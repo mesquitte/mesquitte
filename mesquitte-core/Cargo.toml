@@ -10,6 +10,7 @@ authors = [
 license = "Apache-2.0"
 keywords = ["mqtt", "quic", "network", "async"]
 categories = ["network-programming", "asynchronous"]
+repository = "https://github.com/mesquitte/mesquitte"
 edition = "2021"
 rust-version = "1.80"
 
