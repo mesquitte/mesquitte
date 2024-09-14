@@ -1,0 +1,33 @@
+[package]
+name = "mqtt-codec-kit"
+version = "1.0.0"
+description = "MQTT v3.1.1/v5.0 protocol async codec."
+authors = [
+    "sunj <diablur@gmail.com>",
+    "qinxin0720 <qinxin_0720@live.com>",
+    "fiekers <fiekersfan@gmail.com>",
+]
+license = "Apache-2.0"
+keywords = ["mqtt", "codec", "network", "async"]
+categories = ["network-programming", "asynchronous"]
+edition = "2021"
+rust-version = "1.80"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+v4 = []
+v5 = []
+parse = ["tokio/io-util"]
+tokio-codec = ["tokio-util/codec", "bytes"]
+
+[dependencies]
+byteorder = "1.5"
+bytes = { version = "1.7", optional = true }
+thiserror = "1.0"
+tokio = { version = "1", optional = true }
+tokio-util = { version = "0.7", optional = true }
+
+[dev-dependencies]
+futures = "0.3"
+tokio = { version = "1", features = ["macros", "rt"] }
