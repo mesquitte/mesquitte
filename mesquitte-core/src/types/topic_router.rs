@@ -7,7 +7,7 @@ use mqtt_codec_kit::common::{
 };
 use parking_lot::RwLock;
 
-use super::{client::ClientId, retain_table::split_topic};
+use super::{client_id::ClientId, retain_table::split_topic};
 
 #[derive(Default)]
 pub struct RouteTable {
