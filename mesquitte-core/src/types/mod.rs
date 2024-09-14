@@ -1,4 +1,4 @@
-pub mod client;
+pub mod client_id;
 pub mod error;
 pub mod last_will;
 pub mod outgoing;

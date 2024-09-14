@@ -4,7 +4,7 @@ use parking_lot::Mutex;
 use tokio::sync::mpsc::{self, channel};
 
 use crate::types::{
-    client::{AddClientReceipt, ClientId},
+    client_id::{AddClientReceipt, ClientId},
     error::Error,
     outgoing::Outgoing,
     retain_table::RetainTable,

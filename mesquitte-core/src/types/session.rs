@@ -6,7 +6,7 @@ use mqtt_codec_kit::common::{PacketIdentifier, QualityOfService, TopicFilter};
 use parking_lot::RwLock;
 use tokio::time::Instant;
 
-use super::{client::ClientId, last_will::LastWill, pending_packets::PendingPackets};
+use super::{client_id::ClientId, last_will::LastWill, pending_packets::PendingPackets};
 
 pub struct SessionV5Extend {
     session_expiry_interval: u32,

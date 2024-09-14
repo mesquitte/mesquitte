@@ -18,7 +18,7 @@ use crate::{
     protocols::{common::keep_alive_timer, v5::publish::handle_will},
     server::state::GlobalState,
     types::{
-        client::AddClientReceipt,
+        client_id::AddClientReceipt,
         error::Error,
         outgoing::{KickReason, Outgoing},
         session::Session,

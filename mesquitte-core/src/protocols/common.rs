@@ -6,7 +6,7 @@ use tokio::time::Instant;
 use crate::{
     server::state::GlobalState,
     types::{
-        client::ClientId,
+        client_id::ClientId,
         outgoing::{KickReason, Outgoing},
     },
 };
