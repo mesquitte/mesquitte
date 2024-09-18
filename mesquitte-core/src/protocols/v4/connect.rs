@@ -74,6 +74,7 @@ clean session : {}
     // TODO: config: max inflight size
     // TODO: config: max inflight message size
     // TODO: config: inflight message timeout
+    // TODO: config: max packet size
 
     let mut session = Session::new(packet.client_identifier().to_owned(), 12, 1024, 10);
     session.set_clean_session(packet.clean_session());
@@ -149,7 +150,7 @@ clean session : {}
         session.keep_alive(),
         session.client_id(),
         session.last_packet_at(),
-        &global,
+        global.clone(),
     )?;
     writer
         .send(ConnackPacket::new(session_present, ConnectReturnCode::ConnectionAccepted).into())
@@ -197,8 +198,8 @@ clean session : {}
 
     while let Some(outgoing) = outgoing_rx.recv().await {
         match outgoing {
-            Outgoing::Publish(qos, msg) => {
-                if qos == QualityOfService::Level2 {
+            Outgoing::Publish(msg) => {
+                if QualityOfService::Level2.eq(msg.qos()) {
                     let pid = session.incr_server_packet_id();
                     session.pending_packets().push_outgoing(pid, msg);
                 }

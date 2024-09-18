@@ -3,7 +3,7 @@ use std::sync::Arc;
 use state::GlobalState;
 use tokio::io::{split, AsyncRead, AsyncWrite};
 
-use crate::protocols::v4::read_write_loop::read_write_loop;
+use crate::protocols::v5::read_write_loop::read_write_loop;
 
 pub mod config;
 #[cfg(feature = "quic")]

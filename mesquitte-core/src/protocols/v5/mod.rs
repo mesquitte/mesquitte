@@ -1,3 +1,4 @@
+mod common;
 mod connect;
 mod publish;
 mod subscribe;
