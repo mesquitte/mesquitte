@@ -28,8 +28,8 @@ impl LastWill {
         self.retain
     }
 
-    pub fn properties(&self) -> &Option<LastWillProperties> {
-        &self.properties
+    pub fn properties(&self) -> Option<&LastWillProperties> {
+        self.properties.as_ref()
     }
 
     pub fn qos(&self) -> &QualityOfService {
@@ -64,7 +64,7 @@ impl From<V5LastWill> for LastWill {
             message,
             qos: value.qos(),
             retain: value.retain(),
-            properties: None,
+            properties: Some(value.properties().to_owned()),
         }
     }
 }

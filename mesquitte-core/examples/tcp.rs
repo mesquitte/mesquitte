@@ -4,7 +4,7 @@ use mesquitte_core::server::{state::GlobalState, tcp::server::TcpServer};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    env::set_var("RUST_LOG", "tcp=trace,lutein_core=trace,mqtt_codec=info");
+    env::set_var("RUST_LOG", "tcp=trace,mesquitte_core=trace,mqtt_codec=info");
     env_logger::init();
 
     let global = Arc::new(GlobalState::new());

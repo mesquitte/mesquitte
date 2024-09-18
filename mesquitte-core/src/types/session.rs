@@ -8,18 +8,7 @@ use tokio::time::Instant;
 
 use super::{client_id::ClientId, last_will::LastWill, pending_packets::PendingPackets};
 
-pub struct SessionV5Extend {
-    session_expiry_interval: u32,
-    receive_maximum: u16,
-    max_packet_size: u32,
-    topic_alias_max: u16,
-    request_response_info: bool,
-    request_problem_info: bool,
-    user_properties: Vec<(String, String)>,
-    // TODO: v5 auth
-    authentication_method: Option<Arc<String>>,
-    // scram_stage: ScramStage,
-}
+pub const DEFAULT_MAX_PACKET_SIZE: u32 = 5 + 268_435_455;
 
 pub struct Session {
     connected_at: Instant,
@@ -39,14 +28,32 @@ pub struct Session {
     last_will: Option<LastWill>,
     subscribes: HashMap<TopicFilter, QualityOfService, ahash::RandomState>,
 
-    authorizing: bool,
+    authorized: bool,
     client_disconnected: bool,
     server_disconnected: bool,
-    assigned_client_id: bool,
-    server_keep_alive: bool,
 
     // #[cfg(feature = "v5")]
-    extend: Option<SessionV5Extend>,
+    assigned_client_id: bool,
+    // #[cfg(feature = "v5")]
+    server_keep_alive: bool,
+    // #[cfg(feature = "v5")]
+    session_expiry_interval: u32,
+    // #[cfg(feature = "v5")]
+    receive_maximum: u16,
+    // #[cfg(feature = "v5")]
+    max_packet_size: u32,
+    // #[cfg(feature = "v5")]
+    topic_alias_max: u16,
+    // #[cfg(feature = "v5")]
+    request_response_info: bool,
+    // #[cfg(feature = "v5")]
+    request_problem_info: bool,
+    // #[cfg(feature = "v5")]
+    user_properties: Vec<(String, String)>,
+    // #[cfg(feature = "v5")]
+    authentication_method: Option<Arc<String>>,
+    // #[cfg(feature = "v5")]
+    // authentication_data: Option<Arc<String>>,
 }
 
 impl Session {
@@ -76,18 +83,34 @@ impl Session {
             last_will: None,
             subscribes: HashMap::with_hasher(ahash::RandomState::new()),
 
-            authorizing: false,
+            authorized: false,
             client_disconnected: false,
             server_disconnected: false,
             assigned_client_id: false,
             server_keep_alive: false,
 
-            extend: None,
+            session_expiry_interval: 0,
+            receive_maximum: max_inflight_client,
+            max_packet_size: DEFAULT_MAX_PACKET_SIZE,
+            // TODO: config: max topic alias
+            topic_alias_max: 65535,
+            request_response_info: false,
+            request_problem_info: true,
+            user_properties: Vec::new(),
+            authentication_method: None,
         }
     }
 
-    pub fn last_packet_at(&self) -> &Arc<RwLock<Instant>> {
-        &self.last_packet_at
+    pub fn connected_at(&self) -> &Instant {
+        &self.connected_at
+    }
+
+    pub fn connection_closed_at(&self) -> Option<&Instant> {
+        self.connection_closed_at.as_ref()
+    }
+
+    pub fn last_packet_at(&self) -> Arc<RwLock<Instant>> {
+        self.last_packet_at.clone()
     }
 
     pub fn renew_last_packet_at(&self) {
@@ -125,19 +148,29 @@ impl Session {
     pub fn set_keep_alive(&mut self, keep_alive: u16) {
         // TODO: config: max keep alive?
         // TODO: config: min keep alive?
-        // TODO: server_keep_alive
         // let keep_alive = if keep_alive > self.config.max_keep_alive {
+        //     self.server_keep_alive = true;
         //     self.config.max_keep_alive
         // } else if keep_alive < self.config.min_keep_alive {
+        //     self.server_keep_alive = true;
         //     self.config.min_keep_alive
         // } else {
         //     keep_alive
         // };
+
         self.keep_alive = keep_alive;
     }
 
     pub fn clean_session(&self) -> bool {
         self.clean_session
+    }
+
+    pub fn authorized(&self) -> bool {
+        self.authorized
+    }
+
+    pub fn set_authorized(&mut self, authorized: bool) {
+        self.authorized = authorized;
     }
 
     pub fn disconnected(&self) -> bool {
@@ -158,10 +191,6 @@ impl Session {
 
     pub fn set_server_disconnected(&mut self) {
         self.server_disconnected = true
-    }
-
-    pub fn set_assigned_client_id(&mut self) {
-        self.assigned_client_id = true
     }
 
     pub fn set_server_keep_alive(&mut self, server_keep_alive: bool) {
@@ -196,7 +225,7 @@ impl Session {
         self.subscribes.remove(topic).is_some()
     }
 
-    pub fn server_packet_id(&mut self) -> PacketIdentifier {
+    pub fn server_packet_id(&self) -> PacketIdentifier {
         self.server_packet_id
     }
 
@@ -204,6 +233,80 @@ impl Session {
         let old_value = self.server_packet_id;
         self.server_packet_id.0 += 1;
         old_value.0
+    }
+
+    pub fn assigned_client_id(&self) -> bool {
+        self.assigned_client_id
+    }
+
+    pub fn set_assigned_client_id(&mut self) {
+        self.assigned_client_id = true
+    }
+
+    pub fn server_keep_alive(&self) -> bool {
+        self.server_keep_alive
+    }
+
+    pub fn session_expiry_interval(&self) -> u32 {
+        self.session_expiry_interval
+    }
+
+    pub fn set_session_expiry_interval(&mut self, session_expiry_interval: u32) {
+        self.session_expiry_interval = session_expiry_interval;
+    }
+
+    pub fn receive_maximum(&self) -> u16 {
+        self.receive_maximum
+    }
+
+    pub fn set_receive_maximum(&mut self, receive_maximum: u16) {
+        self.receive_maximum = receive_maximum;
+    }
+
+    pub fn max_packet_size(&self) -> u32 {
+        self.max_packet_size
+    }
+
+    pub fn set_max_packet_size(&mut self, max_packet_size: u32) {
+        if max_packet_size < self.max_packet_size {
+            self.max_packet_size = max_packet_size;
+        }
+    }
+
+    pub fn topic_alias_max(&self) -> u16 {
+        self.topic_alias_max
+    }
+
+    pub fn set_topic_alias_max(&mut self, topic_alias_max: u16) {
+        self.topic_alias_max = topic_alias_max;
+    }
+
+    pub fn request_response_info(&self) -> bool {
+        self.request_response_info
+    }
+
+    pub fn set_request_response_info(&mut self, request_response_info: bool) {
+        self.request_response_info = request_response_info;
+    }
+
+    pub fn request_problem_info(&self) -> bool {
+        self.request_problem_info
+    }
+
+    pub fn set_request_problem_info(&mut self, request_problem_info: bool) {
+        self.request_problem_info = request_problem_info;
+    }
+
+    pub fn user_properties(&self) -> &Vec<(String, String)> {
+        self.user_properties.as_ref()
+    }
+
+    pub fn set_user_properties(&mut self, user_properties: Vec<(String, String)>) {
+        self.user_properties = user_properties;
+    }
+
+    pub fn set_authentication_method(&mut self, authentication_method: &str) {
+        self.authentication_method = Some(Arc::new(authentication_method.to_owned()));
     }
 
     pub fn copy_from_state(&mut self, mut state: SessionState) {

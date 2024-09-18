@@ -11,14 +11,17 @@ use tokio::{
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
 use crate::{
-    protocols::v4::publish::deliver_publish,
+    protocols::v4::publish::receive_publish,
     server::state::GlobalState,
     types::{error::Error, outgoing::Outgoing},
 };
 
 use super::{
     connect::{handle_connect, handle_disconnect, handle_offline},
-    publish::{handle_puback, handle_pubcomp, handle_publish, handle_pubrec, handle_pubrel},
+    publish::{
+        get_unsent_publish_packet, handle_puback, handle_pubcomp, handle_publish, handle_pubrec,
+        handle_pubrel,
+    },
     subscribe::{handle_subscribe, handle_unsubscribe},
 };
 
@@ -77,6 +80,11 @@ where
             }
         };
 
+    let packets = get_unsent_publish_packet(&mut session);
+    for packet in packets {
+        writer.send(packet.into()).await?;
+    }
+
     let mut take_over = true;
 
     loop {
@@ -110,7 +118,7 @@ where
                                 handle_pubrec(&mut session, packet.packet_identifier()).into()
                             }
                             VariablePacket::SubscribePacket(packet) => {
-                                let packets = handle_subscribe(&mut session, &packet, &global);
+                                let packets = handle_subscribe(&mut session, &packet, global.clone());
                                 for packet in packets {
                                     if let Err(err) = writer.send(packet).await {
                                         log::error!(
@@ -128,14 +136,16 @@ where
                                 continue;
                             }
                             VariablePacket::UnsubscribePacket(packet) => {
-                                handle_unsubscribe(&mut session, &packet, &global).into()
+                                handle_unsubscribe(&mut session, &packet, global.clone()).into()
                             }
                             VariablePacket::DisconnectPacket(_packet) => {
                                 handle_disconnect(&mut session).await;
+                                take_over = false;
                                 break;
                             }
                             _ => {
                                 log::debug!("unsupported packet: {:?}", packet);
+                                take_over = false;
                                 break;
                             }
                         };
@@ -151,11 +161,11 @@ where
                     }
                 }
             }
-            outgoing = outgoing_rx.recv() => {
-                match outgoing {
-                    Some(outgoing) => {
-                        let resp = match outgoing {
-                            Outgoing::Publish(qos, msg) => deliver_publish(&mut session, qos, msg).into(),
+            packet = outgoing_rx.recv() => {
+                match packet {
+                    Some(packet) => {
+                        let resp = match packet {
+                            Outgoing::Publish(msg) => receive_publish(&mut session, msg).into(),
                             Outgoing::Online(sender) => {
                                 global.remove_client(session.client_id(), session.subscribes().keys());
                                 if let Err(err) = sender.send((&mut session).into()).await {

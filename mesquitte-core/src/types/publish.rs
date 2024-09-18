@@ -26,12 +26,8 @@ impl PublishMessage {
         &self.qos
     }
 
-    pub fn set_qos(&mut self, qos: QualityOfService) {
-        self.qos = qos
-    }
-
-    pub fn properties(&self) -> &Option<PublishProperties> {
-        &self.properties
+    pub fn properties(&self) -> Option<&PublishProperties> {
+        self.properties.as_ref()
     }
 
     pub fn dup(&self) -> bool {
@@ -47,13 +43,13 @@ impl PublishMessage {
     }
 }
 
-impl From<&V4PublishPacket> for PublishMessage {
-    fn from(packet: &V4PublishPacket) -> Self {
+impl From<(QualityOfService, &V4PublishPacket)> for PublishMessage {
+    fn from((qos, packet): (QualityOfService, &V4PublishPacket)) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
 
         Self {
-            qos: packet.qos().into(),
+            qos,
             topic_name: packet.topic_name().to_owned(),
             payload,
             dup: packet.dup(),
@@ -64,13 +60,13 @@ impl From<&V4PublishPacket> for PublishMessage {
     }
 }
 
-impl From<&V5PublishPacket> for PublishMessage {
-    fn from(packet: &V5PublishPacket) -> Self {
+impl From<(QualityOfService, &V5PublishPacket)> for PublishMessage {
+    fn from((qos, packet): (QualityOfService, &V5PublishPacket)) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
 
         Self {
-            qos: packet.qos().into(),
+            qos,
             topic_name: packet.topic_name().to_owned(),
             payload,
             dup: packet.dup(),

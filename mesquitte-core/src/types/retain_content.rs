@@ -33,6 +33,10 @@ impl RetainContent {
     pub fn qos(&self) -> &QualityOfService {
         &self.qos
     }
+
+    pub fn client_identifier(&self) -> Arc<String> {
+        self.client_identifier.clone()
+    }
 }
 
 impl From<(Arc<String>, &V4PublishPacket)> for RetainContent {

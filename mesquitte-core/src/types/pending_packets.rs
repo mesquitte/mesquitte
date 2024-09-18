@@ -7,14 +7,9 @@ use super::publish::PublishMessage;
 pub struct OutgoingPacket {
     packet: PublishMessage,
     pid: u16,
-    // add this packet timestamp as seconds
     added_at: u64,
-    // pubrec this packet timestamp as seconds
     pubrec_at: Option<u64>,
-    // pubcomp this packet timestamp as seconds
     pubcomp_at: Option<u64>,
-    pubrec: bool,
-    pubcomp: bool,
 }
 
 impl OutgoingPacket {
@@ -23,20 +18,24 @@ impl OutgoingPacket {
             added_at: get_unix_ts(),
             pubrec_at: None,
             pubcomp_at: None,
-            pubrec: false,
-            pubcomp: false,
             pid,
             packet,
         }
     }
 
+    pub fn pid(&self) -> u16 {
+        self.pid
+    }
+
+    pub fn packet(&self) -> &PublishMessage {
+        &self.packet
+    }
+
     pub fn set_pubrec(&mut self) {
-        self.pubrec = true;
         self.pubrec_at = Some(get_unix_ts())
     }
 
     pub fn set_pubcomp(&mut self) {
-        self.pubcomp = true;
         self.pubcomp_at = Some(get_unix_ts())
     }
 }
@@ -44,9 +43,8 @@ impl OutgoingPacket {
 pub struct IncomingPacket {
     pid: u16,
     inner: PublishMessage,
-    // receive this packet timestamp as seconds
     receive_at: u64,
-    sent: bool,
+    deliver_at: Option<u64>,
 }
 
 impl IncomingPacket {
@@ -55,7 +53,7 @@ impl IncomingPacket {
             receive_at: get_unix_ts(),
             pid,
             inner: packet,
-            sent: false,
+            deliver_at: None,
         }
     }
 
@@ -125,7 +123,8 @@ impl PendingPackets {
         for idx in 0..current_inflight {
             let outgoing_packet = self.outgoing_packets.get_mut(idx).expect("pubrec packet");
             if outgoing_packet.pid.eq(&target_pid) {
-                outgoing_packet.set_pubrec()
+                outgoing_packet.packet.set_dup();
+                outgoing_packet.set_pubrec();
             }
         }
         false
@@ -190,8 +189,9 @@ impl PendingPackets {
         let mut changed = false;
         let now_ts = get_unix_ts();
         let mut start_idx = 0;
+
         while let Some(packet) = self.incoming_packets.get(start_idx) {
-            if packet.sent || now_ts >= self.timeout + packet.receive_at {
+            if packet.deliver_at.is_some() || now_ts >= self.timeout + packet.receive_at {
                 self.incoming_packets.pop_front();
                 changed = true;
             }
@@ -208,13 +208,30 @@ impl PendingPackets {
         let mut changed = false;
         let now_ts = get_unix_ts();
         let mut start_idx = 0;
+
         while let Some(packet) = self.outgoing_packets.get(start_idx) {
-            if packet.pubcomp || now_ts >= self.timeout + packet.added_at {
-                self.incoming_packets.pop_front();
+            start_idx += 1;
+            if packet.pubcomp_at.is_some() {
+                self.outgoing_packets.pop_front();
                 changed = true;
+                continue;
             }
 
-            start_idx += 1;
+            if QualityOfService::Level0.eq(packet.packet.qos()) {
+                self.outgoing_packets.pop_front();
+                changed = true;
+                continue;
+            }
+
+            let last_packet_at = match packet.pubrec_at {
+                Some(pubrec_at) => pubrec_at,
+                None => packet.added_at,
+            };
+
+            if now_ts >= self.timeout + last_packet_at {
+                self.outgoing_packets.pop_front();
+                changed = true;
+            }
         }
 
         // shrink the queue to save memory
@@ -232,13 +249,13 @@ impl PendingPackets {
         let mut next_idx = None;
         for idx in start_idx..current_inflight {
             let packet = self.incoming_packets.get_mut(idx).expect("incoming packet");
-            if packet.sent {
+            if packet.deliver_at.is_some() {
                 continue;
             }
 
             if now_ts <= self.timeout + packet.receive_at {
                 next_idx = Some(idx);
-                packet.sent = true;
+                packet.deliver_at = Some(get_unix_ts());
                 break;
             }
         }
@@ -246,6 +263,39 @@ impl PendingPackets {
             (
                 idx,
                 self.incoming_packets.get(idx).expect("incoming packet"),
+            )
+        })
+    }
+
+    pub fn get_unsent_outgoing_packet(
+        &mut self,
+        start_idx: usize,
+    ) -> Option<(usize, &OutgoingPacket)> {
+        let now_ts = get_unix_ts();
+        let current_inflight = cmp::min(self.max_inflight as usize, self.outgoing_packets.len());
+        let mut next_idx = None;
+        for idx in start_idx..current_inflight {
+            let packet = self.outgoing_packets.get_mut(idx).expect("outgoing packet");
+            if packet.pubcomp_at.is_some() {
+                continue;
+            }
+
+            let last_packet_at = match packet.pubrec_at {
+                Some(pubrec_at) => pubrec_at,
+                None => packet.added_at,
+            };
+
+            if now_ts <= self.timeout + last_packet_at {
+                next_idx = Some(idx);
+                packet.packet.set_dup();
+                break;
+            }
+        }
+
+        next_idx.map(|idx| {
+            (
+                idx,
+                self.outgoing_packets.get(idx).expect("outgoing packet"),
             )
         })
     }

@@ -6,7 +6,7 @@ use mesquitte_core::server::{quic::server::QuicServer, state::GlobalState};
 async fn main() {
     env::set_var(
         "RUST_LOG",
-        "quic_server=trace,lutein_core=trace,mqtt_codec=info",
+        "quic=trace,mesquitte_core=trace,mqtt_codec=info",
     );
     env_logger::init();
 
@@ -14,8 +14,8 @@ async fn main() {
     let broker = QuicServer::bind(
         "0.0.0.0:1883".parse().unwrap(),
         (
-            Path::new("lutein-core/examples/certs/cert.pem"),
-            Path::new("lutein-core/examples/certs/key.pem"),
+            Path::new("mesquitte-core/examples/certs/cert.pem"),
+            Path::new("mesquitte-core/examples/certs/key.pem"),
         ),
         global,
     )

@@ -4,7 +4,7 @@ use mesquitte_core::server::{state::GlobalState, ws::server::WsServer};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    env::set_var("RUST_LOG", "ws=trace,lutein_core=trace,mqtt_codec=info");
+    env::set_var("RUST_LOG", "ws=trace,mesquitte_core=trace,mqtt_codec=info");
     env_logger::init();
 
     let global = GlobalState::new();

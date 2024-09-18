@@ -13,7 +13,7 @@ use crate::{server::state::GlobalState, types::session::Session};
 pub(super) fn handle_subscribe(
     session: &mut Session,
     packet: &SubscribePacket,
-    global: &Arc<GlobalState>,
+    global: Arc<GlobalState>,
 ) -> Vec<VariablePacket> {
     log::debug!(
         r#"{} received a subscribe packet:
@@ -70,7 +70,7 @@ packet id : {}
 pub(super) fn handle_unsubscribe(
     session: &mut Session,
     packet: &UnsubscribePacket,
-    global: &Arc<GlobalState>,
+    global: Arc<GlobalState>,
 ) -> UnsubackPacket {
     log::debug!(
         r#"{} received a unsubscribe packet:
