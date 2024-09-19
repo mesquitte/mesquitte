@@ -122,18 +122,32 @@ where
                                 handle_pubrec(&mut session, packet.packet_identifier()).into()
                             }
                             VariablePacket::SubscribePacket(packet) => {
-                                let packets = handle_subscribe(&mut session, &packet, global.clone());
-                                for packet in packets {
-                                    if let Err(err) = writer.send(packet).await {
-                                        log::error!(
-                                            "write subscribe ack to client#{} : {}",
-                                            &session.client_identifier(),
-                                            err
-                                        );
+                                match handle_subscribe(&mut session, &packet, global.clone()) {
+                                    Ok(packets) => {
+                                        for packet in packets {
+                                            if let Err(err) = writer.send(packet).await {
+                                                log::error!(
+                                                    "write subscribe ack to client#{} : {}",
+                                                    &session.client_identifier(),
+                                                    err
+                                                );
+                                                break;
+                                            }
+                                        }
+                                        continue;
+                                    },
+                                    Err(packet) => {
+                                        if let Err(err) = writer.send(packet.into()).await {
+                                            log::error!(
+                                                "write subscribe ack to client#{} : {}",
+                                                &session.client_identifier(),
+                                                err
+                                            );
+                                        }
                                         break;
-                                    }
+                                    },
                                 }
-                                continue;
+
                             }
                             VariablePacket::PubcompPacket(packet) => {
                                 handle_pubcomp(&mut session, packet.packet_identifier());

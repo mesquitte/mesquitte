@@ -2,19 +2,25 @@ use std::{collections::VecDeque, sync::Arc};
 
 use mqtt_codec_kit::{
     common::{qos::QoSWithPacketIdentifier, QualityOfService},
-    v5::packet::{
-        suback::SubscribeReasonCode, PublishPacket, SubackPacket, SubscribePacket, UnsubackPacket,
-        UnsubscribePacket, VariablePacket,
+    v5::{
+        control::DisconnectReasonCode,
+        packet::{
+            suback::SubscribeReasonCode, DisconnectPacket, PublishPacket, SubackPacket,
+            SubscribePacket, UnsubackPacket, UnsubscribePacket, VariablePacket,
+        },
     },
 };
 
-use crate::{server::state::GlobalState, types::session::Session};
+use crate::{
+    protocols::v5::common::build_error_disconnect, server::state::GlobalState,
+    types::session::Session,
+};
 
 pub(super) fn handle_subscribe(
     session: &mut Session,
     packet: &SubscribePacket,
     global: Arc<GlobalState>,
-) -> Vec<VariablePacket> {
+) -> Result<Vec<VariablePacket>, DisconnectPacket> {
     log::debug!(
         r#"{} received a subscribe packet:
 packet id : {}
@@ -24,10 +30,25 @@ packet id : {}
         packet.subscribes(),
     );
 
-    let mut return_codes = Vec::with_capacity(packet.subscribes().len());
+    let properties = packet.properties();
+    if properties.identifier().map(|id| id) == Some(0) {
+        let err_pkt = build_error_disconnect(
+            session,
+            DisconnectReasonCode::ProtocolError,
+            "Subscription identifier value=0 is not allowed",
+        );
+        return Err(err_pkt);
+    }
+
+    // TODO: config subscription identifier available false
+    // properties.identifier().is_some() && !config.subscription_id_available()
+
+    let mut reason_codes = Vec::with_capacity(packet.subscribes().len());
     let mut retain_packets: Vec<VariablePacket> = Vec::new();
     for (filter, subscribe_opts) in packet.subscribes() {
         // TODO: shared subscribe
+        // SubscribeReasonCode::SharedSubscriptionNotSupported
+        // SubscribeReasonCode::WildcardSubscriptionsNotSupported topic contain +/#
 
         let granted_qos = subscribe_opts.qos();
         // TODO: granted max qos from config
@@ -60,11 +81,13 @@ packet id : {}
             QualityOfService::Level2 => SubscribeReasonCode::GrantedQos2,
         };
 
-        return_codes.push(reason_code);
+        reason_codes.push(reason_code);
     }
     let mut queue: VecDeque<VariablePacket> = VecDeque::from(retain_packets);
-    queue.push_front(SubackPacket::new(packet.packet_identifier(), return_codes).into());
-    queue.into()
+    let suback_packet = SubackPacket::new(packet.packet_identifier(), reason_codes);
+    // TODO: user properties
+    queue.push_front(suback_packet.into());
+    Ok(queue.into())
 }
 
 pub(super) fn handle_unsubscribe(

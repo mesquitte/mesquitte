@@ -23,6 +23,8 @@ pub const MATCH_ALL_CHAR: char = '#';
 pub const MATCH_ONE_STR: &str = "+";
 /// The &str version of `MATCH_ALL_CHAR`
 pub const MATCH_ALL_STR: &str = "#";
+/// The &str version of `MATCH_DOLLAR_STR`
+pub const MATCH_DOLLAR_STR: &str = "$";
 
 /// System topic prefix
 pub const SYS_PREFIX: &str = "$SYS/";
