@@ -4,6 +4,7 @@ use mqtt_codec_kit::v4::packet::connect::LastWill as V4LastWill;
 // #[cfg(feature = "v5")]
 use mqtt_codec_kit::v5::packet::connect::{LastWill as V5LastWill, LastWillProperties};
 
+#[derive(Debug)]
 pub struct LastWill {
     topic_name: TopicName,
     message: Vec<u8>,

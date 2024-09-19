@@ -10,6 +10,7 @@ use mqtt_codec_kit::{
         packet::{ConnackPacket, ConnectPacket, VariablePacket},
     },
 };
+use nanoid::nanoid;
 use tokio::{io::AsyncWrite, sync::mpsc};
 use tokio_util::codec::{Encoder, FramedWrite};
 
@@ -35,14 +36,16 @@ where
 {
     log::debug!(
         r#"client#{} received a connect packet:
-protocol_level : {:?}
-clean session : {}
-     username : {:?}
-     password : {:?}
-   keep-alive : {}s
-         will : {:?}"#,
+protocol level : {:?}
+ protocol name : {:?}
+ clean session : {}
+      username : {:?}
+      password : {:?}
+    keep-alive : {}s
+          will : {:?}"#,
         packet.client_identifier(),
         packet.protocol_level(),
+        packet.protocol_name(),
         packet.clean_session(),
         packet.username(),
         packet.password(),
@@ -52,16 +55,24 @@ clean session : {}
 
     let level = packet.protocol_level();
     if ProtocolLevel::Version311.ne(&level) && ProtocolLevel::Version310.ne(&level) {
-        log::info!("unsupported protocol level: {:?}", level);
+        log::debug!("unsupported protocol level: {:?}", level);
         writer
-            .send(ConnackPacket::new(false, ConnectReturnCode::IdentifierRejected).into())
+            .send(ConnackPacket::new(false, ConnectReturnCode::UnacceptableProtocolVersion).into())
             .await?;
 
         return Err(Error::InvalidConnectPacket);
     }
 
-    if packet.client_identifier().is_empty() {
-        log::info!("client identifier is empty: {:?}", packet);
+    if packet.protocol_name().ne("MQTT") && packet.protocol_name().ne("MQIsdp") {
+        log::debug!("unsupported protocol name: {:?}", packet.protocol_name());
+        writer
+            .send(ConnackPacket::new(false, ConnectReturnCode::UnacceptableProtocolVersion).into())
+            .await?;
+
+        return Err(Error::InvalidConnectPacket);
+    }
+
+    if packet.client_identifier().is_empty() && !packet.clean_session() {
         writer
             .send(ConnackPacket::new(false, ConnectReturnCode::IdentifierRejected).into())
             .await?;
@@ -78,12 +89,18 @@ clean session : {}
 
     let mut session = Session::new(packet.client_identifier().to_owned(), 12, 1024, 10);
     session.set_clean_session(packet.clean_session());
-    session.set_client_identifier(packet.client_identifier());
     session.set_username(packet.username().map(|name| Arc::new(name.to_owned())));
-
     session.set_keep_alive(packet.keep_alive());
     let server_keep_alive = session.keep_alive() != packet.keep_alive();
     session.set_server_keep_alive(server_keep_alive);
+    if packet.client_identifier().is_empty() {
+        log::error!("client identifier is empty: {:?}", packet);
+        let id = nanoid!();
+        session.set_assigned_client_id();
+        session.set_client_identifier(&id);
+    } else {
+        session.set_client_identifier(packet.client_identifier());
+    }
 
     if let Some(last_will) = packet.will() {
         let topic_name = last_will.topic();
@@ -114,7 +131,7 @@ clean session : {}
             return Err(Error::InvalidConnectPacket);
         }
 
-        if last_will.retain() && last_will.qos() != QualityOfService::Level0 {
+        if last_will.qos() != QualityOfService::Level0 {
             session.set_last_will(Some(last_will.into()))
         }
     }

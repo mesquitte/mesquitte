@@ -1,11 +1,14 @@
 use std::{cmp, collections::VecDeque, time::SystemTime};
 
-use mqtt_codec_kit::common::QualityOfService;
+use mqtt_codec_kit::{
+    common::{QualityOfService, TopicName},
+    v5::control::PublishProperties,
+};
 
 use super::publish::PublishMessage;
 
 pub struct OutgoingPacket {
-    packet: PublishMessage,
+    inner: PublishMessage,
     packet_id: u16,
     added_at: u64,
     pubrec_at: Option<u64>,
@@ -19,7 +22,7 @@ impl OutgoingPacket {
             pubrec_at: None,
             pubcomp_at: None,
             packet_id,
-            packet,
+            inner: packet,
         }
     }
 
@@ -27,8 +30,20 @@ impl OutgoingPacket {
         self.packet_id
     }
 
-    pub fn packet(&self) -> &PublishMessage {
-        &self.packet
+    pub fn qos(&self) -> &QualityOfService {
+        self.inner.qos()
+    }
+
+    pub fn topic_name(&self) -> &TopicName {
+        self.inner.topic_name()
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        self.inner.payload()
+    }
+
+    pub fn properties(&self) -> Option<&PublishProperties> {
+        self.inner.properties()
     }
 
     pub fn set_pubrec(&mut self) {
@@ -57,8 +72,24 @@ impl IncomingPacket {
         }
     }
 
-    pub fn inner(&self) -> &PublishMessage {
-        &self.inner
+    pub fn qos(&self) -> &QualityOfService {
+        self.inner.qos()
+    }
+
+    pub fn topic_name(&self) -> &TopicName {
+        self.inner.topic_name()
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        self.inner.payload()
+    }
+
+    pub fn properties(&self) -> Option<&PublishProperties> {
+        self.inner.properties()
+    }
+
+    pub fn retain(&self) -> bool {
+        self.inner.retain()
     }
 
     pub fn packet_id(&self) -> u16 {
@@ -123,7 +154,7 @@ impl PendingPackets {
         for idx in 0..current_inflight {
             let outgoing_packet = self.outgoing_packets.get_mut(idx).expect("pubrec packet");
             if outgoing_packet.packet_id.eq(&target_pid) {
-                outgoing_packet.packet.set_dup();
+                outgoing_packet.inner.set_dup();
                 outgoing_packet.set_pubrec();
             }
         }
@@ -217,7 +248,7 @@ impl PendingPackets {
                 continue;
             }
 
-            if QualityOfService::Level0.eq(packet.packet.qos()) {
+            if QualityOfService::Level0.eq(packet.inner.qos()) {
                 self.outgoing_packets.pop_front();
                 changed = true;
                 continue;
@@ -287,7 +318,7 @@ impl PendingPackets {
 
             if now_ts <= self.timeout + last_packet_at {
                 next_idx = Some(idx);
-                packet.packet.set_dup();
+                packet.inner.set_dup();
                 break;
             }
         }

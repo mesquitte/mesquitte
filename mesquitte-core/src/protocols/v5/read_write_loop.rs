@@ -158,7 +158,6 @@ where
                             }
                             VariablePacket::DisconnectPacket(_packet) => {
                                 handle_disconnect(&mut session).await;
-                                take_over = false;
                                 break;
                             }
                             _ => {
@@ -187,7 +186,7 @@ where
                             Outgoing::Online(sender) => {
                                 global.remove_client(session.client_id(), session.subscribes().keys());
                                 if let Err(err) = sender.send((&mut session).into()).await {
-                                    log::debug!(
+                                    log::error!(
                                         "client#{} send session state : {}",
                                         session.client_identifier(),
                                         err,
@@ -198,7 +197,7 @@ where
                                     .send(DisconnectPacket::new(DisconnectReasonCode::SessionTakenOver).into())
                                     .await
                                 {
-                                    log::debug!(
+                                    log::error!(
                                         "client#{} write disconnect packet : {}",
                                         session.client_identifier(),
                                         err,
@@ -208,7 +207,7 @@ where
                                 break;
                             }
                             Outgoing::Kick(reason) => {
-                                log::info!(
+                                log::debug!(
                                     "client#{} kicked out: {}",
                                     session.client_identifier(),
                                     reason
@@ -277,7 +276,7 @@ where
     });
 
     if tokio::try_join!(&mut read_task, &mut write_task).is_err() {
-        log::error!("read_task/write_task terminated");
+        log::warn!("read_task/write_task terminated");
         read_task.abort();
     };
 }

@@ -197,6 +197,10 @@ impl Session {
         self.server_keep_alive = server_keep_alive
     }
 
+    pub fn last_will(&mut self) -> Option<&LastWill> {
+        self.last_will.as_ref()
+    }
+
     pub fn clear_last_will(&mut self) {
         self.last_will = None
     }

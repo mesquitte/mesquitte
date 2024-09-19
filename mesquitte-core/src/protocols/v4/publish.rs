@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use mqtt_codec_kit::{
-    common::{qos::QoSWithPacketIdentifier, QualityOfService, MATCH_ALL_STR, MATCH_DOLLAR_STR, MATCH_ONE_STR},
+    common::{
+        qos::QoSWithPacketIdentifier, QualityOfService, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX,
+    },
     v4::packet::{
         PubackPacket, PubcompPacket, PublishPacket, PubrecPacket, PubrelPacket, VariablePacket,
     },
@@ -38,7 +40,7 @@ topic name : {:?}
         ));
     }
 
-    if topic_name.starts_with(MATCH_DOLLAR_STR)
+    if topic_name.starts_with(SHARED_PREFIX)
         || topic_name.contains(MATCH_ALL_STR)
         || topic_name.contains(MATCH_ONE_STR)
     {
@@ -148,17 +150,22 @@ pub(super) async fn handle_pubrel(
 
     session.pending_packets().clean_incoming();
     let mut start_idx = 0;
-    while let Some((idx, packet)) = session
+    while let Some((idx, msg)) = session
         .pending_packets()
         .get_unsent_incoming_packet(start_idx)
     {
-        let publish_packet = PublishPacket::new(
-            packet.inner().topic_name().to_owned(),
-            QoSWithPacketIdentifier::Level2(packet.packet_id()),
-            packet.inner().payload(),
-        );
-        dispatch_publish(session, &publish_packet, global.clone()).await;
         start_idx = idx + 1;
+
+        let qos = match msg.qos() {
+            QualityOfService::Level0 => QoSWithPacketIdentifier::Level0,
+            QualityOfService::Level1 => QoSWithPacketIdentifier::Level1(msg.packet_id()),
+            QualityOfService::Level2 => QoSWithPacketIdentifier::Level2(msg.packet_id()),
+        };
+
+        let mut packet = PublishPacket::new(msg.topic_name().to_owned(), qos, msg.payload());
+        packet.set_retain(msg.retain());
+
+        dispatch_publish(session, &packet, global.clone()).await;
     }
 
     PubcompPacket::new(pid)
@@ -170,58 +177,38 @@ pub(super) fn receive_publish(session: &mut Session, mut msg: PublishMessage) ->
         r#"client#{} receive publish message:
 topic name : {:?}
    payload : {:?}
+properties : {:?}
      flags : qos={:?}, retain={}, dup={}"#,
         session.client_identifier(),
         msg.topic_name(),
         msg.payload(),
+        msg.properties(),
         msg.qos(),
         msg.retain(),
         msg.dup(),
     );
 
-    match msg.qos() {
-        QualityOfService::Level0 => {
-            let mut packet = PublishPacket::new(
-                msg.topic_name().to_owned(),
-                QoSWithPacketIdentifier::Level0,
-                msg.payload(),
-            );
-            packet.set_retain(msg.retain());
-            packet
-        }
+    let (pid, qos) = match msg.qos() {
+        QualityOfService::Level0 => (None, QoSWithPacketIdentifier::Level0),
         QualityOfService::Level1 => {
-            msg.set_dup();
-
-            let topic_name = msg.topic_name().to_owned();
-
             let pid = session.incr_server_packet_id();
-            session.pending_packets().push_outgoing(pid, msg.to_owned());
-
-            let mut packet = PublishPacket::new(
-                topic_name,
-                QoSWithPacketIdentifier::Level1(pid),
-                msg.payload(),
-            );
-            packet.set_retain(msg.retain());
-            packet
+            (Some(pid), QoSWithPacketIdentifier::Level1(pid))
         }
         QualityOfService::Level2 => {
-            msg.set_dup();
-
-            let topic_name = msg.topic_name().to_owned();
-
             let pid = session.incr_server_packet_id();
-            session.pending_packets().push_outgoing(pid, msg.to_owned());
-
-            let mut packet = PublishPacket::new(
-                topic_name,
-                QoSWithPacketIdentifier::Level2(pid),
-                msg.payload(),
-            );
-            packet.set_retain(msg.retain());
-            packet
+            (Some(pid), QoSWithPacketIdentifier::Level2(pid))
         }
+    };
+
+    let mut packet = PublishPacket::new(msg.topic_name().to_owned(), qos, msg.payload());
+    packet.set_retain(msg.retain());
+
+    if let Some(pid) = pid {
+        msg.set_dup();
+        session.pending_packets().push_outgoing(pid, msg);
     }
+
+    packet
 }
 
 pub(super) fn handle_puback(session: &mut Session, pid: u16) {
@@ -262,10 +249,12 @@ pub(super) async fn handle_will(session: &mut Session, global: Arc<GlobalState>)
     log::debug!(
         r#"client#{} handle last will:
 client side disconnected : {}
-server side disconnected : {}"#,
+server side disconnected : {}
+               last will : {:?}"#,
         session.client_identifier(),
         session.client_disconnected(),
         session.server_disconnected(),
+        session.last_will(),
     );
 
     if let Some(last_will) = session.take_last_will() {
@@ -283,6 +272,7 @@ server side disconnected : {}"#,
         let mut packet =
             PublishPacket::new(last_will.topic_name().to_owned(), qos, last_will.message());
         packet.set_retain(last_will.retain());
+
         dispatch_publish(session, &packet, global.clone()).await;
         session.clear_last_will();
     }
@@ -297,40 +287,16 @@ pub(crate) fn get_unsent_publish_packet(session: &mut Session) -> Vec<PublishPac
     {
         start_idx = idx + 1;
 
-        let publish_packet = match msg.packet().qos() {
-            QualityOfService::Level0 => {
-                let mut packet = PublishPacket::new(
-                    msg.packet().topic_name().to_owned(),
-                    QoSWithPacketIdentifier::Level0,
-                    msg.packet().payload(),
-                );
-                packet.set_retain(packet.retain());
-
-                packet
-            }
-            QualityOfService::Level1 => {
-                let mut packet = PublishPacket::new(
-                    msg.packet().topic_name().to_owned(),
-                    QoSWithPacketIdentifier::Level1(msg.packet_id()),
-                    msg.packet().payload(),
-                );
-                packet.set_retain(packet.retain());
-
-                packet
-            }
-            QualityOfService::Level2 => {
-                let mut packet = PublishPacket::new(
-                    msg.packet().topic_name().to_owned(),
-                    QoSWithPacketIdentifier::Level2(msg.packet_id()),
-                    msg.packet().payload(),
-                );
-                packet.set_retain(packet.retain());
-
-                packet
-            }
+        let qos = match msg.qos() {
+            QualityOfService::Level0 => QoSWithPacketIdentifier::Level0,
+            QualityOfService::Level1 => QoSWithPacketIdentifier::Level1(msg.packet_id()),
+            QualityOfService::Level2 => QoSWithPacketIdentifier::Level2(msg.packet_id()),
         };
 
-        packets.push(publish_packet);
+        let mut packet = PublishPacket::new(msg.topic_name().to_owned(), qos, msg.payload());
+        packet.set_retain(packet.retain());
+
+        packets.push(packet);
     }
 
     packets
