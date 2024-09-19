@@ -39,7 +39,8 @@ where
 {
     log::debug!(
         r#"client#{} received a connect packet:
-protocol_level : {:?}
+protocol level : {:?}
+ protocol name : {:?}
  clean session : {}
       username : {:?}
       password : {:?}
@@ -47,6 +48,7 @@ protocol_level : {:?}
           will : {:?}"#,
         packet.client_identifier(),
         packet.protocol_level(),
+        packet.protocol_name(),
         packet.clean_session(),
         packet.username(),
         packet.password(),
@@ -58,6 +60,15 @@ protocol_level : {:?}
     if ProtocolLevel::Version50.ne(&level) {
         log::info!("unsupported protocol level: {:?}", level);
 
+        writer
+            .send(ConnackPacket::new(false, ConnectReasonCode::UnsupportedProtocolVersion).into())
+            .await?;
+
+        return Err(Error::InvalidConnectPacket);
+    }
+
+    if packet.protocol_name().ne("MQTT") {
+        log::info!("unsupported protocol name: {:?}", packet.protocol_name());
         writer
             .send(ConnackPacket::new(false, ConnectReasonCode::UnsupportedProtocolVersion).into())
             .await?;
@@ -220,7 +231,7 @@ protocol_level : {:?}
         //     return Err(Error::InvalidConnectPacket);
         // }
 
-        if last_will.retain() && last_will.qos() != QualityOfService::Level0 {
+        if last_will.qos() != QualityOfService::Level0 {
             session.set_last_will(Some(last_will.into()))
         }
     }

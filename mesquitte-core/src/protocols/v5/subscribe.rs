@@ -72,6 +72,9 @@ packet id : {}
 
             let mut publish_packet = PublishPacket::new(msg.topic_name().to_owned(), qos, payload);
             publish_packet.set_retain(true);
+            if let Some(properties) = msg.properties() {
+                publish_packet.set_properties(properties.to_owned());
+            }
 
             retain_packets.push(publish_packet.into());
         }
