@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use mqtt_codec_kit::{
-    common::{qos::QoSWithPacketIdentifier, QualityOfService, MATCH_ALL_STR, MATCH_ONE_STR},
+    common::{qos::QoSWithPacketIdentifier, QualityOfService, MATCH_ALL_STR, MATCH_DOLLAR_STR, MATCH_ONE_STR},
     v4::packet::{
         PubackPacket, PubcompPacket, PublishPacket, PubrecPacket, PubrelPacket, VariablePacket,
     },
@@ -37,7 +37,11 @@ topic name : {:?}
             "invalid empty topic name".to_string(),
         ));
     }
-    if topic_name.contains(MATCH_ALL_STR) || topic_name.contains(MATCH_ONE_STR) {
+
+    if topic_name.starts_with(MATCH_DOLLAR_STR)
+        || topic_name.contains(MATCH_ALL_STR)
+        || topic_name.contains(MATCH_ONE_STR)
+    {
         log::debug!("invalid topic name: {:?}", topic_name);
         return Err(Error::InvalidPublishPacket(format!(
             "invalid topic name: {:?}",
@@ -150,7 +154,7 @@ pub(super) async fn handle_pubrel(
     {
         let publish_packet = PublishPacket::new(
             packet.inner().topic_name().to_owned(),
-            QoSWithPacketIdentifier::Level2(packet.pid()),
+            QoSWithPacketIdentifier::Level2(packet.packet_id()),
             packet.inner().payload(),
         );
         dispatch_publish(session, &publish_packet, global.clone()).await;
@@ -307,7 +311,7 @@ pub(crate) fn get_unsent_publish_packet(session: &mut Session) -> Vec<PublishPac
             QualityOfService::Level1 => {
                 let mut packet = PublishPacket::new(
                     msg.packet().topic_name().to_owned(),
-                    QoSWithPacketIdentifier::Level1(msg.pid()),
+                    QoSWithPacketIdentifier::Level1(msg.packet_id()),
                     msg.packet().payload(),
                 );
                 packet.set_retain(packet.retain());
@@ -317,7 +321,7 @@ pub(crate) fn get_unsent_publish_packet(session: &mut Session) -> Vec<PublishPac
             QualityOfService::Level2 => {
                 let mut packet = PublishPacket::new(
                     msg.packet().topic_name().to_owned(),
-                    QoSWithPacketIdentifier::Level2(msg.pid()),
+                    QoSWithPacketIdentifier::Level2(msg.packet_id()),
                     msg.packet().payload(),
                 );
                 packet.set_retain(packet.retain());

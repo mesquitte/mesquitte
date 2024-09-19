@@ -6,25 +6,25 @@ use super::publish::PublishMessage;
 
 pub struct OutgoingPacket {
     packet: PublishMessage,
-    pid: u16,
+    packet_id: u16,
     added_at: u64,
     pubrec_at: Option<u64>,
     pubcomp_at: Option<u64>,
 }
 
 impl OutgoingPacket {
-    fn new(pid: u16, packet: PublishMessage) -> Self {
+    fn new(packet_id: u16, packet: PublishMessage) -> Self {
         Self {
             added_at: get_unix_ts(),
             pubrec_at: None,
             pubcomp_at: None,
-            pid,
+            packet_id,
             packet,
         }
     }
 
-    pub fn pid(&self) -> u16 {
-        self.pid
+    pub fn packet_id(&self) -> u16 {
+        self.packet_id
     }
 
     pub fn packet(&self) -> &PublishMessage {
@@ -41,17 +41,17 @@ impl OutgoingPacket {
 }
 
 pub struct IncomingPacket {
-    pid: u16,
+    packet_id: u16,
     inner: PublishMessage,
     receive_at: u64,
     deliver_at: Option<u64>,
 }
 
 impl IncomingPacket {
-    fn new(pid: u16, packet: PublishMessage) -> Self {
+    fn new(packet_id: u16, packet: PublishMessage) -> Self {
         Self {
             receive_at: get_unix_ts(),
-            pid,
+            packet_id,
             inner: packet,
             deliver_at: None,
         }
@@ -61,8 +61,8 @@ impl IncomingPacket {
         &self.inner
     }
 
-    pub fn pid(&self) -> u16 {
-        self.pid
+    pub fn packet_id(&self) -> u16 {
+        self.packet_id
     }
 }
 
@@ -87,7 +87,7 @@ impl PendingPackets {
     }
 
     /// Push a packet into queue, return if the queue is full.
-    pub fn push_incoming(&mut self, pid: u16, packet: PublishMessage) -> bool {
+    pub fn push_incoming(&mut self, packet_id: u16, packet: PublishMessage) -> bool {
         if self.incoming_packets.len() >= self.max_packets {
             log::error!(
                 "drop packet {:?}, due to too many incoming packets in the queue: {}",
@@ -98,11 +98,11 @@ impl PendingPackets {
         }
 
         self.incoming_packets
-            .push_back(IncomingPacket::new(pid, packet));
+            .push_back(IncomingPacket::new(packet_id, packet));
         false
     }
 
-    pub fn push_outgoing(&mut self, pid: u16, packet: PublishMessage) -> bool {
+    pub fn push_outgoing(&mut self, packet_id: u16, packet: PublishMessage) -> bool {
         if self.outgoing_packets.len() >= self.max_packets {
             log::error!(
                 "drop packet {:?}, due to too many outgoing packets in the queue: {}",
@@ -113,7 +113,7 @@ impl PendingPackets {
         }
 
         self.outgoing_packets
-            .push_back(OutgoingPacket::new(pid, packet));
+            .push_back(OutgoingPacket::new(packet_id, packet));
         false
     }
 
@@ -122,7 +122,7 @@ impl PendingPackets {
         let current_inflight = cmp::min(self.max_inflight.into(), self.outgoing_packets.len());
         for idx in 0..current_inflight {
             let outgoing_packet = self.outgoing_packets.get_mut(idx).expect("pubrec packet");
-            if outgoing_packet.pid.eq(&target_pid) {
+            if outgoing_packet.packet_id.eq(&target_pid) {
                 outgoing_packet.packet.set_dup();
                 outgoing_packet.set_pubrec();
             }
@@ -139,7 +139,7 @@ impl PendingPackets {
         let current_inflight = cmp::min(max_inflight, packets.len());
         for idx in 0..current_inflight {
             let outgoing_packet = packets.get_mut(idx).expect("release outgoing packet");
-            if outgoing_packet.pid.eq(&target_pid) {
+            if outgoing_packet.packet_id.eq(&target_pid) {
                 match qos {
                     QualityOfService::Level1 => {
                         outgoing_packet.set_pubcomp();

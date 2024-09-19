@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use mqtt_codec_kit::{
-    common::{qos::QoSWithPacketIdentifier, QualityOfService, MATCH_ALL_STR, MATCH_ONE_STR},
+    common::{
+        qos::QoSWithPacketIdentifier, QualityOfService, TopicFilter, MATCH_ALL_STR,
+        MATCH_DOLLAR_STR, MATCH_ONE_STR, SHARED_PREFIX,
+    },
     v5::{
         control::{PubackReasonCode, PubcompReasonCode, PubrecReasonCode, PubrelReasonCode},
         packet::{
@@ -40,7 +43,11 @@ topic name : {:?}
             "invalid empty topic name".to_string(),
         ));
     }
-    if topic_name.contains(MATCH_ALL_STR) || topic_name.contains(MATCH_ONE_STR) {
+
+    if topic_name.starts_with(MATCH_DOLLAR_STR)
+        || topic_name.contains(MATCH_ALL_STR)
+        || topic_name.contains(MATCH_ONE_STR)
+    {
         log::debug!("invalid topic name: {:?}", topic_name);
         return Err(Error::InvalidPublishPacket(format!(
             "invalid topic name: {:?}",
@@ -113,6 +120,7 @@ topic name : {:?}
     let mut senders = Vec::with_capacity(matches.len());
     for content in matches {
         let content = content.read();
+        let subscribe_filter = content.topic_filter.as_ref().unwrap();
         match content.topic_filter.as_ref() {
             Some(filter) => {
                 for (client_id, subscribe_qos) in &content.clients {
@@ -120,6 +128,19 @@ topic name : {:?}
                 }
             }
             None => log::warn!("topic filter is empty in content : {:?}", content),
+        }
+        for (group_name, shared_clients) in &content.groups {
+            // TODO: config: shared subscription available
+            // TODO: config: shared subscription mode
+            let (client_id, subscribe_qos) =
+                shared_clients.get_by_hash(&session.client_identifier());
+            // TODO: optimize this alloc later
+            let full_filter = TopicFilter::new(format!(
+                "{SHARED_PREFIX}{group_name}/{}",
+                subscribe_filter.to_string(),
+            ))
+            .expect("full topic filter");
+            senders.push((client_id, full_filter, subscribe_qos));
         }
     }
 
@@ -157,7 +178,7 @@ pub(super) async fn handle_pubrel(
     {
         let publish_packet = PublishPacket::new(
             packet.inner().topic_name().to_owned(),
-            QoSWithPacketIdentifier::Level2(packet.pid()),
+            QoSWithPacketIdentifier::Level2(packet.packet_id()),
             packet.inner().payload(),
         );
         dispatch_publish(session, &publish_packet, global.clone()).await;
@@ -168,7 +189,6 @@ pub(super) async fn handle_pubrel(
 }
 
 // outgoing
-
 pub(super) fn receive_publish(session: &mut Session, mut msg: PublishMessage) -> PublishPacket {
     log::debug!(
         r#"client#{} receive publish message:
@@ -317,7 +337,7 @@ pub(crate) fn get_unsent_publish_packet(session: &mut Session) -> Vec<PublishPac
             QualityOfService::Level1 => {
                 let mut packet = PublishPacket::new(
                     msg.packet().topic_name().to_owned(),
-                    QoSWithPacketIdentifier::Level1(msg.pid()),
+                    QoSWithPacketIdentifier::Level1(msg.packet_id()),
                     msg.packet().payload(),
                 );
                 packet.set_retain(packet.retain());
@@ -327,7 +347,7 @@ pub(crate) fn get_unsent_publish_packet(session: &mut Session) -> Vec<PublishPac
             QualityOfService::Level2 => {
                 let mut packet = PublishPacket::new(
                     msg.packet().topic_name().to_owned(),
-                    QoSWithPacketIdentifier::Level2(msg.pid()),
+                    QoSWithPacketIdentifier::Level2(msg.packet_id()),
                     msg.packet().payload(),
                 );
                 packet.set_retain(packet.retain());

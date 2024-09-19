@@ -1,4 +1,4 @@
-use std::{io, sync::Arc};
+use std::{io, sync::Arc, u32};
 
 use futures::SinkExt as _;
 use mqtt_codec_kit::{
@@ -262,7 +262,7 @@ protocol_level : {:?}
     // Build and send connack packet
     let mut connack_properties = ConnackProperties::default();
     // TODO: config: max session_expiry_interval
-    connack_properties.set_session_expiry_interval(Some(30));
+    connack_properties.set_session_expiry_interval(Some(u32::MAX));
     // TODO: config: max receive_maximum
     connack_properties.set_receive_maximum(Some(session.receive_maximum()));
     // TODO: config: max qos
@@ -282,7 +282,8 @@ protocol_level : {:?}
     // TODO: config: subscription_identifiers_available
     connack_properties.set_subscription_identifiers_available(Some(1));
     // TODO: config: shared_subscription_available
-    connack_properties.set_shared_subscription_available(Some(1));
+    // BUG: publish or subscribe QoS1/2 connect ack failed？
+    // connack_properties.set_shared_subscription_available(Some(1));
 
     // TODO: config: min/max keep alive
     if session.server_keep_alive() {
