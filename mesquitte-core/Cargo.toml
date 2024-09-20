@@ -57,11 +57,6 @@ openraft = { version = "0.10", git = "https://github.com/datafuselabs/openraft.g
 parking_lot = "0.12"
 pin-project-lite = "0.2"
 rand = "0.8"
-reqwest = { version = "0.12", default-features = false, features = [
-    "charset",
-    "http2",
-    "json",
-] }
 rocksdb = { version = "0.22", default-features = false, features = [
     "io-uring",
     "zstd",
