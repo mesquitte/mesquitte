@@ -126,7 +126,7 @@ topic name : {:?}
         if let Some(sender) = global.get_outgoing_sender(&receiver_client_id) {
             if let Err(err) = sender.send(Outgoing::Publish((qos, packet).into())).await {
                 log::error!(
-                    "send publish message failed, inner client id#{} topic : {:?}, qos : {:?}, {}",
+                    "send publish message failed, {} topic : {:?}, qos : {:?}, {}",
                     receiver_client_id,
                     filter,
                     qos,

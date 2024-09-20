@@ -23,4 +23,6 @@ pub enum Error {
     SendOutgoing(#[from] SendError<Outgoing>),
     #[error("empty session state")]
     EmptySessionState,
+    #[error("unsupported Packet")]
+    UnsupportedPacket,
 }
