@@ -10,12 +10,12 @@ use openraft::{
     RaftSnapshotBuilder, SnapshotMeta, StorageError, StoredMembership, Vote,
 };
 use rand::Rng;
-use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Direction, Options, DB};
+use rust_rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Direction, Options, DB};
 use serde::{Deserialize, Serialize};
 
 use super::{typ, TypeConfig};
 
-pub type RocksNodeId = u64;
+pub type NodeId = u64;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Request {
@@ -35,7 +35,7 @@ pub struct RocksSnapshot {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StateMachine {
-    pub last_applied_log: Option<LogId<RocksNodeId>>,
+    pub last_applied_log: Option<LogId<NodeId>>,
     pub last_membership: StoredMembership<TypeConfig>,
     pub data: BTreeMap<String, String>,
 }
@@ -47,15 +47,14 @@ pub struct RocksStateMachine {
 }
 
 impl RocksStateMachine {
-    async fn new(db: Arc<DB>) -> RocksStateMachine {
+    async fn new(db: Arc<DB>) -> Self {
         let mut state_machine = Self {
             db,
             sm: Default::default(),
         };
         let snapshot = state_machine.get_current_snapshot().await.unwrap();
         if let Some(s) = snapshot {
-            let prev: StateMachine = *s.snapshot;
-            state_machine.sm = prev;
+            state_machine.sm = *s.snapshot;
         }
         state_machine
     }
@@ -102,7 +101,7 @@ impl RaftStateMachine<TypeConfig> for RocksStateMachine {
 
     async fn applied_state(
         &mut self,
-    ) -> Result<(Option<LogId<RocksNodeId>>, StoredMembership<TypeConfig>), StorageError<TypeConfig>>
+    ) -> Result<(Option<LogId<NodeId>>, StoredMembership<TypeConfig>), StorageError<TypeConfig>>
     {
         Ok((self.sm.last_applied_log, self.sm.last_membership.clone()))
     }
@@ -213,7 +212,7 @@ mod meta {
     use openraft::ErrorSubject;
     use openraft::LogId;
 
-    use super::RocksNodeId;
+    use super::NodeId;
     use super::TypeConfig;
 
     pub(crate) trait StoreMeta {
@@ -236,7 +235,7 @@ mod meta {
 
     impl StoreMeta for Vote {
         const KEY: &'static str = "vote";
-        type Value = openraft::Vote<RocksNodeId>;
+        type Value = openraft::Vote<NodeId>;
 
         fn subject(_v: Option<&Self::Value>) -> ErrorSubject<TypeConfig> {
             ErrorSubject::Vote
@@ -297,7 +296,7 @@ impl RaftLogReader<TypeConfig> for RocksLogStore {
         let mut res = Vec::new();
         let it = self.db.iterator_cf(
             self.cf_logs(),
-            rocksdb::IteratorMode::From(&start, Direction::Forward),
+            rust_rocksdb::IteratorMode::From(&start, Direction::Forward),
         );
         for item_res in it {
             let (id, val) = item_res.map_err(read_logs_err)?;
@@ -312,7 +311,7 @@ impl RaftLogReader<TypeConfig> for RocksLogStore {
         Ok(res)
     }
 
-    async fn read_vote(&mut self) -> Result<Option<Vote<RocksNodeId>>, StorageError<TypeConfig>> {
+    async fn read_vote(&mut self) -> Result<Option<Vote<NodeId>>, StorageError<TypeConfig>> {
         self.get_meta::<meta::Vote>()
     }
 }
@@ -323,7 +322,7 @@ impl RaftLogStorage<TypeConfig> for RocksLogStore {
     async fn get_log_state(&mut self) -> StorageResult<LogState<TypeConfig>> {
         let last = self
             .db
-            .iterator_cf(self.cf_logs(), rocksdb::IteratorMode::End)
+            .iterator_cf(self.cf_logs(), rust_rocksdb::IteratorMode::End)
             .next();
         let last_log_id = match last {
             None => None,
@@ -345,10 +344,7 @@ impl RaftLogStorage<TypeConfig> for RocksLogStore {
         })
     }
 
-    async fn save_vote(
-        &mut self,
-        vote: &Vote<RocksNodeId>,
-    ) -> Result<(), StorageError<TypeConfig>> {
+    async fn save_vote(&mut self, vote: &Vote<NodeId>) -> Result<(), StorageError<TypeConfig>> {
         self.put_meta::<meta::Vote>(vote)?;
         self.db
             .flush_wal(true)
@@ -386,10 +382,7 @@ impl RaftLogStorage<TypeConfig> for RocksLogStore {
         Ok(())
     }
 
-    async fn truncate(
-        &mut self,
-        log_id: LogId<RocksNodeId>,
-    ) -> Result<(), StorageError<TypeConfig>> {
+    async fn truncate(&mut self, log_id: LogId<NodeId>) -> Result<(), StorageError<TypeConfig>> {
         let from = id_to_bin(log_id.index);
         let to = id_to_bin(0xff_ff_ff_ff_ff_ff_ff_ff);
         self.db
@@ -401,7 +394,7 @@ impl RaftLogStorage<TypeConfig> for RocksLogStore {
         Ok(())
     }
 
-    async fn purge(&mut self, log_id: LogId<RocksNodeId>) -> Result<(), StorageError<TypeConfig>> {
+    async fn purge(&mut self, log_id: LogId<NodeId>) -> Result<(), StorageError<TypeConfig>> {
         self.put_meta::<meta::LastPurged>(&log_id)?;
         let from = id_to_bin(0);
         let to = id_to_bin(log_id.index + 1);

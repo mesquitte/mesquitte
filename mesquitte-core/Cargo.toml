@@ -57,9 +57,10 @@ openraft = { version = "0.10", git = "https://github.com/datafuselabs/openraft.g
 parking_lot = "0.12"
 pin-project-lite = "0.2"
 rand = "0.8"
-rocksdb = { version = "0.22", default-features = false, features = [
+rust-rocksdb = { version = "0.30", default-features = false, features = [
     "io-uring",
     "zstd",
+    "zstd-static-linking-only",
 ] }
 rustls = { version = "0.23", default-features = false, optional = true }
 rustls-pemfile = { version = "2.1", optional = true }
