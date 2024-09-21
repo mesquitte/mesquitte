@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use mqtt_codec_kit::common::QualityOfService;
 use tokio::sync::mpsc::Sender;
 
 use super::{publish::PublishMessage, session::SessionState};
@@ -20,8 +21,7 @@ impl Display for KickReason {
 }
 
 pub enum Outgoing {
-    // Publish(${publish_msg})
-    Publish(PublishMessage),
+    Publish(QualityOfService, PublishMessage),
     Online(Sender<SessionState>),
     Kick(KickReason),
 }

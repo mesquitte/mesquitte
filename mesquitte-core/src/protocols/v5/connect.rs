@@ -1,4 +1,4 @@
-use std::{io, sync::Arc, u32};
+use std::{cmp, io, sync::Arc, u32};
 
 use futures::SinkExt as _;
 use mqtt_codec_kit::{
@@ -350,10 +350,13 @@ clean session : {}
 
     while let Some(outgoing) = outgoing_rx.recv().await {
         match outgoing {
-            Outgoing::Publish(msg) => {
-                if QualityOfService::Level2.eq(msg.qos()) {
+            Outgoing::Publish(subscribe_qos, packet) => {
+                let final_qos = cmp::min(subscribe_qos, packet.qos());
+                if QualityOfService::Level2.eq(&final_qos) {
                     let pid = session.incr_server_packet_id();
-                    session.pending_packets().push_outgoing(pid, msg);
+                    session
+                        .pending_packets()
+                        .push_outgoing(pid, subscribe_qos, packet);
                 }
             }
             Outgoing::Online(sender) => {

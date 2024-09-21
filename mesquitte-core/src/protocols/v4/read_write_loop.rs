@@ -11,7 +11,7 @@ use tokio::{
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
 use crate::{
-    protocols::v4::publish::receive_publish,
+    protocols::v4::publish::receive_outgoing_publish,
     server::state::GlobalState,
     types::{error::Error, outgoing::Outgoing, session::Session},
 };
@@ -19,7 +19,7 @@ use crate::{
 use super::{
     connect::{handle_connect, handle_disconnect, handle_offline},
     publish::{
-        get_unsent_publish_packet, handle_puback, handle_pubcomp, handle_publish, handle_pubrec,
+        get_unsent_outgoing_packet, handle_puback, handle_pubcomp, handle_publish, handle_pubrec,
         handle_pubrel,
     },
     subscribe::{handle_subscribe, handle_unsubscribe},
@@ -125,7 +125,9 @@ where
 {
     let mut exists = false;
     let resp = match packet {
-        Outgoing::Publish(msg) => receive_publish(session, msg).into(),
+        Outgoing::Publish(subscribe_qos, packet) => {
+            receive_outgoing_publish(session, subscribe_qos, packet).into()
+        }
         Outgoing::Online(sender) => {
             log::debug!("new client#{} online", session.client_identifier());
             global.remove_client(session.client_id(), session.subscribes().keys());
@@ -189,7 +191,7 @@ where
             }
         };
 
-    let packets = get_unsent_publish_packet(&mut session);
+    let packets = get_unsent_outgoing_packet(&mut session);
     for packet in packets {
         writer.send(packet.into()).await?;
     }
@@ -246,6 +248,11 @@ where
                 }
             }
         }
+    }
+
+    let packets = get_unsent_outgoing_packet(&mut session);
+    for packet in packets {
+        writer.send(packet.into()).await?;
     }
 
     tokio::spawn(handle_offline(

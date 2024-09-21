@@ -1,18 +1,19 @@
 use std::{collections::VecDeque, sync::Arc};
 
 use mqtt_codec_kit::{
-    common::{qos::QoSWithPacketIdentifier, QualityOfService},
+    common::QualityOfService,
     v5::{
         control::DisconnectReasonCode,
         packet::{
-            suback::SubscribeReasonCode, DisconnectPacket, PublishPacket, SubackPacket,
-            SubscribePacket, UnsubackPacket, UnsubscribePacket, VariablePacket,
+            suback::SubscribeReasonCode, DisconnectPacket, SubackPacket, SubscribePacket,
+            UnsubackPacket, UnsubscribePacket, VariablePacket,
         },
     },
 };
 
 use crate::{
-    protocols::v5::common::build_error_disconnect, server::state::GlobalState,
+    protocols::v5::{common::build_error_disconnect, publish::receive_outgoing_publish},
+    server::state::GlobalState,
     types::session::Session,
 };
 
@@ -50,33 +51,16 @@ packet id : {}
         // SubscribeReasonCode::SharedSubscriptionNotSupported
         // SubscribeReasonCode::WildcardSubscriptionsNotSupported topic contain +/#
 
-        let granted_qos = subscribe_opts.qos();
+        let granted_qos = subscribe_opts.qos().to_owned();
         // TODO: granted max qos from config
-        session.set_subscribe(filter.clone(), granted_qos.to_owned());
-        global.subscribe(filter, session.client_id(), granted_qos.to_owned());
+        session.set_subscribe(filter.clone(), granted_qos);
+        global.subscribe(filter, session.client_id(), granted_qos);
 
         for msg in global.retain_table().get_matches(filter) {
-            let qos = match granted_qos {
-                QualityOfService::Level0 => QoSWithPacketIdentifier::Level0,
-                QualityOfService::Level1 => {
-                    let pid = session.incr_server_packet_id();
-                    QoSWithPacketIdentifier::Level1(pid)
-                }
-                QualityOfService::Level2 => {
-                    let pid = session.incr_server_packet_id();
-                    QoSWithPacketIdentifier::Level2(pid)
-                }
-            };
-            let mut payload = vec![0u8; msg.payload().len()];
-            payload.copy_from_slice(&msg.payload());
+            let mut packet = receive_outgoing_publish(session, granted_qos, msg.into());
+            packet.set_retain(true);
 
-            let mut publish_packet = PublishPacket::new(msg.topic_name().to_owned(), qos, payload);
-            publish_packet.set_retain(true);
-            if let Some(properties) = msg.properties() {
-                publish_packet.set_properties(properties.to_owned());
-            }
-
-            retain_packets.push(publish_packet.into());
+            retain_packets.push(packet.into());
         }
         let reason_code = match granted_qos {
             QualityOfService::Level0 => SubscribeReasonCode::GrantedQos0,

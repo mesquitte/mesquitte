@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use mqtt_codec_kit::common::{QualityOfService, TopicName};
-// #[cfg(feature = "v4")]
-use mqtt_codec_kit::v4::packet::PublishPacket as V4PublishPacket;
 // #[cfg(feature = "v5")]
-use mqtt_codec_kit::v5::{control::PublishProperties, packet::PublishPacket as V5PublishPacket};
+use mqtt_codec_kit::v5::control::PublishProperties;
+
+use super::publish::PublishMessage;
 
 #[derive(Clone)]
 pub struct RetainContent {
@@ -39,28 +39,14 @@ impl RetainContent {
     }
 }
 
-impl From<(Arc<String>, &V4PublishPacket)> for RetainContent {
-    fn from((client_identifier, packet): (Arc<String>, &V4PublishPacket)) -> Self {
+impl From<(Arc<String>, &PublishMessage)> for RetainContent {
+    fn from((client_identifier, packet): (Arc<String>, &PublishMessage)) -> Self {
         Self {
             client_identifier,
             topic_name: packet.topic_name().clone(),
             payload: packet.payload().into(),
             qos: packet.qos().into(),
-
-            properties: None,
-        }
-    }
-}
-
-impl From<(Arc<String>, &V5PublishPacket)> for RetainContent {
-    fn from((client_identifier, packet): (Arc<String>, &V5PublishPacket)) -> Self {
-        Self {
-            client_identifier,
-            topic_name: packet.topic_name().clone(),
-            payload: packet.payload().into(),
-            qos: packet.qos().into(),
-
-            properties: Some(packet.properties().clone()),
+            properties: packet.properties().map(|p| p.to_owned()),
         }
     }
 }
