@@ -1,4 +1,3 @@
-mod ws_callback;
 mod ws_stream;
 
 pub mod server;
@@ -7,6 +6,8 @@ pub mod server;
 pub enum Error {
     #[error("Io Error : {0}")]
     Io(#[from] std::io::Error),
+    #[error("tungstenite Error : {0}")]
+    Accept(#[from] tungstenite::Error),
     #[error("Missing tls config")]
     MissingTlsConfig,
     #[error("Wrong tls config: {0}")]
