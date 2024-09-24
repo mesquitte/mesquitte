@@ -1,7 +1,10 @@
-use std::{io, sync::Arc, time::Duration};
+use std::{
+    io,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use parking_lot::RwLock;
-use tokio::time::Instant;
 
 use crate::{
     server::state::GlobalState,

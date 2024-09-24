@@ -1,4 +1,4 @@
-use std::{cmp, io, sync::Arc};
+use std::{io, sync::Arc};
 
 use futures::SinkExt as _;
 use mqtt_codec_kit::{
@@ -15,15 +15,15 @@ use tokio::{io::AsyncWrite, sync::mpsc};
 use tokio_util::codec::{Encoder, FramedWrite};
 
 use crate::{
-    protocols::{common::keep_alive_timer, v4::publish::handle_will},
-    server::state::GlobalState,
-    types::{
-        client_id::AddClientReceipt,
-        error::Error,
-        outgoing::{KickReason, Outgoing},
-        session::Session,
+    protocols::{
+        common::keep_alive_timer,
+        v4::{common::WritePacket, message::handle_outgoing},
     },
+    server::state::GlobalState,
+    types::{client_id::AddClientReceipt, error::Error, outgoing::Outgoing, session::Session},
 };
+
+use super::publish::handle_will;
 
 pub(super) async fn handle_connect<W, E>(
     writer: &mut FramedWrite<W, E>,
@@ -213,47 +213,10 @@ clean session : {}
         return;
     }
 
-    while let Some(outgoing) = outgoing_rx.recv().await {
-        match outgoing {
-            Outgoing::Publish(subscribe_qos, message) => {
-                let final_qos = cmp::min(subscribe_qos, message.qos());
-                if QualityOfService::Level0.ne(&final_qos) {
-                    let packet_id = session.incr_server_packet_id();
-                    session.pending_packets().push_outgoing(
-                        packet_id,
-                        subscribe_qos,
-                        message,
-                    );
-                }
-            }
-            Outgoing::Online(sender) => {
-                log::debug!(
-                    "handle offline client#{} receive new client online",
-                    session.client_identifier(),
-                );
-                global.remove_client(session.client_id(), session.subscribes().keys());
-                if let Err(err) = sender.send((&mut session).into()).await {
-                    log::debug!(
-                        "handle offline client#{} send session state : {}",
-                        session.client_identifier(),
-                        err,
-                    );
-                }
-                break;
-            }
-            Outgoing::Kick(reason) => {
-                log::debug!(
-                    "handle offline client#{} receive kick message",
-                    session.client_identifier(),
-                );
-
-                if KickReason::Expired == reason {
-                    continue;
-                }
-
-                global.remove_client(session.client_id(), session.subscribes().keys());
-                break;
-            }
+    while let Some(p) = outgoing_rx.recv().await {
+        match handle_outgoing(&mut session, global.clone(), p).await {
+            WritePacket::Disconnect(_) => break,
+            _ => continue,
         }
     }
 }

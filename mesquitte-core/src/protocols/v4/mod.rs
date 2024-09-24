@@ -1,4 +1,6 @@
+mod common;
 mod connect;
+mod message;
 mod publish;
 mod subscribe;
 

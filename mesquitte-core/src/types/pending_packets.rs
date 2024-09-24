@@ -309,6 +309,18 @@ impl PendingPackets {
             )
         })
     }
+
+    pub fn incoming_len(&self) -> usize {
+        self.incoming_packets.len()
+    }
+
+    pub fn outgoing_len(&self) -> usize {
+        self.outgoing_packets.len()
+    }
+
+    pub fn set_max_inflight(&mut self, new_value: u16) {
+        self.max_inflight = new_value;
+    }
 }
 
 /// Unix timestamp as seconds

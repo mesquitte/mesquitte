@@ -1,42 +1,21 @@
-use std::cmp;
-
 use mqtt_codec_kit::{
-    common::{qos::QoSWithPacketIdentifier, Encodable, QualityOfService},
+    common::Encodable,
     v5::{
         control::{
             ConnackProperties, ConnectReasonCode, DisconnectProperties, DisconnectReasonCode,
         },
-        packet::{ConnackPacket, DisconnectPacket, PublishPacket},
+        packet::{ConnackPacket, DisconnectPacket, VariablePacket},
     },
 };
 
-use crate::types::{publish::PublishMessage, session::Session};
+use crate::types::session::Session;
 
-fn new_publish_packet(
-    session: &mut Session,
-    subscribe_qos: QualityOfService,
-    msg: PublishMessage,
-) -> (Option<u16>, PublishPacket) {
-    let final_qos = cmp::min(subscribe_qos, msg.qos());
-    let (packet_id, qos) = match final_qos {
-        QualityOfService::Level0 => (None, QoSWithPacketIdentifier::Level0),
-        QualityOfService::Level1 => {
-            let pid = session.incr_server_packet_id();
-            (Some(pid), QoSWithPacketIdentifier::Level1(pid))
-        }
-        QualityOfService::Level2 => {
-            let pid = session.incr_server_packet_id();
-            (Some(pid), QoSWithPacketIdentifier::Level2(pid))
-        }
-    };
-    let mut packet = PublishPacket::new(msg.topic_name().to_owned(), qos, msg.payload());
-    packet.set_retain(msg.retain());
-    packet.set_dup(msg.dup());
-    if let Some(properties) = msg.properties() {
-        packet.set_properties(properties.to_owned());
-    }
-
-    (packet_id, packet)
+#[derive(Debug)]
+pub enum WritePacket {
+    Stop,
+    Packet(VariablePacket),
+    Packets(Vec<VariablePacket>),
+    Disconnect(DisconnectPacket),
 }
 
 pub(crate) fn build_error_connack<S: Into<String>>(

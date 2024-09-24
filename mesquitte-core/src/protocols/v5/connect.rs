@@ -1,4 +1,4 @@
-use std::{cmp, io, sync::Arc, u32};
+use std::{io, sync::Arc};
 
 use futures::SinkExt as _;
 use mqtt_codec_kit::{
@@ -6,8 +6,8 @@ use mqtt_codec_kit::{
         ProtocolLevel, QualityOfService, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX, SYS_PREFIX,
     },
     v5::{
-        control::{ConnackProperties, ConnectReasonCode},
-        packet::{ConnackPacket, ConnectPacket, VariablePacket},
+        control::{ConnackProperties, ConnectReasonCode, DisconnectReasonCode},
+        packet::{ConnackPacket, ConnectPacket, DisconnectPacket, VariablePacket},
     },
 };
 use nanoid::nanoid;
@@ -17,15 +17,14 @@ use tokio_util::codec::{Encoder, FramedWrite};
 use crate::{
     protocols::{
         common::keep_alive_timer,
-        v5::{common::build_error_connack, publish::handle_will},
+        v5::{
+            common::{build_error_connack, build_error_disconnect, WritePacket},
+            message::handle_outgoing,
+            publish::handle_will,
+        },
     },
     server::state::GlobalState,
-    types::{
-        client_id::AddClientReceipt,
-        error::Error,
-        outgoing::{KickReason, Outgoing},
-        session::Session,
-    },
+    types::{client_id::AddClientReceipt, error::Error, outgoing::Outgoing, session::Session},
 };
 
 pub(super) async fn handle_connect<W, E>(
@@ -83,7 +82,7 @@ protocol level : {:?}
     // TODO: config: inflight message timeout
     // TODO: config: max packet size
 
-    let mut session = Session::new(packet.client_identifier().to_owned(), 12, 1024, 10);
+    let mut session = Session::new(packet.client_identifier().to_owned(), 12, 1024, 60);
     session.set_clean_session(packet.clean_session());
     session.set_username(packet.username().map(|name| Arc::new(name.to_owned())));
     session.set_keep_alive(packet.keep_alive());
@@ -270,10 +269,10 @@ protocol level : {:?}
         session.last_packet_at(),
         global.clone(),
     )?;
-    // Build and send connack packet
+    // build and send connack packet
     let mut connack_properties = ConnackProperties::default();
     // TODO: config: max session_expiry_interval
-    connack_properties.set_session_expiry_interval(Some(u32::MAX));
+    connack_properties.set_session_expiry_interval(Some(session.session_expiry_interval()));
     // TODO: config: max receive_maximum
     connack_properties.set_receive_maximum(Some(session.receive_maximum()));
     // TODO: config: max qos
@@ -311,14 +310,31 @@ protocol level : {:?}
     Ok((session, outgoing_rx))
 }
 
-pub(super) async fn handle_disconnect(session: &mut Session) {
+pub(super) async fn handle_disconnect(
+    session: &mut Session,
+    packet: DisconnectPacket,
+) -> Option<DisconnectPacket> {
     log::debug!(
         "client#{} received a disconnect packet",
         session.client_identifier()
     );
 
-    session.clear_last_will();
+    if let Some(value) = packet.properties().session_expiry_interval() {
+        if session.session_expiry_interval() == 0 && value > 0 {
+            return Some(build_error_disconnect(
+                session,
+                DisconnectReasonCode::ProtocolError,
+                "SessionExpiryInterval is 0 in CONNECT",
+            ));
+        }
+        session.set_session_expiry_interval(value);
+    }
+
+    if packet.reason_code() == DisconnectReasonCode::NormalDisconnection {
+        session.clear_last_will();
+    }
     session.set_client_disconnected();
+    None
 }
 
 pub(super) async fn handle_offline(
@@ -348,44 +364,10 @@ clean session : {}
         return;
     }
 
-    while let Some(outgoing) = outgoing_rx.recv().await {
-        match outgoing {
-            Outgoing::Publish(subscribe_qos, packet) => {
-                let final_qos = cmp::min(subscribe_qos, packet.qos());
-                if QualityOfService::Level2.eq(&final_qos) {
-                    let pid = session.incr_server_packet_id();
-                    session
-                        .pending_packets()
-                        .push_outgoing(pid, subscribe_qos, packet);
-                }
-            }
-            Outgoing::Online(sender) => {
-                log::debug!(
-                    "handle offline client#{} receive new client online",
-                    session.client_identifier(),
-                );
-                global.remove_client(session.client_id(), session.subscribes().keys());
-                if let Err(err) = sender.send((&mut session).into()).await {
-                    log::debug!(
-                        "handle offline client#{} send session state : {}",
-                        session.client_identifier(),
-                        err,
-                    );
-                }
-                break;
-            }
-            Outgoing::Kick(reason) => {
-                log::debug!(
-                    "handle offline client#{} receive kick message",
-                    session.client_identifier(),
-                );
-                if KickReason::Expired == reason {
-                    continue;
-                }
-
-                global.remove_client(session.client_id(), session.subscribes().keys());
-                break;
-            }
+    while let Some(p) = outgoing_rx.recv().await {
+        match handle_outgoing(&mut session, global.clone(), p).await {
+            WritePacket::Disconnect(_) => break,
+            _ => continue,
         }
     }
 }

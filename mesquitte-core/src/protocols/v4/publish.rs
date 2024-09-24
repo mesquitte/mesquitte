@@ -5,20 +5,22 @@ use mqtt_codec_kit::{
         qos::QoSWithPacketIdentifier, QualityOfService, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX,
     },
     v4::packet::{
-        PubackPacket, PubcompPacket, PublishPacket, PubrecPacket, PubrelPacket, VariablePacket,
+        DisconnectPacket, PubackPacket, PubcompPacket, PublishPacket, PubrecPacket, PubrelPacket,
     },
 };
 
 use crate::{
     server::state::GlobalState,
-    types::{error::Error, outgoing::Outgoing, publish::PublishMessage, session::Session},
+    types::{outgoing::Outgoing, publish::PublishMessage, session::Session},
 };
+
+use super::common::WritePacket;
 
 pub(super) async fn handle_publish(
     session: &mut Session,
     packet: &PublishPacket,
     global: Arc<GlobalState>,
-) -> Result<Option<VariablePacket>, Error> {
+) -> Option<WritePacket> {
     log::debug!(
         r#"client#{} received a publish packet:
 topic name : {:?}
@@ -34,10 +36,8 @@ topic name : {:?}
 
     let topic_name = packet.topic_name();
     if topic_name.is_empty() {
-        log::debug!("invalid empty topic name");
-        return Err(Error::InvalidPublishPacket(
-            "invalid empty topic name".to_string(),
-        ));
+        log::debug!("Publish topic name cannot be empty");
+        return Some(WritePacket::Disconnect(DisconnectPacket::new().into()));
     }
 
     if topic_name.starts_with(SHARED_PREFIX)
@@ -45,34 +45,31 @@ topic name : {:?}
         || topic_name.contains(MATCH_ONE_STR)
     {
         log::debug!("invalid topic name: {:?}", topic_name);
-        return Err(Error::InvalidPublishPacket(format!(
-            "invalid topic name: {:?}",
-            topic_name
-        )));
+        return Some(WritePacket::Disconnect(DisconnectPacket::new().into()));
     }
     if packet.qos() == QoSWithPacketIdentifier::Level0 && packet.dup() {
         log::debug!("invalid duplicate flag in QoS 0 publish message");
-        return Err(Error::InvalidPublishPacket(
-            "invalid duplicate flag in QoS 0 publish message".to_string(),
-        ));
+        return Some(WritePacket::Disconnect(DisconnectPacket::new().into()));
     }
 
     match packet.qos() {
         QoSWithPacketIdentifier::Level0 => {
             dispatch_publish(session, packet.into(), global).await;
-            Ok(None)
+            None
         }
-        QoSWithPacketIdentifier::Level1(pid) => {
+        QoSWithPacketIdentifier::Level1(packet_id) => {
             if !packet.dup() {
                 dispatch_publish(session, packet.into(), global).await;
             }
-            Ok(Some(PubackPacket::new(pid).into()))
+            Some(WritePacket::Packet(PubackPacket::new(packet_id).into()))
         }
-        QoSWithPacketIdentifier::Level2(pid) => {
+        QoSWithPacketIdentifier::Level2(packet_id) => {
             if !packet.dup() {
-                session.pending_packets().push_incoming(pid, packet.into());
+                session
+                    .pending_packets()
+                    .push_incoming(packet_id, packet.into());
             }
-            Ok(Some(PubrecPacket::new(pid).into()))
+            Some(WritePacket::Packet(PubrecPacket::new(packet_id).into()))
         }
     }
 }

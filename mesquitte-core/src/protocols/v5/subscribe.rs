@@ -5,8 +5,8 @@ use mqtt_codec_kit::{
     v5::{
         control::DisconnectReasonCode,
         packet::{
-            suback::SubscribeReasonCode, DisconnectPacket, SubackPacket, SubscribePacket,
-            UnsubackPacket, UnsubscribePacket, VariablePacket,
+            suback::SubscribeReasonCode, SubackPacket, SubscribePacket, UnsubackPacket,
+            UnsubscribePacket, VariablePacket,
         },
     },
 };
@@ -17,11 +17,13 @@ use crate::{
     types::session::Session,
 };
 
+use super::common::WritePacket;
+
 pub(super) fn handle_subscribe(
     session: &mut Session,
     packet: &SubscribePacket,
     global: Arc<GlobalState>,
-) -> Result<Vec<VariablePacket>, DisconnectPacket> {
+) -> WritePacket {
     log::debug!(
         r#"{} received a subscribe packet:
 packet id : {}
@@ -38,7 +40,7 @@ packet id : {}
             DisconnectReasonCode::ProtocolError,
             "Subscription identifier value=0 is not allowed",
         );
-        return Err(err_pkt);
+        return WritePacket::Disconnect(err_pkt.into());
     }
 
     // TODO: config subscription identifier available false
@@ -74,7 +76,7 @@ packet id : {}
     let suback_packet = SubackPacket::new(packet.packet_identifier(), reason_codes);
     // TODO: user properties
     queue.push_front(suback_packet.into());
-    Ok(queue.into())
+    WritePacket::Packets(queue.into())
 }
 
 pub(super) fn handle_unsubscribe(

@@ -6,23 +6,26 @@ use mqtt_codec_kit::{
         MATCH_DOLLAR_STR, MATCH_ONE_STR, SHARED_PREFIX,
     },
     v5::{
-        control::{PubackReasonCode, PubcompReasonCode, PubrecReasonCode, PubrelReasonCode},
-        packet::{
-            PubackPacket, PubcompPacket, PublishPacket, PubrecPacket, PubrelPacket, VariablePacket,
+        control::{
+            DisconnectReasonCode, PubackReasonCode, PubcompReasonCode, PubrecReasonCode,
+            PubrelReasonCode,
         },
+        packet::{PubackPacket, PubcompPacket, PublishPacket, PubrecPacket, PubrelPacket},
     },
 };
 
 use crate::{
     server::state::GlobalState,
-    types::{error::Error, outgoing::Outgoing, publish::PublishMessage, session::Session},
+    types::{outgoing::Outgoing, publish::PublishMessage, session::Session},
 };
+
+use super::common::{build_error_disconnect, WritePacket};
 
 pub(super) async fn handle_publish(
     session: &mut Session,
     packet: &PublishPacket,
     global: Arc<GlobalState>,
-) -> Result<Option<VariablePacket>, Error> {
+) -> Option<WritePacket> {
     log::debug!(
         r#"client#{} received a publish packet:
 topic name : {:?}
@@ -36,11 +39,26 @@ topic name : {:?}
         packet.dup(),
     );
 
+    if session.pending_packets().incoming_len() >= session.receive_maximum().into() {
+        return Some(WritePacket::Disconnect(
+            build_error_disconnect(
+                session,
+                DisconnectReasonCode::ReceiveMaximumExceeded,
+                "received more than Receive Maximum publication",
+            )
+            .into(),
+        ));
+    }
+
     let topic_name = packet.topic_name();
     if topic_name.is_empty() {
-        log::debug!("invalid empty topic name");
-        return Err(Error::InvalidPublishPacket(
-            "invalid empty topic name".to_string(),
+        return Some(WritePacket::Disconnect(
+            build_error_disconnect(
+                session,
+                DisconnectReasonCode::TopicNameInvalid,
+                "topic name cannot be empty",
+            )
+            .into(),
         ));
     }
 
@@ -48,38 +66,43 @@ topic name : {:?}
         || topic_name.contains(MATCH_ALL_STR)
         || topic_name.contains(MATCH_ONE_STR)
     {
-        log::debug!("invalid topic name: {:?}", topic_name);
-        return Err(Error::InvalidPublishPacket(format!(
-            "invalid topic name: {:?}",
-            topic_name
-        )));
+        let err_pkt = build_error_disconnect(
+            session,
+            DisconnectReasonCode::TopicNameInvalid,
+            "topic name cannot start with '$' or contain '+' or '#'",
+        );
+        return Some(WritePacket::Disconnect(err_pkt.into()));
     }
     if packet.qos() == QoSWithPacketIdentifier::Level0 && packet.dup() {
-        log::debug!("invalid duplicate flag in QoS 0 publish message");
-        return Err(Error::InvalidPublishPacket(
-            "invalid duplicate flag in QoS 0 publish message".to_string(),
-        ));
+        let err_pkt = build_error_disconnect(
+            session,
+            DisconnectReasonCode::ProtocolError,
+            "invalid duplicate flag in QoS 0 publish message",
+        );
+        return Some(WritePacket::Disconnect(err_pkt.into()));
     }
 
     match packet.qos() {
         QoSWithPacketIdentifier::Level0 => {
             dispatch_publish(session, packet.into(), global).await;
-            Ok(None)
+            None
         }
-        QoSWithPacketIdentifier::Level1(pid) => {
+        QoSWithPacketIdentifier::Level1(packet_id) => {
             if !packet.dup() {
                 dispatch_publish(session, packet.into(), global).await;
             }
-            Ok(Some(
-                PubackPacket::new(pid, PubackReasonCode::Success).into(),
+            Some(WritePacket::Packet(
+                PubackPacket::new(packet_id, PubackReasonCode::Success).into(),
             ))
         }
-        QoSWithPacketIdentifier::Level2(pid) => {
+        QoSWithPacketIdentifier::Level2(packet_id) => {
             if !packet.dup() {
-                session.pending_packets().push_incoming(pid, packet.into());
+                session
+                    .pending_packets()
+                    .push_incoming(packet_id, packet.into());
             }
-            Ok(Some(
-                PubrecPacket::new(pid, PubrecReasonCode::Success).into(),
+            Some(WritePacket::Packet(
+                PubrecPacket::new(packet_id, PubrecReasonCode::Success).into(),
             ))
         }
     }
@@ -188,7 +211,7 @@ pub(super) fn receive_outgoing_publish(
     subscribe_qos: QualityOfService,
     message: PublishMessage,
 ) -> PublishPacket {
-    log::error!(
+    log::debug!(
         r#"client#{} receive outgoing publish message:
 topic name : {:?}
    payload : {:?}

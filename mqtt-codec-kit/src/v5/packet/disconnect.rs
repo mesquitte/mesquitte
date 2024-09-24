@@ -43,6 +43,14 @@ impl DisconnectPacket {
         }
     }
 
+    pub fn reason_code(&self) -> DisconnectReasonCode {
+        self.reason_code
+    }
+
+    pub fn properties(&self) -> &DisconnectProperties {
+        &self.properties
+    }
+
     pub fn set_properties(&mut self, properties: DisconnectProperties) {
         self.properties = properties;
         self.fix_header_remaining_len();

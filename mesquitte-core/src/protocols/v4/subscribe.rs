@@ -1,20 +1,19 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::sync::Arc;
 
 use mqtt_codec_kit::v4::packet::{
     suback::SubscribeReturnCode, SubackPacket, SubscribePacket, UnsubackPacket, UnsubscribePacket,
     VariablePacket,
 };
 
-use crate::{
-    protocols::v4::publish::receive_outgoing_publish, server::state::GlobalState,
-    types::session::Session,
-};
+use crate::{server::state::GlobalState, types::session::Session};
+
+use super::{common::WritePacket, publish::receive_outgoing_publish};
 
 pub(super) fn handle_subscribe(
     session: &mut Session,
     packet: &SubscribePacket,
     global: Arc<GlobalState>,
-) -> Vec<VariablePacket> {
+) -> WritePacket {
     log::debug!(
         r#"{} received a subscribe packet:
 packet id : {}
@@ -24,7 +23,7 @@ packet id : {}
         packet.subscribes(),
     );
     let mut return_codes = Vec::with_capacity(packet.subscribes().len());
-    let mut retain_packets: Vec<VariablePacket> = Vec::new();
+    let mut packets: Vec<VariablePacket> = Vec::new();
     for (filter, subscribe_qos) in packet.subscribes() {
         if filter.is_shared() {
             log::warn!("mqtt v3.x don't support shared subscription");
@@ -41,14 +40,13 @@ packet id : {}
             let mut packet = receive_outgoing_publish(session, granted_qos, msg.into());
             packet.set_retain(true);
 
-            retain_packets.push(packet.into());
+            packets.push(packet.into());
         }
 
         return_codes.push(granted_qos.into());
     }
-    let mut queue: VecDeque<VariablePacket> = VecDeque::from(retain_packets);
-    queue.push_front(SubackPacket::new(packet.packet_identifier(), return_codes).into());
-    queue.into()
+    packets.push(SubackPacket::new(packet.packet_identifier(), return_codes).into());
+    WritePacket::Packets(packets)
 }
 
 pub(super) fn handle_unsubscribe(

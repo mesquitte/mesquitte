@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, time::Instant};
 
 use mqtt_codec_kit::common::QualityOfService;
 use tokio::sync::mpsc::Sender;
@@ -24,4 +24,5 @@ pub enum Outgoing {
     Publish(QualityOfService, PublishMessage),
     Online(Sender<SessionState>),
     Kick(KickReason),
+    SessionExpired { connected_at: Instant },
 }

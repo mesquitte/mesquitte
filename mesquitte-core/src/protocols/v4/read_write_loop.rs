@@ -1,28 +1,20 @@
 use std::{io, sync::Arc};
 
 use futures::{SinkExt as _, StreamExt as _};
-use mqtt_codec_kit::v4::packet::{
-    DisconnectPacket, MqttDecoder, MqttEncoder, PingrespPacket, VariablePacket, VariablePacketError,
-};
+use mqtt_codec_kit::v4::packet::{MqttDecoder, MqttEncoder, VariablePacket, VariablePacketError};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc,
 };
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
-use crate::{
-    protocols::v4::publish::receive_outgoing_publish,
-    server::state::GlobalState,
-    types::{error::Error, outgoing::Outgoing, session::Session},
-};
+use crate::{server::state::GlobalState, types::error::Error};
 
 use super::{
-    connect::{handle_connect, handle_disconnect, handle_offline},
-    publish::{
-        get_unsent_outgoing_packet, handle_puback, handle_pubcomp, handle_publish, handle_pubrec,
-        handle_pubrel,
-    },
-    subscribe::{handle_subscribe, handle_unsubscribe},
+    common::WritePacket,
+    connect::{handle_connect, handle_offline},
+    message::{handle_incoming, handle_outgoing},
+    publish::get_unsent_outgoing_packet,
 };
 
 async fn read_from_client<T, D>(mut reader: FramedRead<T, D>, msg_tx: mpsc::Sender<VariablePacket>)
@@ -41,7 +33,6 @@ where
                 break;
             }
             Some(Ok(packet)) => {
-                log::debug!("read from client: {:?}", packet);
                 if let Err(err) = msg_tx.send(packet).await {
                     log::error!("receiver closed: {}", err);
                     break;
@@ -49,117 +40,6 @@ where
             }
         }
     }
-}
-
-async fn handle_incoming<T, E>(
-    session: &mut Session,
-    writer: &mut FramedWrite<T, E>,
-    global: Arc<GlobalState>,
-    packet: VariablePacket,
-    take_over: &mut bool,
-) -> Result<bool, Error>
-where
-    T: AsyncWrite + Unpin,
-    E: Encoder<VariablePacket, Error = io::Error>,
-{
-    session.renew_last_packet_at();
-    let resp = match packet {
-        VariablePacket::PingreqPacket(_packet) => PingrespPacket::new().into(),
-        VariablePacket::PublishPacket(packet) => {
-            match handle_publish(session, &packet, global.clone()).await {
-                Ok(Some(resp)) => resp,
-                Ok(None) => return Ok(false),
-                Err(err) => return Err(err),
-            }
-        }
-        VariablePacket::PubrelPacket(packet) => {
-            handle_pubrel(session, global.clone(), packet.packet_identifier())
-                .await
-                .into()
-        }
-        VariablePacket::PubackPacket(packet) => {
-            handle_puback(session, packet.packet_identifier());
-            return Ok(false);
-        }
-        VariablePacket::PubrecPacket(packet) => {
-            handle_pubrec(session, packet.packet_identifier()).into()
-        }
-        VariablePacket::SubscribePacket(packet) => {
-            let packets = handle_subscribe(session, &packet, global.clone());
-            for packet in packets {
-                writer.send(packet).await?;
-            }
-            return Ok(false);
-        }
-        VariablePacket::PubcompPacket(packet) => {
-            handle_pubcomp(session, packet.packet_identifier());
-            return Ok(false);
-        }
-        VariablePacket::UnsubscribePacket(packet) => {
-            handle_unsubscribe(session, &packet, global.clone()).into()
-        }
-        VariablePacket::DisconnectPacket(_packet) => {
-            handle_disconnect(session).await;
-            return Ok(true);
-        }
-        _ => {
-            log::debug!("unsupported packet: {:?}", packet);
-            *take_over = false;
-            return Err(Error::UnsupportedPacket);
-        }
-    };
-    writer.send(resp).await?;
-    Ok(false)
-}
-
-async fn handle_control<T, E>(
-    session: &mut Session,
-    writer: &mut FramedWrite<T, E>,
-    global: Arc<GlobalState>,
-    packet: Outgoing,
-    take_over: &mut bool,
-) -> Result<bool, Error>
-where
-    T: AsyncWrite + Unpin,
-    E: Encoder<VariablePacket, Error = io::Error>,
-{
-    let mut exists = false;
-    let resp = match packet {
-        Outgoing::Publish(subscribe_qos, packet) => {
-            receive_outgoing_publish(session, subscribe_qos, packet).into()
-        }
-        Outgoing::Online(sender) => {
-            log::debug!("new client#{} online", session.client_identifier());
-            global.remove_client(session.client_id(), session.subscribes().keys());
-            *take_over = false;
-
-            if let Err(err) = sender.send(session.into()).await {
-                log::error!(
-                    "client#{} send session state : {}",
-                    session.client_identifier(),
-                    err,
-                );
-            }
-            exists = true;
-
-            DisconnectPacket::new().into()
-        }
-        Outgoing::Kick(reason) => {
-            log::debug!(
-                "client#{} kicked out: {}",
-                session.client_identifier(),
-                reason
-            );
-            global.remove_client(session.client_id(), session.subscribes().keys());
-            *take_over = false;
-            exists = true;
-
-            DisconnectPacket::new().into()
-        }
-    };
-
-    writer.send(resp).await?;
-    Ok(exists)
 }
 
 async fn write_to_client<T, E>(
@@ -200,21 +80,21 @@ where
     loop {
         tokio::select! {
             packet = msg_rx.recv() => match packet {
-                Some(packet) => {
-                    let ret = handle_incoming(
-                        &mut session,
-                        &mut writer,
-                        global.clone(),
-                        packet,
-                        &mut take_over,
-                    )
-                    .await;
-                    match ret {
-                        Ok(true) => break,
-                        Ok(false) => continue,
-                        Err(err) => {
-                            log::error!("handle mqtt incoming message failed: {err}");
-                            break;
+                Some(p) => {
+                    session.renew_last_packet_at();
+                    if let Some(write_packet) = handle_incoming(&mut session, global.clone(), p).await {
+                        match write_packet {
+                            WritePacket::Packet(write_packet) => writer.send(write_packet).await?,
+                            WritePacket::Packets(write_packets) => {
+                                for write_packet in write_packets {
+                                    writer.send(write_packet).await?
+                                }
+                            },
+                            WritePacket::Disconnect(write_packet) => {
+                                writer.send(write_packet.into()).await?;
+                                break;
+                            },
+                            WritePacket::Stop => break,
                         }
                     }
                 }
@@ -224,22 +104,20 @@ where
                 }
             },
             packet = outgoing_rx.recv() => match packet {
-                Some(packet) => {
-                    let ret = handle_control(
-                        &mut session,
-                        &mut writer,
-                        global.clone(),
-                        packet,
-                        &mut take_over,
-                    )
-                    .await;
-                    match ret {
-                        Ok(true) => break,
-                        Ok(false) => continue,
-                        Err(err) => {
-                            log::error!("handle mqtt outgoing message failed: {err}");
-                            break;
+                Some(p) => {
+                    match handle_outgoing(&mut session, global.clone(), p).await {
+                        WritePacket::Packet(write_packet) => writer.send(write_packet).await?,
+                        WritePacket::Packets(write_packets) => {
+                            for write_packet in write_packets {
+                                writer.send(write_packet).await?
+                            }
                         }
+                        WritePacket::Stop => break,
+                        WritePacket::Disconnect(write_packet) => {
+                            writer.send(write_packet.into()).await?;
+                            take_over = false;
+                            break;
+                        },
                     }
                 }
                 None => {
@@ -248,11 +126,6 @@ where
                 }
             }
         }
-    }
-
-    let packets = get_unsent_outgoing_packet(&mut session);
-    for packet in packets {
-        writer.send(packet.into()).await?;
     }
 
     tokio::spawn(handle_offline(
