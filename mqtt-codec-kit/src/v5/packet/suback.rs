@@ -92,7 +92,7 @@ impl SubackPacketPayload {
 impl Encodable for SubackPacketPayload {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
         for code in self.subscribes.iter() {
-            writer.write_u8(*code as u8)?;
+            code.encode(writer)?;
         }
 
         Ok(())
