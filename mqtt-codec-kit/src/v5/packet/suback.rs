@@ -25,30 +25,34 @@ pub struct SubackPacket {
 encodable_packet!(SubackPacket(packet_identifier, properties, payload));
 
 impl SubackPacket {
-    pub fn new(pkid: u16, subscribes: Vec<SubscribeReasonCode>) -> SubackPacket {
-        let mut pk = SubackPacket {
+    pub fn new(pkid: u16, reason_codes: Vec<SubscribeReasonCode>) -> SubackPacket {
+        let mut pkt = SubackPacket {
             fixed_header: FixedHeader::new(
                 PacketType::with_default(ControlType::SubscribeAcknowledgement),
                 0,
             ),
             packet_identifier: PacketIdentifier(pkid),
             properties: SubackProperties::default(),
-            payload: SubackPacketPayload::new(subscribes),
+            payload: SubackPacketPayload::new(reason_codes),
         };
-        pk.fix_header_remaining_len();
-        pk
+        pkt.fix_header_remaining_len();
+        pkt
     }
 
     pub fn packet_identifier(&self) -> u16 {
         self.packet_identifier.0
     }
 
-    pub fn set_packet_identifier(&mut self, pkid: u16) {
-        self.packet_identifier.0 = pkid;
+    pub fn properties(&self) -> &SubackProperties {
+        &self.properties
     }
 
-    pub fn subscribes(&self) -> &[SubscribeReasonCode] {
-        &self.payload.subscribes[..]
+    pub fn reason_code(&self) -> &[SubscribeReasonCode] {
+        &self.payload.reason_codes[..]
+    }
+
+    pub fn set_packet_identifier(&mut self, pkid: u16) {
+        self.packet_identifier.0 = pkid;
     }
 }
 
@@ -80,18 +84,18 @@ impl DecodablePacket for SubackPacket {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct SubackPacketPayload {
-    subscribes: Vec<SubscribeReasonCode>,
+    reason_codes: Vec<SubscribeReasonCode>,
 }
 
 impl SubackPacketPayload {
-    pub fn new(subs: Vec<SubscribeReasonCode>) -> SubackPacketPayload {
-        SubackPacketPayload { subscribes: subs }
+    pub fn new(reason_codes: Vec<SubscribeReasonCode>) -> SubackPacketPayload {
+        SubackPacketPayload { reason_codes }
     }
 }
 
 impl Encodable for SubackPacketPayload {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        for code in self.subscribes.iter() {
+        for code in self.reason_codes.iter() {
             code.encode(writer)?;
         }
 
@@ -99,7 +103,7 @@ impl Encodable for SubackPacketPayload {
     }
 
     fn encoded_length(&self) -> u32 {
-        self.subscribes.len() as u32
+        self.reason_codes.len() as u32
     }
 }
 

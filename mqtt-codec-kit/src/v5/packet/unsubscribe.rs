@@ -32,26 +32,30 @@ encodable_packet!(UnsubscribePacket(packet_identifier, properties, payload));
 
 impl UnsubscribePacket {
     pub fn new(pkid: u16, subscribes: Vec<TopicFilter>) -> UnsubscribePacket {
-        let mut pk = UnsubscribePacket {
+        let mut pkt = UnsubscribePacket {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::Unsubscribe), 0),
             packet_identifier: PacketIdentifier(pkid),
             properties: UnsubscribeProperties::default(),
             payload: UnsubscribePacketPayload::new(subscribes),
         };
-        pk.fix_header_remaining_len();
-        pk
+        pkt.fix_header_remaining_len();
+        pkt
     }
 
     pub fn packet_identifier(&self) -> u16 {
         self.packet_identifier.0
     }
 
-    pub fn set_packet_identifier(&mut self, pkid: u16) {
-        self.packet_identifier.0 = pkid;
+    pub fn properties(&self) -> &UnsubscribeProperties {
+        &self.properties
     }
 
     pub fn subscribes(&self) -> &[TopicFilter] {
         &self.payload.subscribes[..]
+    }
+
+    pub fn set_packet_identifier(&mut self, pkid: u16) {
+        self.packet_identifier.0 = pkid;
     }
 }
 

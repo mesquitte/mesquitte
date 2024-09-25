@@ -25,7 +25,7 @@ pub struct UnsubackPacket {
 encodable_packet!(UnsubackPacket(packet_identifier, properties, payload));
 
 impl UnsubackPacket {
-    pub fn new(pkid: u16, unsubscribes: Vec<UnsubscribeReasonCode>) -> UnsubackPacket {
+    pub fn new(pkid: u16, reason_codes: Vec<UnsubscribeReasonCode>) -> UnsubackPacket {
         let mut pkt = UnsubackPacket {
             fixed_header: FixedHeader::new(
                 PacketType::with_default(ControlType::UnsubscribeAcknowledgement),
@@ -33,7 +33,7 @@ impl UnsubackPacket {
             ),
             packet_identifier: PacketIdentifier(pkid),
             properties: UnsubackProperties::default(),
-            payload: UnsubackPacketPayload::new(unsubscribes),
+            payload: UnsubackPacketPayload::new(reason_codes),
         };
 
         pkt.fix_header_remaining_len();
@@ -42,6 +42,14 @@ impl UnsubackPacket {
 
     pub fn packet_identifier(&self) -> u16 {
         self.packet_identifier.0
+    }
+
+    pub fn properties(&self) -> &UnsubackProperties {
+        &self.properties
+    }
+
+    pub fn reason_code(&self) -> &[UnsubscribeReasonCode] {
+        &self.payload.reason_codes[..]
     }
 
     pub fn set_packet_identifier(&mut self, pkid: u16) {
@@ -89,18 +97,18 @@ impl DecodablePacket for UnsubackPacket {
 
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
 struct UnsubackPacketPayload {
-    unsubscribes: Vec<UnsubscribeReasonCode>,
+    reason_codes: Vec<UnsubscribeReasonCode>,
 }
 
 impl UnsubackPacketPayload {
-    pub fn new(unsubscribes: Vec<UnsubscribeReasonCode>) -> Self {
-        Self { unsubscribes }
+    pub fn new(reason_codes: Vec<UnsubscribeReasonCode>) -> Self {
+        Self { reason_codes }
     }
 }
 
 impl Encodable for UnsubackPacketPayload {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        for code in self.unsubscribes.iter() {
+        for code in self.reason_codes.iter() {
             writer.write_u8(*code as u8)?;
         }
 
@@ -108,7 +116,7 @@ impl Encodable for UnsubackPacketPayload {
     }
 
     fn encoded_length(&self) -> u32 {
-        self.unsubscribes.len() as u32
+        self.reason_codes.len() as u32
     }
 }
 

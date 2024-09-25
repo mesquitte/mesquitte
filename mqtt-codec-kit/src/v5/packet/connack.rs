@@ -46,8 +46,12 @@ impl ConnackPacket {
         self.flags
     }
 
-    pub fn connect_return_code(&self) -> ConnectReasonCode {
+    pub fn connect_reason_code(&self) -> ConnectReasonCode {
         self.reason_code
+    }
+
+    pub fn properties(&self) -> &ConnackProperties {
+        &self.properties
     }
 }
 
