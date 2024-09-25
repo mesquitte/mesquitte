@@ -54,6 +54,14 @@ impl PubackPacket {
         self.packet_identifier.0
     }
 
+    pub fn properties(&self) -> &PubackProperties {
+        &self.properties
+    }
+
+    pub fn reason_code(&self) -> PubackReasonCode {
+        self.reason_code
+    }
+
     pub fn set_packet_identifier(&mut self, pkid: u16) {
         self.packet_identifier.0 = pkid;
     }

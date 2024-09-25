@@ -44,6 +44,14 @@ impl AuthPacket {
         self.properties = properties;
         self.fix_header_remaining_len();
     }
+
+    pub fn properties(&self) -> &Option<AuthProperties> {
+        &self.properties
+    }
+
+    pub fn reason_code(&self) -> AuthenticateReasonCode {
+        self.reason_code
+    }
 }
 
 impl DecodablePacket for AuthPacket {

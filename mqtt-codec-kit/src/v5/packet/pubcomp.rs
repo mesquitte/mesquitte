@@ -52,6 +52,14 @@ impl PubcompPacket {
         self.packet_identifier.0
     }
 
+    pub fn properties(&self) -> &PubcompProperties {
+        &self.properties
+    }
+
+    pub fn reason_code(&self) -> PubcompReasonCode {
+        self.reason_code
+    }
+
     pub fn set_packet_identifier(&mut self, pkid: u16) {
         self.packet_identifier.0 = pkid;
     }

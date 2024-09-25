@@ -48,6 +48,15 @@ impl DisconnectPacket {
         self.fix_header_remaining_len();
     }
 
+    pub fn properties(&self) -> &DisconnectProperties {
+        &self.properties
+    }
+
+    pub fn reason_code(&self) -> DisconnectReasonCode {
+        self.reason_code
+    }
+
+    #[inline]
     fn fix_header_remaining_len(&mut self) {
         self.fixed_header.remaining_length = self.encoded_packet_length();
     }

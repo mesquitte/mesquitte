@@ -32,22 +32,18 @@ encodable_packet!(SubscribePacket(packet_identifier, properties, payload));
 
 impl SubscribePacket {
     pub fn new(pkid: u16, subscribes: Vec<(TopicFilter, SubscribeOptions)>) -> SubscribePacket {
-        let mut pk = SubscribePacket {
+        let mut pkt = SubscribePacket {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::Subscribe), 0),
             packet_identifier: PacketIdentifier(pkid),
             properties: SubscribeProperties::default(),
             payload: SubscribePayload::new(subscribes),
         };
-        pk.fix_header_remaining_len();
-        pk
+        pkt.fix_header_remaining_len();
+        pkt
     }
 
     pub fn packet_identifier(&self) -> u16 {
         self.packet_identifier.0
-    }
-
-    pub fn set_packet_identifier(&mut self, pkid: u16) {
-        self.packet_identifier.0 = pkid;
     }
 
     pub fn subscribes(&self) -> &[(TopicFilter, SubscribeOptions)] {
@@ -56,6 +52,10 @@ impl SubscribePacket {
 
     pub fn properties(&self) -> &SubscribeProperties {
         &self.properties
+    }
+
+    pub fn set_packet_identifier(&mut self, pkid: u16) {
+        self.packet_identifier.0 = pkid;
     }
 }
 
