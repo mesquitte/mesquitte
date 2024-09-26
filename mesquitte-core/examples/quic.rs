@@ -6,7 +6,7 @@ use mesquitte_core::server::{quic::server::QuicServer, state::GlobalState};
 async fn main() {
     env::set_var(
         "RUST_LOG",
-        "quic=trace,mesquitte_core=trace,mqtt_codec=info",
+        "quic=trace,mesquitte_core=trace,mqtt_codec_kit=info",
     );
     env_logger::init();
 
