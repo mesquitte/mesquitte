@@ -16,9 +16,6 @@ pub(crate) fn build_error_connack<S: Into<String>>(
     reason_code: ConnectReasonCode,
     reason_string: S,
 ) -> ConnackPacket {
-    session.set_client_disconnected();
-    session.set_server_disconnected();
-
     let mut connack_packet = ConnackPacket::new(session_present, reason_code);
 
     if session.request_problem_info() {
@@ -39,8 +36,6 @@ pub(crate) fn build_error_disconnect<S: Into<String>>(
     reason_code: DisconnectReasonCode,
     reason_string: S,
 ) -> DisconnectPacket {
-    session.set_server_disconnected();
-
     let mut disconnect_packet = DisconnectPacket::new(reason_code);
 
     if session.request_problem_info() {

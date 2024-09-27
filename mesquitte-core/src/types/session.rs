@@ -1,10 +1,7 @@
-use std::mem;
-use std::sync::Arc;
+use std::{mem, sync::Arc, time::Instant};
 
 use hashbrown::HashMap;
-use mqtt_codec_kit::common::{PacketIdentifier, QualityOfService, TopicFilter};
-use parking_lot::RwLock;
-use tokio::time::Instant;
+use mqtt_codec_kit::common::{QualityOfService, TopicFilter};
 
 use super::{client_id::ClientId, last_will::LastWill, pending_packets::PendingPackets};
 
@@ -14,9 +11,9 @@ pub struct Session {
     connected_at: Instant,
     connection_closed_at: Option<Instant>,
     // last package timestamp
-    last_packet_at: Arc<RwLock<Instant>>,
+    last_packet_at: Instant,
     // For record packet id send from server to client
-    server_packet_id: PacketIdentifier,
+    server_packet_id: u16,
 
     pending_packets: PendingPackets,
 
@@ -66,8 +63,8 @@ impl Session {
         Self {
             connected_at: Instant::now(),
             connection_closed_at: None,
-            last_packet_at: Arc::new(RwLock::new(Instant::now())),
-            server_packet_id: PacketIdentifier(1),
+            last_packet_at: Instant::now(),
+            server_packet_id: 1,
 
             pending_packets: PendingPackets::new(
                 max_inflight_client,
@@ -109,12 +106,12 @@ impl Session {
         self.connection_closed_at.as_ref()
     }
 
-    pub fn last_packet_at(&self) -> Arc<RwLock<Instant>> {
-        self.last_packet_at.clone()
+    pub fn last_packet_at(&self) -> &Instant {
+        &self.last_packet_at
     }
 
-    pub fn renew_last_packet_at(&self) {
-        *self.last_packet_at.write() = Instant::now();
+    pub fn renew_last_packet_at(&mut self) {
+        self.last_packet_at = Instant::now();
     }
 
     pub fn pending_packets(&mut self) -> &mut PendingPackets {
@@ -146,6 +143,8 @@ impl Session {
     }
 
     pub fn set_keep_alive(&mut self, keep_alive: u16) {
+        // MQTT V5
+        // MQTT V3?
         // TODO: config: max keep alive?
         // TODO: config: min keep alive?
         // let keep_alive = if keep_alive > self.config.max_keep_alive {
@@ -221,22 +220,22 @@ impl Session {
         &self.subscribes
     }
 
-    pub fn set_subscribe(&mut self, topic: TopicFilter, qos: QualityOfService) {
-        self.subscribes.insert(topic, qos);
+    pub fn set_subscribe(
+        &mut self,
+        topic: TopicFilter,
+        qos: QualityOfService,
+    ) -> Option<QualityOfService> {
+        self.subscribes.insert(topic, qos)
     }
 
     pub fn rm_subscribe(&mut self, topic: &TopicFilter) -> bool {
         self.subscribes.remove(topic).is_some()
     }
 
-    pub fn server_packet_id(&self) -> PacketIdentifier {
-        self.server_packet_id
-    }
-
     pub fn incr_server_packet_id(&mut self) -> u16 {
         let old_value = self.server_packet_id;
-        self.server_packet_id.0 += 1;
-        old_value.0
+        self.server_packet_id += 1;
+        old_value
     }
 
     pub fn assigned_client_id(&self) -> bool {
@@ -323,7 +322,7 @@ impl Session {
 
 pub struct SessionState {
     // For record packet id send from server to client
-    server_packet_id: PacketIdentifier,
+    server_packet_id: u16,
     // QoS1/QoS2 pending packets
     pending_packets: PendingPackets,
 
