@@ -1,8 +1,6 @@
 use std::{net::SocketAddr, path::PathBuf};
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug)]
 pub struct ServerConfig {
     pub addr: SocketAddr,
     pub tls: Option<TlsConfig>,
@@ -14,7 +12,7 @@ impl ServerConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug)]
 pub struct TlsConfig {
     pub ca_file: Option<PathBuf>,
     pub cert_file: PathBuf,
