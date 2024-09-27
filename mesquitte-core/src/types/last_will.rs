@@ -33,8 +33,8 @@ impl LastWill {
         self.properties.as_ref()
     }
 
-    pub fn qos(&self) -> &QualityOfService {
-        &self.qos
+    pub fn qos(&self) -> QualityOfService {
+        self.qos
     }
 }
 

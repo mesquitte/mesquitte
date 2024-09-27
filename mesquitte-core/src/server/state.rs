@@ -1,7 +1,12 @@
+use std::{io, time::Duration};
+
 use dashmap::DashMap;
 use mqtt_codec_kit::common::{QualityOfService, TopicFilter};
 use parking_lot::Mutex;
-use tokio::sync::mpsc::{self, channel};
+use tokio::{
+    sync::mpsc::{self, channel},
+    time,
+};
 
 use crate::types::{
     client_id::{AddClientReceipt, ClientId},
@@ -13,24 +18,26 @@ use crate::types::{
 
 #[derive(Default)]
 pub struct GlobalState {
-    // TODO: metrics
+    // TODO: metrics?
+    // TODO: config content
+    // max qos
+    // max connection ?
+    // read channel size
+    // outgoing channel size
+    // max packet size-> v3?
+    // max inflight size
+    // max inflight message size
+    // retain table enable
+    // max retain table size?
+
+    // v5
+    // max client packet size
+    // max topic alias
+    // max keep alive
+    // min keep alive
     // config: Arc<Config>,
-
-    // TODO: config: max qos
-    // TODO: config: max packet size
-    // TODO: config: max client packet size->V5 properties
-    // TODO: config: max topic alias
-    // TODO: config: read channel size
-    // TODO: config: outgoing channel size
-    // TODO: config: max inflight size
-    // TODO: config: max inflight message size
-    // TODO: config: max qos2 limit
-    // TODO: config max keep alive
-    // TODO: config min keep alive
-    // TODO: config retain table enable
-    // TODO: config max retain table size?
-
-    // TODO: The next client internal id, use this mutex to keep `add_client` atomic
+    // The next client internal id, use this mutex to keep `add_client` atomic
+    // TODO: next_client_id overflow?
     next_client_id: Mutex<u64>,
 
     // client internal id => MQTT client identifier
@@ -50,7 +57,44 @@ impl GlobalState {
         }
     }
 
-    fn renew_client(&self, client_identifier: &str, sender: mpsc::Sender<Outgoing>) -> ClientId {
+    pub async fn add_client(
+        &self,
+        client_identifier: &str,
+        sender: mpsc::Sender<Outgoing>,
+    ) -> Result<AddClientReceipt, Error> {
+        let client_id_opt: Option<ClientId> = self
+            .client_identifier_map
+            .get(client_identifier)
+            .map(|pair| *pair.value());
+
+        if let Some(client_id) = client_id_opt {
+            if let Some(old_sender) = self.get_outgoing_sender(&client_id) {
+                if !old_sender.is_closed() {
+                    let (control_sender, mut control_receiver) = channel(1);
+                    old_sender
+                        .send(Outgoing::Online(control_sender))
+                        .await
+                        .map_err(|err| {
+                            log::warn!("send online message failed: {}", err);
+                            io::Error::from(io::ErrorKind::InvalidData)
+                        })?;
+
+                    // TODO: config: build session state timeout
+                    match time::timeout(Duration::from_secs(10), control_receiver.recv()).await {
+                        Ok(data) => {
+                            if let Some(state) = data {
+                                self.clients.insert(client_id, sender);
+                                return Ok(AddClientReceipt::Present(client_id, state));
+                            }
+                        }
+                        Err(_) => {
+                            log::warn!("receive old session state timeout");
+                        }
+                    }
+                }
+            }
+        }
+
         let mut next_client_id = self.next_client_id.lock();
 
         let client_id = (*next_client_id).into();
@@ -63,41 +107,7 @@ impl GlobalState {
 
         *next_client_id += 1;
 
-        client_id
-    }
-
-    pub async fn add_client(
-        &self,
-        client_identifier: &str,
-        sender: mpsc::Sender<Outgoing>,
-    ) -> Result<AddClientReceipt, Error> {
-        let client_id_opt: Option<ClientId> = self
-            .client_identifier_map
-            .get(client_identifier)
-            .map(|pair| *pair.value());
-
-        // TODO: build session state timeout
-        if let Some(client_id) = client_id_opt {
-            if let Some(old_sender) = self.get_outgoing_sender(&client_id) {
-                if !old_sender.is_closed() {
-                    let (control_sender, mut control_receiver) = channel(1);
-                    if let Err(err) = old_sender.send(Outgoing::Online(control_sender)).await {
-                        log::error!("global state add client: {err}");
-                        return Err(Error::SendOutgoing(err));
-                    }
-                    return match control_receiver.recv().await {
-                        Some(state) => {
-                            let client_id = self.renew_client(client_identifier, sender);
-                            Ok(AddClientReceipt::Present(client_id, state))
-                        }
-                        None => Err(Error::EmptySessionState),
-                    };
-                }
-            }
-        }
-        Ok(AddClientReceipt::New(
-            self.renew_client(client_identifier, sender),
-        ))
+        Ok(AddClientReceipt::New(client_id))
     }
 
     pub fn remove_client<'a>(
@@ -127,6 +137,10 @@ impl GlobalState {
 
     pub fn get_outgoing_sender(&self, client_id: &ClientId) -> Option<mpsc::Sender<Outgoing>> {
         self.clients.get(client_id).map(|s| s.value().clone())
+    }
+
+    pub fn get_client_identifier(&self, client_id: &ClientId) -> Option<String> {
+        self.client_id_map.get(client_id).map(|s| s.value().clone())
     }
 
     pub fn retain_table(&self) -> &RetainTable {

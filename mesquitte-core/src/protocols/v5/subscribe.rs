@@ -1,43 +1,44 @@
 use std::{collections::VecDeque, sync::Arc};
 
 use mqtt_codec_kit::{
-    common::{qos::QoSWithPacketIdentifier, QualityOfService},
+    common::QualityOfService,
     v5::{
         control::DisconnectReasonCode,
         packet::{
-            suback::SubscribeReasonCode, DisconnectPacket, PublishPacket, SubackPacket,
+            suback::SubscribeReasonCode, subscribe::RetainHandling, DisconnectPacket, SubackPacket,
             SubscribePacket, UnsubackPacket, UnsubscribePacket, VariablePacket,
         },
     },
 };
 
-use crate::{
-    protocols::v5::common::build_error_disconnect, server::state::GlobalState,
-    types::session::Session,
-};
+use crate::{server::state::GlobalState, types::session::Session};
+
+use super::{common::build_error_disconnect, publish::receive_outgoing_publish};
 
 pub(super) fn handle_subscribe(
     session: &mut Session,
-    packet: &SubscribePacket,
+    packet: SubscribePacket,
     global: Arc<GlobalState>,
 ) -> Result<Vec<VariablePacket>, DisconnectPacket> {
     log::debug!(
         r#"{} received a subscribe packet:
-packet id : {}
-   topics : {:?}"#,
+ packet id : {}
+    topics : {:?}
+properties : {:?}"#,
         session.client_id(),
         packet.packet_identifier(),
         packet.subscribes(),
+        packet.properties(),
     );
 
     let properties = packet.properties();
-    if properties.identifier().map(|id| id) == Some(0) {
-        let err_pkt = build_error_disconnect(
+    if properties.identifier() == Some(0) {
+        let disconnect_packet = build_error_disconnect(
             session,
             DisconnectReasonCode::ProtocolError,
             "Subscription identifier value=0 is not allowed",
         );
-        return Err(err_pkt);
+        return Err(disconnect_packet);
     }
 
     // TODO: config subscription identifier available false
@@ -50,34 +51,34 @@ packet id : {}
         // SubscribeReasonCode::SharedSubscriptionNotSupported
         // SubscribeReasonCode::WildcardSubscriptionsNotSupported topic contain +/#
 
-        let granted_qos = subscribe_opts.qos();
+        let granted_qos = subscribe_opts.qos().to_owned();
         // TODO: granted max qos from config
-        session.set_subscribe(filter.clone(), granted_qos.to_owned());
-        global.subscribe(filter, session.client_id(), granted_qos.to_owned());
+        let old_sub = session.set_subscribe(filter.clone(), granted_qos);
+        global.subscribe(filter, session.client_id(), granted_qos);
 
-        for msg in global.retain_table().get_matches(filter) {
-            let qos = match granted_qos {
-                QualityOfService::Level0 => QoSWithPacketIdentifier::Level0,
-                QualityOfService::Level1 => {
-                    let pid = session.incr_server_packet_id();
-                    QoSWithPacketIdentifier::Level1(pid)
-                }
-                QualityOfService::Level2 => {
-                    let pid = session.incr_server_packet_id();
-                    QoSWithPacketIdentifier::Level2(pid)
-                }
+        // TODO: config: retain available?
+        let send_retain = !filter.is_shared()
+            && match subscribe_opts.retain_handling {
+                RetainHandling::SendAtSubscribe => true,
+                RetainHandling::SendAtSubscribeIfNotExist => old_sub.is_none(),
+                RetainHandling::DoNotSend => false,
             };
-            let mut payload = vec![0u8; msg.payload().len()];
-            payload.copy_from_slice(&msg.payload());
 
-            let mut publish_packet = PublishPacket::new(msg.topic_name().to_owned(), qos, payload);
-            publish_packet.set_retain(true);
-            if let Some(properties) = msg.properties() {
-                publish_packet.set_properties(properties.to_owned());
+        if send_retain {
+            for msg in global.retain_table().get_matches(filter) {
+                if subscribe_opts.no_local
+                    && msg.client_identifier().eq(&session.client_identifier())
+                {
+                    continue;
+                }
+
+                let mut packet = receive_outgoing_publish(session, granted_qos, msg.into());
+                packet.set_retain(true);
+
+                retain_packets.push(packet.into());
             }
-
-            retain_packets.push(publish_packet.into());
         }
+
         let reason_code = match granted_qos {
             QualityOfService::Level0 => SubscribeReasonCode::GrantedQos0,
             QualityOfService::Level1 => SubscribeReasonCode::GrantedQos1,
@@ -109,8 +110,8 @@ packet id : {}
 
     let reason_codes = Vec::new();
     for filter in packet.subscribes() {
-        global.unsubscribe(&filter, session.client_id());
-        session.rm_subscribe(&filter);
+        global.unsubscribe(filter, session.client_id());
+        session.rm_subscribe(filter);
     }
 
     UnsubackPacket::new(packet.packet_identifier(), reason_codes)

@@ -2,9 +2,7 @@ use std::{io, sync::Arc};
 
 use futures::SinkExt as _;
 use mqtt_codec_kit::{
-    common::{
-        ProtocolLevel, QualityOfService, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX, SYS_PREFIX,
-    },
+    common::{ProtocolLevel, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX, SYS_PREFIX},
     v4::{
         control::ConnectReturnCode,
         packet::{ConnackPacket, ConnectPacket, VariablePacket},
@@ -15,19 +13,13 @@ use tokio::{io::AsyncWrite, sync::mpsc};
 use tokio_util::codec::{Encoder, FramedWrite};
 
 use crate::{
-    protocols::{common::keep_alive_timer, v4::publish::handle_will},
     server::state::GlobalState,
-    types::{
-        client_id::AddClientReceipt,
-        error::Error,
-        outgoing::{KickReason, Outgoing},
-        session::Session,
-    },
+    types::{client_id::AddClientReceipt, error::Error, outgoing::Outgoing, session::Session},
 };
 
 pub(super) async fn handle_connect<W, E>(
     writer: &mut FramedWrite<W, E>,
-    packet: &ConnectPacket,
+    packet: ConnectPacket,
     global: Arc<GlobalState>,
 ) -> Result<(Session, mpsc::Receiver<Outgoing>), Error>
 where
@@ -55,7 +47,7 @@ protocol level : {:?}
 
     let level = packet.protocol_level();
     if ProtocolLevel::Version311.ne(&level) && ProtocolLevel::Version310.ne(&level) {
-        log::debug!("unsupported protocol level: {:?}", level);
+        log::debug!("handle connect unsupported protocol level: {:?}", level);
         writer
             .send(ConnackPacket::new(false, ConnectReturnCode::UnacceptableProtocolVersion).into())
             .await?;
@@ -63,8 +55,11 @@ protocol level : {:?}
         return Err(Error::InvalidConnectPacket);
     }
 
-    if packet.protocol_name().ne("MQTT") && packet.protocol_name().ne("MQIsdp") {
-        log::debug!("unsupported protocol name: {:?}", packet.protocol_name());
+    if packet.protocol_name().ne("MQTT") {
+        log::debug!(
+            "handle connect unsupported protocol name: {:?}",
+            packet.protocol_name()
+        );
         writer
             .send(ConnackPacket::new(false, ConnectReturnCode::UnacceptableProtocolVersion).into())
             .await?;
@@ -94,7 +89,6 @@ protocol level : {:?}
     let server_keep_alive = session.keep_alive() != packet.keep_alive();
     session.set_server_keep_alive(server_keep_alive);
     if packet.client_identifier().is_empty() {
-        log::error!("client identifier is empty: {:?}", packet);
         let id = nanoid!();
         session.set_assigned_client_id();
         session.set_client_identifier(&id);
@@ -105,7 +99,7 @@ protocol level : {:?}
     if let Some(last_will) = packet.will() {
         let topic_name = last_will.topic();
         if topic_name.is_empty() {
-            log::debug!("last will topic is empty");
+            log::debug!("handle connect last will topic is empty");
             writer
                 .send(ConnackPacket::new(false, ConnectReturnCode::IdentifierRejected).into())
                 .await?;
@@ -114,7 +108,7 @@ protocol level : {:?}
         }
 
         if topic_name.contains(MATCH_ALL_STR) || topic_name.contains(MATCH_ONE_STR) {
-            log::debug!("last will topic contains illegal characters '+' or '#'");
+            log::debug!("handle connect last will topic contains illegal characters '+' or '#'");
             writer
                 .send(ConnackPacket::new(false, ConnectReturnCode::IdentifierRejected).into())
                 .await?;
@@ -123,7 +117,7 @@ protocol level : {:?}
         }
 
         if topic_name.starts_with(SHARED_PREFIX) || topic_name.starts_with(SYS_PREFIX) {
-            log::debug!("last will topic start with '$SYS/' or '$share/'");
+            log::debug!("handle connect last will topic start with '$SYS/' or '$share/'");
             writer
                 .send(ConnackPacket::new(false, ConnectReturnCode::IdentifierRejected).into())
                 .await?;
@@ -131,9 +125,7 @@ protocol level : {:?}
             return Err(Error::InvalidConnectPacket);
         }
 
-        if last_will.qos() != QualityOfService::Level0 {
-            session.set_last_will(Some(last_will.into()))
-        }
+        session.set_last_will(Some(last_will.into()))
     }
 
     // FIXME: to many clients cause memory leak
@@ -163,12 +155,6 @@ protocol level : {:?}
             false
         }
     };
-    keep_alive_timer(
-        session.keep_alive(),
-        session.client_id(),
-        session.last_packet_at(),
-        global.clone(),
-    )?;
     writer
         .send(ConnackPacket::new(session_present, ConnectReturnCode::ConnectionAccepted).into())
         .await?;
@@ -184,70 +170,4 @@ pub(super) async fn handle_disconnect(session: &mut Session) {
 
     session.clear_last_will();
     session.set_client_disconnected();
-}
-
-pub(super) async fn handle_offline(
-    mut session: Session,
-    mut outgoing_rx: mpsc::Receiver<Outgoing>,
-    global: Arc<GlobalState>,
-    take_over: bool,
-) {
-    log::debug!(
-        r#"client#{} handle offline:
-clean session : {}
-    take over : {}"#,
-        session.client_identifier(),
-        session.clean_session(),
-        take_over,
-    );
-    if !session.disconnected() {
-        session.set_server_disconnected();
-    }
-
-    if !session.client_disconnected() {
-        handle_will(&mut session, global.clone()).await;
-    }
-
-    if !take_over || session.clean_session() {
-        global.remove_client(session.client_id(), session.subscribes().keys());
-        return;
-    }
-
-    while let Some(outgoing) = outgoing_rx.recv().await {
-        match outgoing {
-            Outgoing::Publish(msg) => {
-                if QualityOfService::Level2.eq(msg.qos()) {
-                    let pid = session.incr_server_packet_id();
-                    session.pending_packets().push_outgoing(pid, msg);
-                }
-            }
-            Outgoing::Online(sender) => {
-                log::debug!(
-                    "handle offline client#{} receive new client online",
-                    session.client_identifier(),
-                );
-                global.remove_client(session.client_id(), session.subscribes().keys());
-                if let Err(err) = sender.send((&mut session).into()).await {
-                    log::debug!(
-                        "handle offline client#{} send session state : {}",
-                        session.client_identifier(),
-                        err,
-                    );
-                }
-                break;
-            }
-            Outgoing::Kick(reason) => {
-                log::debug!(
-                    "handle offline client#{} receive kick message",
-                    session.client_identifier(),
-                );
-                if KickReason::Expired == reason {
-                    continue;
-                }
-
-                global.remove_client(session.client_id(), session.subscribes().keys());
-                break;
-            }
-        }
-    }
 }
