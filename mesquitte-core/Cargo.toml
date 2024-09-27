@@ -46,7 +46,7 @@ openraft = { workspace = true, features = ["serde", "type-alias"] }
 parking_lot.workspace = true
 pin-project-lite.workspace = true
 rand.workspace = true
-rust-rocksdb = { workspace = true, default-features = false, features = [
+rust-rocksdb = { workspace = true, features = [
     "io-uring",
     "zstd",
     "zstd-static-linking-only",
