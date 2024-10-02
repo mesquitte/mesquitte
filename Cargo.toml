@@ -31,7 +31,7 @@ flume = "0.11"
 futures = "0.3"
 futures-sink = "0.3"
 futures-util = "0.3"
-hashbrown = "0.14"
+hashbrown = "0.15"
 nanoid = "0.4"
 log = "0.4"
 openraft = { version = "0.10", git = "https://github.com/datafuselabs/openraft.git", branch = "main" }
