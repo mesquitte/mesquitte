@@ -26,7 +26,6 @@ rustls = [
     "rustls-pemfile",
     "tokio-rustls/aws-lc-rs",
 ]
-cluster = ["openraft", "rust-rocksdb", "tonic"]
 
 [dependencies]
 ahash.workspace = true
@@ -43,18 +42,14 @@ hashbrown.workspace = true
 log.workspace = true
 mqtt-codec-kit = { workspace = true, features = ["v4", "v5", "tokio-codec"] }
 nanoid.workspace = true
-openraft = { workspace = true, features = [
-    "serde",
-    "type-alias",
-], optional = true }
 parking_lot.workspace = true
 pin-project-lite.workspace = true
 rand.workspace = true
-rust-rocksdb = { workspace = true, features = [
-    "io-uring",
-    "zstd",
-    "zstd-static-linking-only",
-], optional = true }
+# rust-rocksdb = { workspace = true, features = [
+#     "io-uring",
+#     "zstd",
+#     "zstd-static-linking-only",
+# ], optional = true }
 rustls = { workspace = true, default-features = false, optional = true }
 rustls-pemfile = { workspace = true, optional = true }
 s2n-quic = { workspace = true, optional = true }
@@ -68,11 +63,9 @@ tokio = { workspace = true, features = [
 ] }
 tokio-rustls = { workspace = true, default-features = false, optional = true }
 tokio-util = { workspace = true, features = ["codec"] }
-tonic = { workspace = true, optional = true }
 tungstenite = { workspace = true, optional = true }
 
 [build-dependencies]
-tonic-build.workspace = true
 
 [dev-dependencies]
 env_logger.workspace = true
