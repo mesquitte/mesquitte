@@ -125,7 +125,10 @@ topic name : {:?}
                 );
                 continue;
             }
-            if let Err(err) = sender.send(Outgoing::Publish(qos, packet.clone())).await {
+            if let Err(err) = sender
+                .send(Outgoing::Publish(qos, Box::new(packet.clone())))
+                .await
+            {
                 log::error!("{} send publish message: {}", receiver_client_id, err,)
             }
         }

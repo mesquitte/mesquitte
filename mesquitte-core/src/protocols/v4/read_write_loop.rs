@@ -131,7 +131,7 @@ pub(super) async fn receive_outgoing(
     let mut should_stop = false;
     let resp = match packet {
         Outgoing::Publish(subscribe_qos, packet) => {
-            let resp = receive_outgoing_publish(session, subscribe_qos, packet);
+            let resp = receive_outgoing_publish(session, subscribe_qos, *packet);
             if session.disconnected() {
                 None
             } else {

@@ -19,7 +19,7 @@ impl Display for KickReason {
 }
 
 pub enum Outgoing {
-    Publish(QualityOfService, PublishMessage),
+    Publish(QualityOfService, Box<PublishMessage>),
     Online(Sender<SessionState>),
     Kick(KickReason),
 }
