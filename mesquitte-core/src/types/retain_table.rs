@@ -1,7 +1,9 @@
 use std::{mem, sync::Arc};
 
 use hashbrown::HashMap;
-use mqtt_codec_kit::common::{LEVEL_SEP, MATCH_ALL_CHAR, MATCH_ALL_STR, MATCH_ONE_CHAR, MATCH_ONE_STR};
+use mqtt_codec_kit::common::{
+    LEVEL_SEP, MATCH_ALL_CHAR, MATCH_ALL_STR, MATCH_ONE_CHAR, MATCH_ONE_STR,
+};
 use parking_lot::RwLock;
 
 use super::retain_content::RetainContent;

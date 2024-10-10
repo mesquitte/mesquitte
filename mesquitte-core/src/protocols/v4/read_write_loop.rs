@@ -63,7 +63,7 @@ where
 {
     log::debug!(
         r#"client#{} receive mqtt client incoming message: {:?}"#,
-        session.client_identifier(),
+        session.client_id(),
         packet,
     );
     session.renew_last_packet_at();
@@ -141,17 +141,17 @@ pub(super) async fn receive_outgoing(
         Outgoing::Online(sender) => {
             log::debug!(
                 "handle outgoing client#{} receive new client online",
-                session.client_identifier(),
+                session.client_id(),
             );
 
             if let Err(err) = sender.send(session.into()).await {
                 log::error!(
                     "handle outgoing client#{} send session state: {err}",
-                    session.client_identifier(),
+                    session.client_id(),
                 );
             }
             should_stop = true;
-            global.remove_client(session.client_id(), session.subscribes().keys());
+            global.remove_client(session.client_id(), session.subscriptions());
             if session.disconnected() {
                 None
             } else {
@@ -161,7 +161,7 @@ pub(super) async fn receive_outgoing(
         Outgoing::Kick(reason) => {
             log::debug!(
                 "handle outgoing client#{} receive kick message: {}",
-                session.client_identifier(),
+                session.client_id(),
                 reason,
             );
 
@@ -169,7 +169,7 @@ pub(super) async fn receive_outgoing(
                 None
             } else {
                 should_stop = true;
-                global.remove_client(session.client_id(), session.subscribes().keys());
+                global.remove_client(session.client_id(), session.subscriptions());
                 Some(DisconnectPacket::new().into())
             }
         }
@@ -208,7 +208,7 @@ pub(super) async fn handle_clean_session(
         r#"client#{} handle offline:
  clean session : {}
     keep alive : {}"#,
-        session.client_identifier(),
+        session.client_id(),
         session.clean_session(),
         session.keep_alive(),
     );
@@ -221,7 +221,7 @@ pub(super) async fn handle_clean_session(
     }
 
     if session.clean_session() {
-        global.remove_client(session.client_id(), session.subscribes().keys());
+        global.remove_client(session.client_id(), session.subscriptions());
         return;
     }
 
@@ -234,44 +234,22 @@ pub(super) async fn handle_clean_session(
 }
 
 async fn write_to_client<T, E>(
+    mut session: Session,
     mut writer: FramedWrite<T, E>,
-    mut msg_rx: mpsc::Receiver<VariablePacket>,
+    mut incoming_rx: mpsc::Receiver<VariablePacket>,
+    mut outgoing_rx: mpsc::Receiver<Outgoing>,
     global: Arc<GlobalState>,
 ) where
     T: AsyncWrite + Unpin,
     E: Encoder<VariablePacket, Error = io::Error>,
 {
-    let packet = match msg_rx.recv().await {
-        Some(VariablePacket::ConnectPacket(packet)) => packet,
-        _ => {
-            log::warn!("first packet is not CONNECT packet");
-            return;
-        }
-    };
-
-    let (mut session, mut outgoing_rx) =
-        match handle_connect(&mut writer, packet, global.clone()).await {
-            Ok(r) => r,
-            Err(err) => {
-                log::warn!("handle connect: {err}");
-                return;
-            }
-        };
-
-    let packets = get_unsent_outgoing_packet(&mut session);
-    for packet in packets {
-        if let Err(err) = writer.send(packet.into()).await {
-            log::error!("write pending packet failed: {err}");
-            return;
-        }
-    }
     if session.keep_alive() > 0 {
         let half_interval = Duration::from_millis(session.keep_alive() as u64 * 500);
         let mut keep_alive_tick = interval_at(Instant::now() + half_interval, half_interval);
         let keep_alive_timeout = half_interval * 3;
         loop {
             tokio::select! {
-                packet = msg_rx.recv() => match packet {
+                packet = incoming_rx.recv() => match packet {
                     Some(p) => match handle_incoming(&mut writer, &mut session, p, global.clone()).await {
                         Ok(true) => break,
                         Ok(false) => continue,
@@ -304,7 +282,7 @@ async fn write_to_client<T, E>(
     } else {
         loop {
             tokio::select! {
-                packet = msg_rx.recv() => match packet {
+                packet = incoming_rx.recv() => match packet {
                     Some(p) => match handle_incoming(&mut writer, &mut session, p, global.clone()).await {
                         Ok(true) => break,
                         Ok(false) => continue,
@@ -339,15 +317,49 @@ where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
 {
-    let frame_reader = FramedRead::new(reader, MqttDecoder::new());
-    let frame_writer = FramedWrite::new(writer, MqttEncoder::new());
+    let mut frame_reader = FramedRead::new(reader, MqttDecoder::new());
+    let mut frame_writer = FramedWrite::new(writer, MqttEncoder::new());
+
+    let packet = match frame_reader.next().await {
+        Some(Ok(VariablePacket::ConnectPacket(packet))) => packet,
+        _ => {
+            log::warn!("first packet is not CONNECT packet");
+            return;
+        }
+    };
+
+    let (mut session, outgoing_rx) = match handle_connect(packet, global.clone()).await {
+        Ok((pkt, session, outgoing_rx)) => {
+            if let Err(err) = frame_writer.send(pkt).await {
+                log::error!("handle connect write connect ack: {err}");
+                return;
+            }
+            (session, outgoing_rx)
+        }
+        Err(pkt) => {
+            if let Err(err) = frame_writer.send(pkt).await {
+                log::error!("handle connect write connect ack: {err}");
+            }
+            return;
+        }
+    };
+
+    let packets = get_unsent_outgoing_packet(&mut session);
+    for pkt in packets {
+        if let Err(err) = frame_writer.send(pkt).await {
+            log::error!("write pending packet failed: {err}");
+            return;
+        }
+    }
+
     let (msg_tx, msg_rx) = mpsc::channel(8);
     let mut read_task = tokio::spawn(async move {
         read_from_client(frame_reader, msg_tx).await;
     });
 
-    let mut write_task =
-        tokio::spawn(async move { write_to_client(frame_writer, msg_rx, global.clone()).await });
+    let mut write_task = tokio::spawn(async move {
+        write_to_client(session, frame_writer, msg_rx, outgoing_rx, global.clone()).await
+    });
 
     if tokio::try_join!(&mut read_task, &mut write_task).is_err() {
         log::warn!("read_task/write_task terminated");

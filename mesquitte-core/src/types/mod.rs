@@ -1,6 +1,4 @@
-pub mod client_id;
-pub mod error;
-pub mod last_will;
+pub mod client;
 pub mod outgoing;
 pub mod pending_packets;
 pub mod publish;

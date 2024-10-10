@@ -1,31 +1,28 @@
-use std::{io, sync::Arc};
+use std::sync::Arc;
 
-use futures::SinkExt as _;
 use mqtt_codec_kit::{
     common::{ProtocolLevel, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX, SYS_PREFIX},
     v4::{
         control::ConnectReturnCode,
-        packet::{ConnackPacket, ConnectPacket, VariablePacket},
+        packet::{ConnackPacket, ConnectPacket},
     },
 };
 use nanoid::nanoid;
-use tokio::{io::AsyncWrite, sync::mpsc};
-use tokio_util::codec::{Encoder, FramedWrite};
+use tokio::sync::mpsc;
 
 use crate::{
     server::state::GlobalState,
-    types::{client_id::AddClientReceipt, error::Error, outgoing::Outgoing, session::Session},
+    types::{
+        client::AddClientReceipt,
+        outgoing::Outgoing,
+        session::{LastWill, Session},
+    },
 };
 
-pub(super) async fn handle_connect<W, E>(
-    writer: &mut FramedWrite<W, E>,
+pub(super) async fn handle_connect(
     packet: ConnectPacket,
     global: Arc<GlobalState>,
-) -> Result<(Session, mpsc::Receiver<Outgoing>), Error>
-where
-    W: AsyncWrite + Unpin,
-    E: Encoder<VariablePacket, Error = io::Error>,
-{
+) -> Result<(ConnackPacket, Session, mpsc::Receiver<Outgoing>), ConnackPacket> {
     log::debug!(
         r#"client#{} received a connect packet:
 protocol level : {:?}
@@ -48,11 +45,11 @@ protocol level : {:?}
     let level = packet.protocol_level();
     if ProtocolLevel::Version311.ne(&level) && ProtocolLevel::Version310.ne(&level) {
         log::debug!("handle connect unsupported protocol level: {:?}", level);
-        writer
-            .send(ConnackPacket::new(false, ConnectReturnCode::UnacceptableProtocolVersion).into())
-            .await?;
 
-        return Err(Error::InvalidConnectPacket);
+        return Err(ConnackPacket::new(
+            false,
+            ConnectReturnCode::UnacceptableProtocolVersion,
+        ));
     }
 
     if packet.protocol_name().ne("MQTT") {
@@ -60,85 +57,80 @@ protocol level : {:?}
             "handle connect unsupported protocol name: {:?}",
             packet.protocol_name()
         );
-        writer
-            .send(ConnackPacket::new(false, ConnectReturnCode::UnacceptableProtocolVersion).into())
-            .await?;
 
-        return Err(Error::InvalidConnectPacket);
+        return Err(ConnackPacket::new(
+            false,
+            ConnectReturnCode::UnacceptableProtocolVersion,
+        ));
     }
 
     if packet.client_identifier().is_empty() && !packet.clean_session() {
-        writer
-            .send(ConnackPacket::new(false, ConnectReturnCode::IdentifierRejected).into())
-            .await?;
-
-        return Err(Error::InvalidConnectPacket);
+        return Err(ConnackPacket::new(
+            false,
+            ConnectReturnCode::IdentifierRejected,
+        ));
     }
 
     // TODO: handle auth
+
+    let (assigned_client_id, client_id) = if packet.client_identifier().is_empty() {
+        (true, nanoid!())
+    } else {
+        (false, packet.client_identifier().to_owned())
+    };
 
     // TODO: config: max inflight size
     // TODO: config: max inflight message size
     // TODO: config: inflight message timeout
     // TODO: config: max packet size
 
-    let mut session = Session::new(packet.client_identifier().to_owned(), 12, 1024, 10);
+    let mut session = Session::new(client_id, assigned_client_id, 12, 1024, 10);
     session.set_clean_session(packet.clean_session());
-    session.set_username(packet.username().map(|name| Arc::new(name.to_owned())));
+    session.set_username(packet.username().map(|name| name.to_owned()));
     session.set_keep_alive(packet.keep_alive());
     let server_keep_alive = session.keep_alive() != packet.keep_alive();
     session.set_server_keep_alive(server_keep_alive);
-    if packet.client_identifier().is_empty() {
-        let id = nanoid!();
-        session.set_assigned_client_id();
-        session.set_client_identifier(&id);
-    } else {
-        session.set_client_identifier(packet.client_identifier());
-    }
 
     if let Some(last_will) = packet.will() {
         let topic_name = last_will.topic();
         if topic_name.is_empty() {
             log::debug!("handle connect last will topic is empty");
-            writer
-                .send(ConnackPacket::new(false, ConnectReturnCode::IdentifierRejected).into())
-                .await?;
 
-            return Err(Error::InvalidConnectPacket);
+            return Err(ConnackPacket::new(
+                false,
+                ConnectReturnCode::IdentifierRejected,
+            ));
         }
 
         if topic_name.contains(MATCH_ALL_STR) || topic_name.contains(MATCH_ONE_STR) {
             log::debug!("handle connect last will topic contains illegal characters '+' or '#'");
-            writer
-                .send(ConnackPacket::new(false, ConnectReturnCode::IdentifierRejected).into())
-                .await?;
 
-            return Err(Error::InvalidConnectPacket);
+            return Err(ConnackPacket::new(
+                false,
+                ConnectReturnCode::IdentifierRejected,
+            ));
         }
 
         if topic_name.starts_with(SHARED_PREFIX) || topic_name.starts_with(SYS_PREFIX) {
             log::debug!("handle connect last will topic start with '$SYS/' or '$share/'");
-            writer
-                .send(ConnackPacket::new(false, ConnectReturnCode::IdentifierRejected).into())
-                .await?;
 
-            return Err(Error::InvalidConnectPacket);
+            return Err(ConnackPacket::new(
+                false,
+                ConnectReturnCode::IdentifierRejected,
+            ));
         }
 
-        session.set_last_will(Some(last_will.into()))
+        session.set_last_will(LastWill::V4(last_will))
     }
 
     // FIXME: to many clients cause memory leak
 
     // TODO: outgoing channel size
     let (outgoing_tx, outgoing_rx) = mpsc::channel::<Outgoing>(8);
-    let receipt = global
-        .add_client(session.client_identifier().as_str(), outgoing_tx)
-        .await?;
+    let receipt = global.add_client(session.client_id(), outgoing_tx).await;
 
     let session_present = match receipt {
-        AddClientReceipt::Present(client_id, old_state) => {
-            session.set_client_id(client_id);
+        AddClientReceipt::Present(old_state) => {
             if !session.clean_session() {
                 session.copy_from_state(old_state);
                 true
@@ -150,22 +142,20 @@ protocol level : {:?}
                 false
             }
         }
-        AddClientReceipt::New(client_id) => {
-            session.set_client_id(client_id);
-            false
-        }
+        AddClientReceipt::New => false,
     };
-    writer
-        .send(ConnackPacket::new(session_present, ConnectReturnCode::ConnectionAccepted).into())
-        .await?;
 
-    Ok((session, outgoing_rx))
+    Ok((
+        ConnackPacket::new(session_present, ConnectReturnCode::ConnectionAccepted),
+        session,
+        outgoing_rx,
+    ))
 }
 
 pub(super) async fn handle_disconnect(session: &mut Session) {
     log::debug!(
         "client#{} received a disconnect packet",
-        session.client_identifier()
+        session.client_id()
     );
 
     session.clear_last_will();

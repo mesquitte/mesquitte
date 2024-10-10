@@ -15,7 +15,7 @@ pub(super) fn handle_subscribe(
     global: Arc<GlobalState>,
 ) -> Vec<VariablePacket> {
     log::debug!(
-        r#"{} received a subscribe packet:
+        r#"client#{} received a subscribe packet:
 packet id : {}
    topics : {:?}"#,
         session.client_id(),
@@ -33,7 +33,7 @@ packet id : {}
 
         // TODO: granted max qos from config
         let granted_qos = subscribe_qos.to_owned();
-        session.set_subscribe(filter.clone(), granted_qos);
+        session.subscribe(filter.clone());
         global.subscribe(filter, session.client_id(), granted_qos);
 
         for msg in global.retain_table().get_matches(filter) {
@@ -57,16 +57,16 @@ pub(super) fn handle_unsubscribe(
     global: Arc<GlobalState>,
 ) -> UnsubackPacket {
     log::debug!(
-        r#"{} received a unsubscribe packet:
+        r#"client#{} received a unsubscribe packet:
 packet id : {}
    topics : {:?}"#,
-        session.client_identifier(),
+        session.client_id(),
         packet.packet_identifier(),
         packet.subscribes(),
     );
     for filter in packet.subscribes() {
         global.unsubscribe(filter, session.client_id());
-        session.rm_subscribe(filter);
+        session.unsubscribe(filter);
     }
 
     UnsubackPacket::new(packet.packet_identifier())
