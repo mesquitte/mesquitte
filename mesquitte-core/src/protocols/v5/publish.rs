@@ -18,7 +18,11 @@ use mqtt_codec_kit::{
 
 use crate::{
     server::state::GlobalState,
-    types::{outgoing::Outgoing, publish::PublishMessage, session::Session},
+    types::{
+        outgoing::Outgoing,
+        publish::PublishMessage,
+        session::{LastWill, Session},
+    },
 };
 
 use super::common::build_error_disconnect;
@@ -33,7 +37,7 @@ pub(super) async fn handle_publish(
 topic name : {:?}
    payload : {:?}
      flags : qos={:?}, retain={}, dup={}"#,
-        session.client_identifier(),
+        session.client_id(),
         packet.topic_name(),
         packet.payload(),
         packet.qos(),
@@ -119,7 +123,7 @@ topic name : {:?}
    payload : {:?}
 properties : {:?}
      flags : qos={:?}, retain={}, dup={}"#,
-        session.client_identifier(),
+        session.client_id(),
         packet.topic_name(),
         packet.payload(),
         packet.properties(),
@@ -134,7 +138,7 @@ properties : {:?}
         } else {
             global
                 .retain_table()
-                .insert(Arc::new((session.client_identifier(), &packet).into()));
+                .insert(Arc::new((session.client_id(), &packet).into()));
         }
     }
 
@@ -146,7 +150,7 @@ properties : {:?}
         match content.topic_filter.as_ref() {
             Some(filter) => {
                 for (client_id, subscribe_qos) in &content.clients {
-                    senders.push((*client_id, filter.clone(), *subscribe_qos));
+                    senders.push((client_id.to_owned(), filter.clone(), *subscribe_qos));
                 }
             }
             None => log::warn!("topic filter is empty in content : {:?}", content),
@@ -154,8 +158,7 @@ properties : {:?}
         for (group_name, shared_clients) in &content.groups {
             // TODO: config: shared subscription available
             // TODO: config: shared subscription mode
-            let (client_id, subscribe_qos) =
-                shared_clients.get_by_hash(session.client_identifier());
+            let (client_id, subscribe_qos) = shared_clients.get_by_hash(session.client_id());
             // TODO: optimize this alloc later
             let full_filter = TopicFilter::new(format!(
                 "{SHARED_PREFIX}{group_name}/{:?}",
@@ -190,7 +193,7 @@ pub(super) async fn handle_pubrel(
 ) -> PubcompPacket {
     log::debug!(
         "client#{} received a pubrel packet, id : {}",
-        session.client_identifier(),
+        session.client_id(),
         pid
     );
 
@@ -198,7 +201,7 @@ pub(super) async fn handle_pubrel(
     let mut start_idx = 0;
     while let Some((idx, msg)) = session
         .pending_packets()
-        .get_unsent_incoming_packet(start_idx)
+        .get_ready_incoming_packet(start_idx)
     {
         start_idx = idx + 1;
         let message = msg.message().to_owned();
@@ -220,7 +223,7 @@ topic name : {:?}
    payload : {:?}
 properties : {:?}
      flags : qos={:?}, subscribe_qos={:?}, retain={}, dup={}"#,
-        session.client_identifier(),
+        session.client_id(),
         message.topic_name(),
         message.payload(),
         message.properties(),
@@ -273,7 +276,7 @@ properties : {:?}
 pub(super) fn handle_puback(session: &mut Session, pid: u16) {
     log::debug!(
         "client#{} received a puback packet, id : {}",
-        session.client_identifier(),
+        session.client_id(),
         pid
     );
 
@@ -284,7 +287,7 @@ pub(super) fn handle_puback(session: &mut Session, pid: u16) {
 pub(super) fn handle_pubrec(session: &mut Session, pid: u16) -> PubrelPacket {
     log::debug!(
         "client#{} received a pubrec packet, id : {}",
-        session.client_identifier(),
+        session.client_id(),
         pid
     );
 
@@ -298,7 +301,7 @@ pub(super) fn handle_pubrec(session: &mut Session, pid: u16) -> PubrelPacket {
 pub(super) fn handle_pubcomp(session: &mut Session, pid: u16) {
     log::debug!(
         "client#{} received a pubcomp packet, id : {}",
-        session.client_identifier(),
+        session.client_id(),
         pid
     );
 
@@ -312,13 +315,13 @@ pub(super) async fn handle_will(session: &mut Session, global: Arc<GlobalState>)
 client side disconnected : {}
 server side disconnected : {}
                last will : {:?}"#,
-        session.client_identifier(),
+        session.client_id(),
         session.client_disconnected(),
         session.server_disconnected(),
         session.last_will(),
     );
 
-    if let Some(last_will) = session.take_last_will() {
+    if let Some(LastWill::V5(last_will)) = session.take_last_will() {
         dispatch_publish(session, last_will.into(), global.clone()).await;
         session.clear_last_will();
     }

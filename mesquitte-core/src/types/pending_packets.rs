@@ -187,7 +187,7 @@ impl PendingPackets {
     }
 
     // shrink the queue to save memory
-    pub fn shrink_queue<P>(queue: &mut VecDeque<P>) {
+    fn shrink_queue<P>(queue: &mut VecDeque<P>) {
         if queue.capacity() >= 16 && queue.capacity() >= (queue.len() << 2) {
             queue.shrink_to(queue.len() << 1);
         } else if queue.is_empty() {
@@ -250,7 +250,7 @@ impl PendingPackets {
         }
     }
 
-    pub fn get_unsent_incoming_packet(
+    pub fn get_ready_incoming_packet(
         &mut self,
         start_idx: usize,
     ) -> Option<(usize, &IncomingPublishPacket)> {

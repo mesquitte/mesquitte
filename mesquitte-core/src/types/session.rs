@@ -1,15 +1,50 @@
-use std::{mem, sync::Arc, time::Instant};
+use std::mem;
 
-use hashbrown::HashMap;
-use mqtt_codec_kit::common::{QualityOfService, TopicFilter};
+use hashbrown::HashSet;
+use mqtt_codec_kit::common::TopicFilter;
+use mqtt_codec_kit::v4::packet::connect::LastWill as V4LastWill;
+use mqtt_codec_kit::v5::packet::connect::LastWill as V5LastWill;
+use tokio::time::Instant;
 
-use super::{client_id::ClientId, last_will::LastWill, pending_packets::PendingPackets};
+use super::pending_packets::PendingPackets;
 
 pub const DEFAULT_MAX_PACKET_SIZE: u32 = 5 + 268_435_455;
 
+#[derive(Debug, Clone)]
+pub enum LastWill {
+    V4(V4LastWill),
+    V5(V5LastWill),
+}
+
+pub struct SessionState {
+    server_packet_id: u16,
+    pending_packets: PendingPackets,
+}
+
+impl SessionState {
+    pub fn server_packet_id(&self) -> u16 {
+        self.server_packet_id
+    }
+
+    pub fn pending_packets(&mut self) -> &mut PendingPackets {
+        &mut self.pending_packets
+    }
+}
+
+impl From<&mut Session> for SessionState {
+    fn from(val: &mut Session) -> Self {
+        let mut pending_packets = PendingPackets::new(0, 0, 0);
+        mem::swap(&mut val.pending_packets, &mut pending_packets);
+
+        Self {
+            server_packet_id: val.server_packet_id,
+            pending_packets,
+        }
+    }
+}
+
 pub struct Session {
     connected_at: Instant,
-    connection_closed_at: Option<Instant>,
     // last package timestamp
     last_packet_at: Instant,
     // For record packet id send from server to client
@@ -17,20 +52,18 @@ pub struct Session {
 
     pending_packets: PendingPackets,
 
-    client_id: ClientId,
-    client_identifier: Arc<String>,
-    username: Option<Arc<String>>,
+    client_id: String,
+    username: Option<String>,
     keep_alive: u16,
     clean_session: bool,
     last_will: Option<LastWill>,
-    subscribes: HashMap<TopicFilter, QualityOfService, ahash::RandomState>,
+    subscriptions: HashSet<TopicFilter, ahash::RandomState>,
 
     authorized: bool,
+    assigned_client_id: bool,
     client_disconnected: bool,
     server_disconnected: bool,
 
-    // #[cfg(feature = "v5")]
-    assigned_client_id: bool,
     // #[cfg(feature = "v5")]
     server_keep_alive: bool,
     // #[cfg(feature = "v5")]
@@ -48,7 +81,7 @@ pub struct Session {
     // #[cfg(feature = "v5")]
     user_properties: Vec<(String, String)>,
     // #[cfg(feature = "v5")]
-    authentication_method: Option<Arc<String>>,
+    authentication_method: Option<String>,
     // #[cfg(feature = "v5")]
     // authentication_data: Option<Arc<String>>,
 }
@@ -56,13 +89,13 @@ pub struct Session {
 impl Session {
     pub fn new(
         client_id: String,
+        assigned_client_id: bool,
         max_inflight_client: u16,
         max_in_mem_pending_messages: usize,
         inflight_timeout: u64,
     ) -> Self {
         Self {
             connected_at: Instant::now(),
-            connection_closed_at: None,
             last_packet_at: Instant::now(),
             server_packet_id: 1,
 
@@ -72,18 +105,17 @@ impl Session {
                 inflight_timeout,
             ),
 
-            client_id: Default::default(),
-            client_identifier: Arc::new(client_id),
+            client_id,
+            assigned_client_id,
             username: None,
             keep_alive: 0,
             clean_session: true,
             last_will: None,
-            subscribes: HashMap::with_hasher(ahash::RandomState::new()),
+            subscriptions: HashSet::with_hasher(ahash::RandomState::new()),
 
             authorized: false,
             client_disconnected: false,
             server_disconnected: false,
-            assigned_client_id: false,
             server_keep_alive: false,
 
             session_expiry_interval: 0,
@@ -102,10 +134,6 @@ impl Session {
         &self.connected_at
     }
 
-    pub fn connection_closed_at(&self) -> Option<&Instant> {
-        self.connection_closed_at.as_ref()
-    }
-
     pub fn last_packet_at(&self) -> &Instant {
         &self.last_packet_at
     }
@@ -118,27 +146,15 @@ impl Session {
         &mut self.pending_packets
     }
 
-    pub fn client_id(&self) -> ClientId {
-        self.client_id
+    pub fn client_id(&self) -> &str {
+        &self.client_id
     }
 
-    pub fn set_client_id(&mut self, client_id: ClientId) {
-        self.client_id = client_id
-    }
-
-    pub fn client_identifier(&self) -> Arc<String> {
-        self.client_identifier.clone()
-    }
-
-    pub fn set_client_identifier(&mut self, client_identifier: &str) {
-        self.client_identifier = Arc::new(client_identifier.to_owned())
-    }
-
-    pub fn set_username(&mut self, username: Option<Arc<String>>) {
+    pub fn set_username(&mut self, username: Option<String>) {
         self.username = username
     }
 
-    pub fn keep_alive(&mut self) -> u16 {
+    pub fn keep_alive(&self) -> u16 {
         self.keep_alive
     }
 
@@ -196,7 +212,7 @@ impl Session {
         self.server_keep_alive = server_keep_alive
     }
 
-    pub fn last_will(&mut self) -> Option<&LastWill> {
+    pub fn last_will(&self) -> Option<&LastWill> {
         self.last_will.as_ref()
     }
 
@@ -208,28 +224,24 @@ impl Session {
         self.last_will.take()
     }
 
-    pub fn set_last_will(&mut self, last_will: Option<LastWill>) {
-        self.last_will = last_will;
+    pub fn set_last_will(&mut self, last_will: LastWill) {
+        self.last_will = Some(last_will);
     }
 
     pub fn set_clean_session(&mut self, clean_session: bool) {
         self.clean_session = clean_session;
     }
 
-    pub fn subscribes(&self) -> &HashMap<TopicFilter, QualityOfService, ahash::RandomState> {
-        &self.subscribes
+    pub fn subscriptions(&self) -> &HashSet<TopicFilter, ahash::RandomState> {
+        &self.subscriptions
     }
 
-    pub fn set_subscribe(
-        &mut self,
-        topic: TopicFilter,
-        qos: QualityOfService,
-    ) -> Option<QualityOfService> {
-        self.subscribes.insert(topic, qos)
+    pub fn subscribe(&mut self, topic: TopicFilter) -> bool {
+        self.subscriptions.insert(topic)
     }
 
-    pub fn rm_subscribe(&mut self, topic: &TopicFilter) -> bool {
-        self.subscribes.remove(topic).is_some()
+    pub fn unsubscribe(&mut self, topic: &TopicFilter) -> bool {
+        self.subscriptions.remove(topic)
     }
 
     pub fn incr_server_packet_id(&mut self) -> u16 {
@@ -238,12 +250,16 @@ impl Session {
         old_value
     }
 
-    pub fn assigned_client_id(&self) -> bool {
-        self.assigned_client_id
+    pub fn set_server_packet_id(&mut self, server_packet_id: u16) {
+        self.server_packet_id = server_packet_id;
     }
 
-    pub fn set_assigned_client_id(&mut self) {
-        self.assigned_client_id = true
+    pub fn server_packet_id(&self) -> u16 {
+        self.server_packet_id
+    }
+
+    pub fn assigned_client_id(&self) -> bool {
+        self.assigned_client_id
     }
 
     pub fn server_keep_alive(&self) -> bool {
@@ -309,38 +325,12 @@ impl Session {
     }
 
     pub fn set_authentication_method(&mut self, authentication_method: &str) {
-        self.authentication_method = Some(Arc::new(authentication_method.to_owned()));
+        self.authentication_method = Some(authentication_method.to_owned());
     }
 
     pub fn copy_from_state(&mut self, mut state: SessionState) {
         self.server_packet_id = state.server_packet_id;
 
         mem::swap(&mut state.pending_packets, &mut self.pending_packets);
-        mem::swap(&mut state.subscribes, &mut self.subscribes);
-    }
-}
-
-pub struct SessionState {
-    // For record packet id send from server to client
-    server_packet_id: u16,
-    // QoS1/QoS2 pending packets
-    pending_packets: PendingPackets,
-
-    subscribes: HashMap<TopicFilter, QualityOfService, ahash::RandomState>,
-}
-
-impl From<&mut Session> for SessionState {
-    fn from(val: &mut Session) -> Self {
-        let mut pending_packets = PendingPackets::new(0, 0, 0);
-        let mut subscribes = HashMap::with_hasher(ahash::RandomState::new());
-
-        mem::swap(&mut val.pending_packets, &mut pending_packets);
-        mem::swap(&mut val.subscribes, &mut subscribes);
-
-        Self {
-            server_packet_id: val.server_packet_id,
-            pending_packets,
-            subscribes,
-        }
     }
 }

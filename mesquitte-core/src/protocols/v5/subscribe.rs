@@ -53,22 +53,20 @@ properties : {:?}"#,
 
         let granted_qos = subscribe_opts.qos().to_owned();
         // TODO: granted max qos from config
-        let old_sub = session.set_subscribe(filter.clone(), granted_qos);
+        let exist = session.subscribe(filter.clone());
         global.subscribe(filter, session.client_id(), granted_qos);
 
         // TODO: config: retain available?
         let send_retain = !filter.is_shared()
             && match subscribe_opts.retain_handling {
                 RetainHandling::SendAtSubscribe => true,
-                RetainHandling::SendAtSubscribeIfNotExist => old_sub.is_none(),
+                RetainHandling::SendAtSubscribeIfNotExist => exist,
                 RetainHandling::DoNotSend => false,
             };
 
         if send_retain {
             for msg in global.retain_table().get_matches(filter) {
-                if subscribe_opts.no_local
-                    && msg.client_identifier().eq(&session.client_identifier())
-                {
+                if subscribe_opts.no_local && msg.client_id().eq(session.client_id()) {
                     continue;
                 }
 
@@ -100,10 +98,10 @@ pub(super) fn handle_unsubscribe(
     global: Arc<GlobalState>,
 ) -> UnsubackPacket {
     log::debug!(
-        r#"{} received a unsubscribe packet:
+        r#"client#{} received a unsubscribe packet:
 packet id : {}
    topics : {:?}"#,
-        session.client_identifier(),
+        session.client_id(),
         packet.packet_identifier(),
         packet.subscribes(),
     );
@@ -111,7 +109,7 @@ packet id : {}
     let reason_codes = Vec::new();
     for filter in packet.subscribes() {
         global.unsubscribe(filter, session.client_id());
-        session.rm_subscribe(filter);
+        session.unsubscribe(filter);
     }
 
     UnsubackPacket::new(packet.packet_identifier(), reason_codes)

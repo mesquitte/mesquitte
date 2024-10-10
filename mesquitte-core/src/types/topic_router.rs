@@ -7,7 +7,7 @@ use mqtt_codec_kit::common::{
 };
 use parking_lot::RwLock;
 
-use super::{client_id::ClientId, retain_table::split_topic};
+use super::retain_table::split_topic;
 
 #[derive(Default)]
 pub struct RouteTable {
@@ -23,15 +23,15 @@ struct RouteNode {
 pub struct RouteContent {
     /// Returned RouteContent always have topic_filter
     pub topic_filter: Option<TopicFilter>,
-    pub clients: HashMap<ClientId, QualityOfService>,
+    pub clients: HashMap<String, QualityOfService>,
     pub groups: HashMap<String, SharedClients>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct SharedClients {
     hash_builder: RandomState,
-    items: Vec<(ClientId, QualityOfService)>,
-    index: HashMap<ClientId, usize>,
+    items: Vec<(String, QualityOfService)>,
+    index: HashMap<String, usize>,
 }
 
 impl RouteTable {
@@ -55,7 +55,7 @@ impl RouteTable {
         filters
     }
 
-    pub fn subscribe(&self, topic_filter: &TopicFilter, id: ClientId, qos: QualityOfService) {
+    pub fn subscribe(&self, topic_filter: &TopicFilter, id: &str, qos: QualityOfService) {
         if let Some((shared_group_name, shared_filter)) = topic_filter.shared_info() {
             self.subscribe_shared(
                 &TopicFilter::new(shared_filter.to_owned()).expect("shared filter"),
@@ -67,10 +67,11 @@ impl RouteTable {
             self.subscribe_shared(topic_filter, id, qos, None);
         }
     }
+
     fn subscribe_shared(
         &self,
         topic_filter: &TopicFilter,
-        id: ClientId,
+        id: &str,
         qos: QualityOfService,
         group: Option<String>,
     ) {
@@ -83,7 +84,7 @@ impl RouteTable {
             .insert(topic_filter, rest_items, id, qos, group);
     }
 
-    pub fn unsubscribe(&self, topic_filter: &TopicFilter, id: ClientId) {
+    pub fn unsubscribe(&self, topic_filter: &TopicFilter, id: &str) {
         if let Some((shared_group_name, shared_filter)) = topic_filter.shared_info() {
             self.unsubscribe_shared(
                 &TopicFilter::new(shared_filter.to_owned()).expect("new topic filter"),
@@ -95,7 +96,7 @@ impl RouteTable {
         }
     }
 
-    fn unsubscribe_shared(&self, topic_filter: &TopicFilter, id: ClientId, group: Option<&str>) {
+    fn unsubscribe_shared(&self, topic_filter: &TopicFilter, id: &str, group: Option<&str>) {
         let (filter_item, rest_items) = split_topic(topic_filter.deref());
         // bool variable is for resolve dead lock of access `self.nodes`
         let mut remove_node = false;
@@ -160,7 +161,7 @@ impl RouteNode {
         &self,
         topic_filter: &TopicFilter,
         filter_items: Option<&str>,
-        id: ClientId,
+        id: &str,
         qos: QualityOfService,
         group: Option<String>,
     ) {
@@ -181,14 +182,14 @@ impl RouteNode {
                     .groups
                     .entry(name)
                     .or_insert_with(SharedClients::default)
-                    .insert((id, qos));
+                    .insert((id.to_owned(), qos));
             } else {
-                content.clients.insert(id, qos);
+                content.clients.insert(id.to_owned(), qos);
             }
         }
     }
 
-    fn remove(&self, filter_items: Option<&str>, id: ClientId, group: Option<&str>) -> bool {
+    fn remove(&self, filter_items: Option<&str>, id: &str, group: Option<&str>) -> bool {
         if let Some(filter_items) = filter_items {
             let (filter_item, rest_items) = split_topic(filter_items);
             // bool variables are for resolve dead lock of access `self.nodes`
@@ -215,13 +216,13 @@ impl RouteNode {
             let mut content = self.content.write();
             if let Some(name) = group {
                 if let Some(shared_clients) = content.groups.get_mut(name) {
-                    shared_clients.remove(&id);
+                    shared_clients.remove(id);
                     if shared_clients.is_empty() {
                         content.groups.remove(name);
                     }
                 }
             } else {
-                content.clients.remove(&id);
+                content.clients.remove(id);
             }
             if content.is_empty() {
                 content.topic_filter = None;
@@ -241,37 +242,38 @@ impl RouteContent {
 }
 
 impl SharedClients {
-    pub fn get_by_hash<T: Hash>(&self, data: T) -> (ClientId, QualityOfService) {
+    pub fn get_by_hash<T: Hash>(&self, data: T) -> (String, QualityOfService) {
         let number = self.hash_builder.hash_one(data);
         self.get_by_number(number)
     }
 
-    pub fn get_by_number(&self, number: u64) -> (ClientId, QualityOfService) {
+    pub fn get_by_number(&self, number: u64) -> (String, QualityOfService) {
         // Empty SharedClients MUST already removed from parent data structure immediately.
         debug_assert!(!self.items.is_empty());
         let idx = number as usize % self.items.len();
-        self.items[idx]
+        let (client_id, qos) = &self.items[idx];
+        (client_id.to_owned(), qos.to_owned())
     }
 
     fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
 
-    fn insert(&mut self, item: (ClientId, QualityOfService)) {
+    fn insert(&mut self, item: (String, QualityOfService)) {
         if let Some(idx) = self.index.get(&item.0) {
             self.items[*idx].1 = item.1;
         } else {
-            self.index.insert(item.0, self.items.len());
+            self.index.insert(item.0.to_owned(), self.items.len());
             self.items.push(item);
         }
     }
 
-    fn remove(&mut self, item_key: &ClientId) {
+    fn remove(&mut self, item_key: &str) {
         if let Some(idx) = self.index.remove(item_key) {
             if self.items.len() == 1 {
                 self.items.clear();
             } else {
-                let last_client_id = self.items.last().expect("shared items").0;
+                let last_client_id = self.items.last().expect("shared items").0.to_owned();
                 self.items.swap_remove(idx);
                 self.index.insert(last_client_id, idx);
                 if self.items.capacity() >= 16 && self.items.capacity() >= (self.items.len() << 2) {

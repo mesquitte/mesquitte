@@ -1,35 +1,32 @@
-use std::{io, sync::Arc};
+use std::sync::Arc;
 
-use futures::SinkExt as _;
 use mqtt_codec_kit::{
     common::{
         ProtocolLevel, QualityOfService, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX, SYS_PREFIX,
     },
     v5::{
         control::{ConnackProperties, ConnectReasonCode, DisconnectReasonCode},
-        packet::{ConnackPacket, ConnectPacket, DisconnectPacket, VariablePacket},
+        packet::{ConnackPacket, ConnectPacket, DisconnectPacket},
     },
 };
 use nanoid::nanoid;
-use tokio::{io::AsyncWrite, sync::mpsc};
-use tokio_util::codec::{Encoder, FramedWrite};
+use tokio::sync::mpsc;
 
 use crate::{
     server::state::GlobalState,
-    types::{client_id::AddClientReceipt, error::Error, outgoing::Outgoing, session::Session},
+    types::{
+        client::AddClientReceipt,
+        outgoing::Outgoing,
+        session::{LastWill, Session},
+    },
 };
 
 use super::common::build_error_connack;
 
-pub(super) async fn handle_connect<W, E>(
-    writer: &mut FramedWrite<W, E>,
+pub(super) async fn handle_connect(
     packet: ConnectPacket,
     global: Arc<GlobalState>,
-) -> Result<(Session, mpsc::Receiver<Outgoing>), Error>
-where
-    W: AsyncWrite + Unpin,
-    E: Encoder<VariablePacket, Error = io::Error>,
-{
+) -> Result<(ConnackPacket, Session, mpsc::Receiver<Outgoing>), ConnackPacket> {
     log::debug!(
         r#"client#{} received a connect packet:
 protocol level : {:?}
@@ -55,20 +52,19 @@ protocol level : {:?}
     if ProtocolLevel::Version50.ne(&level) {
         log::info!("unsupported protocol level: {:?}", level);
 
-        writer
-            .send(ConnackPacket::new(false, ConnectReasonCode::UnsupportedProtocolVersion).into())
-            .await?;
-
-        return Err(Error::InvalidConnectPacket);
+        return Err(ConnackPacket::new(
+            false,
+            ConnectReasonCode::UnsupportedProtocolVersion,
+        ));
     }
 
     if packet.protocol_name().ne("MQTT") {
         log::info!("unsupported protocol name: {:?}", packet.protocol_name());
-        writer
-            .send(ConnackPacket::new(false, ConnectReasonCode::UnsupportedProtocolVersion).into())
-            .await?;
 
-        return Err(Error::InvalidConnectPacket);
+        return Err(ConnackPacket::new(
+            false,
+            ConnectReasonCode::UnsupportedProtocolVersion,
+        ));
     }
 
     // TODO: handle auth
@@ -78,20 +74,18 @@ protocol level : {:?}
     // TODO: config: inflight message timeout
     // TODO: config: max packet size
 
-    let mut session = Session::new(packet.client_identifier().to_owned(), 12, 1024, 60);
+    let (assigned_client_id, client_id) = if packet.client_identifier().is_empty() {
+        (true, nanoid!())
+    } else {
+        (false, packet.client_identifier().to_owned())
+    };
+
+    let mut session = Session::new(client_id, assigned_client_id, 12, 1024, 10);
     session.set_clean_session(packet.clean_session());
-    session.set_username(packet.username().map(|name| Arc::new(name.to_owned())));
+    session.set_username(packet.username().map(|name| name.to_owned()));
     session.set_keep_alive(packet.keep_alive());
     let server_keep_alive = session.keep_alive() != packet.keep_alive();
     session.set_server_keep_alive(server_keep_alive);
-
-    if packet.client_identifier().is_empty() {
-        let id = nanoid!();
-        session.set_assigned_client_id();
-        session.set_client_identifier(&id);
-    } else {
-        session.set_client_identifier(packet.client_identifier());
-    }
 
     let properties = packet.properties();
     if let Some(request_problem_info) = properties.request_problem_info() {
@@ -103,40 +97,35 @@ protocol level : {:?}
     }
     if properties.receive_maximum() == Some(0) {
         log::debug!("connect properties ReceiveMaximum is 0");
-        let err_pkt = build_error_connack(
+
+        return Err(build_error_connack(
             &mut session,
             false,
             ConnectReasonCode::ProtocolError,
             "ReceiveMaximum value=0 is not allowed",
-        );
-
-        writer.send(err_pkt.into()).await?;
-        return Err(Error::InvalidConnectPacket);
+        ));
     }
 
     if session.max_packet_size() == 0 {
         log::debug!("connect properties MaximumPacketSize is 0");
-        let err_pkt = build_error_connack(
+
+        return Err(build_error_connack(
             &mut session,
             false,
             ConnectReasonCode::ProtocolError,
             "MaximumPacketSize value=0 is not allowed",
-        );
-
-        writer.send(err_pkt.into()).await?;
-        return Err(Error::InvalidConnectPacket);
+        ));
     }
 
     if properties.authentication_data().is_some() && properties.authentication_method().is_none() {
         log::debug!("connect properties AuthenticationMethod is missing");
-        let err_pkt = build_error_connack(
+
+        return Err(build_error_connack(
             &mut session,
             false,
             ConnectReasonCode::ProtocolError,
             "AuthenticationMethod is missing",
-        );
-        writer.send(err_pkt.into()).await?;
-        return Err(Error::InvalidConnectPacket);
+        ));
     }
 
     if let Some(session_expiry_interval) = properties.session_expiry_interval() {
@@ -163,41 +152,34 @@ protocol level : {:?}
         if topic_name.is_empty() {
             log::debug!("last will topic is empty");
 
-            let err_pkt = build_error_connack(
+            return Err(build_error_connack(
                 &mut session,
                 false,
                 ConnectReasonCode::TopicNameInvalid,
                 "last will topic is empty",
-            );
-            writer.send(err_pkt.into()).await?;
-
-            return Err(Error::InvalidConnectPacket);
+            ));
         }
 
         if topic_name.contains(MATCH_ALL_STR) || topic_name.contains(MATCH_ONE_STR) {
             log::debug!("last will topic contains illegal characters '+' or '#'");
-            let err_pkt = build_error_connack(
+
+            return Err(build_error_connack(
                 &mut session,
                 false,
                 ConnectReasonCode::TopicNameInvalid,
                 "last will topic contains illegal characters '+' or '#'",
-            );
-            writer.send(err_pkt.into()).await?;
-
-            return Err(Error::InvalidConnectPacket);
+            ));
         }
 
         if topic_name.starts_with(SHARED_PREFIX) || topic_name.starts_with(SYS_PREFIX) {
             log::debug!("last will topic start with '$SYS/' or '$share/'");
-            let err_pkt = build_error_connack(
+
+            return Err(build_error_connack(
                 &mut session,
                 false,
                 ConnectReasonCode::TopicNameInvalid,
                 "last will topic start with '$SYS/' or '$share/'",
-            );
-            writer.send(err_pkt.into()).await?;
-
-            return Err(Error::InvalidConnectPacket);
+            ));
         }
         // TODO: config: retain available
         // if last_will.retain() && !retain_available {
@@ -225,7 +207,7 @@ protocol level : {:?}
         //     return Err(Error::InvalidConnectPacket);
         // }
 
-        session.set_last_will(Some(last_will.into()))
+        session.set_last_will(LastWill::V5(last_will))
     }
     // TODO: v5 auth
 
@@ -233,13 +215,10 @@ protocol level : {:?}
 
     // TODO: outgoing channel size
     let (outgoing_tx, outgoing_rx) = mpsc::channel::<Outgoing>(8);
-    let receipt = global
-        .add_client(session.client_identifier().as_str(), outgoing_tx)
-        .await?;
+    let receipt = global.add_client(session.client_id(), outgoing_tx).await;
 
     let session_present = match receipt {
-        AddClientReceipt::Present(client_id, old_state) => {
-            session.set_client_id(client_id);
+        AddClientReceipt::Present(old_state) => {
             if !session.clean_session() {
                 session.copy_from_state(old_state);
                 true
@@ -251,10 +230,7 @@ protocol level : {:?}
                 false
             }
         }
-        AddClientReceipt::New(client_id) => {
-            session.set_client_id(client_id);
-            false
-        }
+        AddClientReceipt::New => false,
     };
 
     // build and send connack packet
@@ -270,8 +246,7 @@ protocol level : {:?}
     // TODO: config: max packet size
     connack_properties.set_max_packet_size(Some(session.max_packet_size()));
     if session.assigned_client_id() {
-        connack_properties
-            .set_assigned_client_identifier(Some(session.client_identifier().to_string()));
+        connack_properties.set_assigned_client_identifier(Some(session.client_id().to_string()));
     }
     // TODO: config: max topic alias num
     connack_properties.set_topic_alias_max(Some(session.topic_alias_max()));
@@ -293,9 +268,7 @@ protocol level : {:?}
     let mut connack_packet = ConnackPacket::new(session_present, ConnectReasonCode::Success);
     connack_packet.set_properties(connack_properties);
 
-    writer.send(connack_packet.into()).await?;
-
-    Ok((session, outgoing_rx))
+    Ok((connack_packet, session, outgoing_rx))
 }
 
 pub(super) async fn handle_disconnect(
@@ -304,7 +277,7 @@ pub(super) async fn handle_disconnect(
 ) -> Option<DisconnectPacket> {
     log::debug!(
         "client#{} received a disconnect packet",
-        session.client_identifier()
+        session.client_id()
     );
 
     if let Some(value) = packet.properties().session_expiry_interval() {
