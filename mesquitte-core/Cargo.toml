@@ -13,7 +13,7 @@ rust-version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["mqtt", "mqtts", "ws", "wss", "quic"]
+default = ["mqtt", "mqtts", "ws", "wss", "quic", "cluster"]
 
 mqtt = []
 mqtts = ["rustls"]
@@ -26,12 +26,19 @@ rustls = [
     "rustls-pemfile",
     "tokio-rustls/aws-lc-rs",
 ]
+cluster = ["openraft", "rust-rocksdb", "tarpc", "backon", "axum"]
 
 [dependencies]
 ahash.workspace = true
 async-tungstenite = { workspace = true, optional = true, features = [
     "tokio-runtime",
 ] }
+axum = { workspace = true, features = [
+    "http1",
+    "json",
+    "tokio",
+], optional = true }
+backon = { workspace = true, features = ["tokio-sleep"], optional = true }
 byteorder.workspace = true
 dashmap.workspace = true
 flume = { workspace = true, features = ["async"] }
@@ -44,17 +51,28 @@ mqtt-codec-kit = { workspace = true, features = ["v4", "v5", "tokio-codec"] }
 nanoid.workspace = true
 parking_lot.workspace = true
 pin-project-lite.workspace = true
+openraft = { workspace = true, features = [
+    "serde",
+    "loosen-follower-log-revert",
+    "type-alias",
+], optional = true }
 rand.workspace = true
-# rust-rocksdb = { workspace = true, features = [
-#     "io-uring",
-#     "zstd",
-#     "zstd-static-linking-only",
-# ], optional = true }
+rust-rocksdb = { workspace = true, features = [
+    "io-uring",
+    "zstd",
+    "zstd-static-linking-only",
+], optional = true }
 rustls = { workspace = true, default-features = false, optional = true }
 rustls-pemfile = { workspace = true, optional = true }
 s2n-quic = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+tarpc = { workspace = true, features = [
+    "tokio1",
+    "serde-transport",
+    "serde-transport-bincode",
+    "tcp",
+], optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = [
     "macros",
@@ -70,3 +88,4 @@ tungstenite = { workspace = true, optional = true }
 [dev-dependencies]
 env_logger.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tempfile.workspace = true
