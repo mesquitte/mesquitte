@@ -1,56 +1,77 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use axum::extract::State;
-use openraft::{error::Infallible, RaftMetrics};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use log::info;
+use openraft::RaftMetrics;
+use serde::Deserialize;
 
-use super::{app::App, decode, encode, Node, NodeId, TypeConfig};
+use super::{app::App, store::Request, Node, NodeId, TypeConfig};
 
-pub async fn write(State(app): State<App>, req: String) -> String {
-    let res = app.raft.client_write(decode(&req)).await;
-    encode(res)
+pub async fn write(State(app): State<App>, Json(req): Json<Request>) -> impl IntoResponse {
+    let res = app.raft.client_write(req).await;
+    info!("appid: {}", app.id);
+    Json(res)
 }
 
-pub async fn read(State(app): State<App>, req: String) -> String {
-    String::default()
+pub async fn read(
+    State(app): State<App>,
+    Json(req): Json<String>,
+) -> Result<Json<String>, (StatusCode, String)> {
+    let state_machine = app.state_machine_store.sm.read();
+    let value = state_machine.data.get(&req).cloned();
+    Ok(Json(value.unwrap_or_default()))
 }
 
 // Management API
 
+#[derive(Deserialize)]
+pub struct AddLearnerRequest {
+    node_id: u64,
+    rpc_addr: String,
+    api_addr: String,
+}
+
 /// Add a node as **Learner**.
-pub async fn add_learner(State(app): State<App>, req: String) -> String {
-    let node_id: NodeId = decode(&req);
+pub async fn add_learner(
+    State(app): State<App>,
+    Json(req): Json<AddLearnerRequest>,
+) -> impl IntoResponse {
     let node = Node {
-        rpc_addr: "".to_string(),
-        api_addr: "".to_string(),
+        rpc_addr: req.rpc_addr,
+        api_addr: req.api_addr,
     };
-    let res = app.raft.add_learner(node_id, node, true).await;
-    encode(res)
+    let res = app.raft.add_learner(req.node_id, node, true).await;
+    Json(res)
 }
 
 /// Changes specified learners to members, or remove members.
-pub async fn change_membership(State(app): State<App>, req: String) -> String {
-    let node_ids: BTreeSet<NodeId> = decode(&req);
+pub async fn change_membership(
+    State(app): State<App>,
+    Json(node_ids): Json<BTreeSet<NodeId>>,
+) -> impl IntoResponse {
     let res = app.raft.change_membership(node_ids, false).await;
-    encode(res)
+    Json(res)
 }
 
 /// Initialize a single-node cluster.
-pub async fn init(State(app): State<App>) -> String {
+pub async fn init(State(app): State<App>) -> impl IntoResponse {
     let mut nodes = BTreeMap::new();
     nodes.insert(
         app.id,
         Node {
-            rpc_addr: "".to_string(),
-            api_addr: "".to_string(),
+            rpc_addr: app.rpc_addr.to_string(),
+            api_addr: app.api_addr.to_string(),
         },
     );
     let res = app.raft.initialize(nodes).await;
-    encode(res)
+    Json(res)
 }
 
 /// Get the latest metrics of the cluster
-pub async fn metrics(State(app): State<App>) -> String {
+pub async fn metrics(
+    State(app): State<App>,
+) -> Result<Json<RaftMetrics<TypeConfig>>, (StatusCode, String)> {
     let metrics = app.raft.metrics().borrow().clone();
-    let res: Result<RaftMetrics<TypeConfig>, Infallible> = Ok(metrics);
-    encode(res)
+    // let res: Result<RaftMetrics<TypeConfig>, Infallible> = Ok(metrics);
+    Ok(Json(metrics))
 }

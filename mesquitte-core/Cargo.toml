@@ -53,7 +53,7 @@ parking_lot.workspace = true
 pin-project-lite.workspace = true
 openraft = { workspace = true, features = [
     "serde",
-    "loosen-follower-log-revert",
+    # "loosen-follower-log-revert",
     "type-alias",
 ], optional = true }
 rand.workspace = true
@@ -87,5 +87,7 @@ tungstenite = { workspace = true, optional = true }
 
 [dev-dependencies]
 env_logger.workspace = true
+maplit.workspace = true
+reqwest = { workspace = true, features = ["charset", "json"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tempfile.workspace = true

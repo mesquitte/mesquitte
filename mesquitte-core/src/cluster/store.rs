@@ -7,6 +7,7 @@ use openraft::{
     Entry, EntryPayload, LogId, RaftLogId as _, RaftSnapshotBuilder, SnapshotMeta, StorageError,
     StoredMembership,
 };
+use parking_lot::RwLock;
 use rand::Rng as _;
 use rust_rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use serde::{Deserialize, Serialize};
@@ -35,59 +36,51 @@ pub struct Response {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StoredSnapshot {
     pub meta: SnapshotMeta<TypeConfig>,
-
-    /// The data of the state machine at the time of this snapshot.
     pub data: Box<typ::SnapshotData>,
 }
 
-/// Data contained in the Raft state machine.
-///
-/// Note that we are using `serde` to serialize the
-/// `data`, which has a implementation to be serialized. Note that for this test we set both the key
-/// and value as String, but you could set any type of value that has the serialization impl.
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct StateMachineData {
     pub last_applied_log: Option<LogId<NodeId>>,
-
     pub last_membership: StoredMembership<TypeConfig>,
-
-    /// Application data.
     pub data: BTreeMap<String, String>,
 }
 
-/// Defines a state machine for the Raft cluster. This state machine represents a copy of the
-/// data for this node. Additionally, it is responsible for storing the last snapshot of the data.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct StateMachineStore {
-    sm: StateMachineData,
+    pub sm: Arc<RwLock<StateMachineData>>,
     db: Arc<DB>,
 }
 
 impl StateMachineStore {
-    async fn new(db: Arc<DB>) -> Self {
-        let mut state_machine = Self {
+    async fn new(db: Arc<DB>) -> Arc<Self> {
+        let state_machine = Self {
             db,
             sm: Default::default(),
         };
+        let mut state_machine = Arc::new(state_machine);
         let snapshot = state_machine.get_current_snapshot().await.unwrap();
-
-        // Restore previous state from snapshot
         if let Some(s) = snapshot {
             let prev: StateMachineData = *s.snapshot;
-            state_machine.sm = prev;
+            let mut sm = state_machine.sm.write();
+            *sm = prev;
         }
 
         state_machine
     }
 }
 
-impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
+impl RaftSnapshotBuilder<TypeConfig> for Arc<StateMachineStore> {
     async fn build_snapshot(&mut self) -> Result<Snapshot<TypeConfig>, StorageError<TypeConfig>> {
-        let last_applied_log = self.sm.last_applied_log;
-        let last_membership = self.sm.last_membership.clone();
-        // Generate a random snapshot index.
+        let sm;
+        let last_applied_log;
+        let last_membership;
+        {
+            sm = self.sm.read();
+            last_applied_log = sm.last_applied_log;
+            last_membership = sm.last_membership.clone();
+        }
         let snapshot_idx: u64 = rand::thread_rng().gen_range(0..1000);
-
         let snapshot_id = if let Some(last) = last_applied_log {
             format!("{}-{}-{}", last.leader_id, last.index, snapshot_idx)
         } else {
@@ -102,7 +95,7 @@ impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
 
         let snapshot = StoredSnapshot {
             meta: meta.clone(),
-            data: Box::new(self.sm.clone()),
+            data: Box::new(sm.clone()),
         };
 
         let serialized_snapshot = serde_json::to_vec(&snapshot)
@@ -118,19 +111,23 @@ impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
 
         Ok(Snapshot {
             meta,
-            snapshot: Box::new(self.sm.clone()),
+            snapshot: Box::new(sm.clone()),
         })
     }
 }
 
-impl RaftStateMachine<TypeConfig> for StateMachineStore {
+impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
     type SnapshotBuilder = Self;
 
     async fn applied_state(
         &mut self,
     ) -> Result<(Option<LogId<NodeId>>, StoredMembership<TypeConfig>), StorageError<TypeConfig>>
     {
-        Ok((self.sm.last_applied_log, self.sm.last_membership.clone()))
+        let state_machine = self.sm.read();
+        Ok((
+            state_machine.last_applied_log,
+            state_machine.last_membership.clone(),
+        ))
     }
 
     async fn apply<I>(&mut self, entries: I) -> Result<Vec<Response>, StorageError<TypeConfig>>
@@ -139,14 +136,11 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
     {
         let entries_iter = entries.into_iter();
         let mut res = Vec::with_capacity(entries_iter.size_hint().0);
-
-        let sm = &mut self.sm;
+        let mut sm = self.sm.write();
 
         for entry in entries_iter {
             debug!("{} replicate to sm", entry.log_id);
-
             sm.last_applied_log = Some(*entry.get_log_id());
-
             match entry.payload {
                 EntryPayload::Blank => res.push(Response { value: None }),
                 EntryPayload::Normal(ref req) => match req {
@@ -181,18 +175,13 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
             meta: meta.clone(),
             data: snapshot,
         };
-
-        // Update the state machine.
         let updated_state_machine: StateMachineData = *new_snapshot.data.clone();
-        // .map_err(|e| StorageError::read_snapshot(Some(new_snapshot.meta.signature()), &e))?;
-
-        self.sm = updated_state_machine;
-
-        // Save snapshot
-
+        {
+            let mut sm = self.sm.write();
+            *sm = updated_state_machine;
+        }
         let serialized_snapshot = serde_json::to_vec(&new_snapshot)
             .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
-
         self.db
             .put_cf(
                 self.db.cf_handle("sm_meta").unwrap(),
@@ -200,7 +189,6 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                 serialized_snapshot,
             )
             .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
-
         self.db
             .flush_wal(true)
             .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
@@ -214,15 +202,12 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
             .db
             .get_cf(self.db.cf_handle("sm_meta").unwrap(), "snapshot")
             .map_err(|e| StorageError::write_snapshot(None, &e))?;
-
         let bytes = match x {
             Some(x) => x,
             None => return Ok(None),
         };
-
         let snapshot: StoredSnapshot =
             serde_json::from_slice(&bytes).map_err(|e| StorageError::write_snapshot(None, &e))?;
-
         let data = snapshot.data.clone();
 
         Ok(Some(Snapshot {
@@ -236,7 +221,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
     }
 }
 
-pub async fn new<P: Into<PathBuf>>(db_path: P) -> (LogStore, StateMachineStore) {
+pub async fn new<P: Into<PathBuf>>(db_path: P) -> (LogStore, Arc<StateMachineStore>) {
     let mut db_opts = Options::default();
     db_opts.create_missing_column_families(true);
     db_opts.create_if_missing(true);
@@ -246,8 +231,8 @@ pub async fn new<P: Into<PathBuf>>(db_path: P) -> (LogStore, StateMachineStore) 
     let logs = ColumnFamilyDescriptor::new("logs", Options::default());
 
     let db = DB::open_cf_descriptors(&db_opts, db_path.into(), vec![meta, sm_meta, logs]).unwrap();
-
     let db = Arc::new(db);
+
     (LogStore::new(db.clone()), StateMachineStore::new(db).await)
 }
 
@@ -263,10 +248,10 @@ mod tests {
 
     struct RocksBuilder {}
 
-    impl StoreBuilder<TypeConfig, LogStore, StateMachineStore, TempDir> for RocksBuilder {
+    impl StoreBuilder<TypeConfig, LogStore, Arc<StateMachineStore>, TempDir> for RocksBuilder {
         async fn build(
             &self,
-        ) -> Result<(TempDir, LogStore, StateMachineStore), StorageError<TypeConfig>> {
+        ) -> Result<(TempDir, LogStore, Arc<StateMachineStore>), StorageError<TypeConfig>> {
             let td = TempDir::new().expect("couldn't create temp dir");
             let (log_store, sm) = super::new(td.path()).await;
             Ok((td, log_store, sm))
