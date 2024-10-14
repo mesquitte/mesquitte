@@ -21,6 +21,15 @@ pub struct Node {
     pub api_addr: String,
 }
 
+impl Node {
+    pub fn new(rpc_addr: &str, api_addr: &str) -> Self {
+        Self {
+            rpc_addr: rpc_addr.to_string(),
+            api_addr: api_addr.to_string(),
+        }
+    }
+}
+
 impl Display for Node {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -70,17 +79,10 @@ pub mod typ {
     pub type ClientWriteResponse = openraft::raft::ClientWriteResponse<TypeConfig>;
 }
 
-pub fn encode<T: serde::Serialize>(t: T) -> String {
-    serde_json::to_string(&t).unwrap()
-}
-
-pub fn decode<T: serde::de::DeserializeOwned>(s: &str) -> T {
-    serde_json::from_str(s).unwrap()
-}
-
 pub async fn new_raft<P: Into<PathBuf>>(
     node_id: NodeId,
-    server_addr: SocketAddr,
+    rpc_addr: SocketAddr,
+    api_addr: SocketAddr,
     dir: P,
 ) -> (typ::Raft, App) {
     let config = Config {
@@ -94,8 +96,7 @@ pub async fn new_raft<P: Into<PathBuf>>(
     let config = Arc::new(config.validate().unwrap());
 
     let (log_store, state_machine_store) = store::new(dir).await;
-
-    let network = Network {};
+    let network = Network { id: node_id };
     let raft = Raft::new(
         node_id,
         config,
@@ -106,7 +107,13 @@ pub async fn new_raft<P: Into<PathBuf>>(
     .await
     .unwrap();
 
-    let app = App::new(node_id, server_addr, raft.clone());
+    let app = App::new(
+        node_id,
+        rpc_addr,
+        api_addr,
+        raft.clone(),
+        state_machine_store,
+    );
 
     (raft, app)
 }

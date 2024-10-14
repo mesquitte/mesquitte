@@ -16,6 +16,7 @@ use tokio::{net::TcpStream, sync::Mutex};
 use super::{app::RaftRPCClient, error::Error, typ, Node, NodeId, TypeConfig};
 
 pub struct Connection {
+    node_id: NodeId,
     client: Mutex<Option<RaftRPCClient>>,
     target: NodeId,
     addr: SocketAddr,
@@ -39,28 +40,32 @@ impl Connection {
         if let Some(c) = client.take() {
             return Ok(c);
         }
-
-        let client_stub = (|| async { self.new_client().await })
-            .retry(ExponentialBuilder::default())
-            .sleep(tokio::time::sleep)
-            .when(|e| e.to_string() == "EOF")
-            .notify(|err, dur| {
-                warn!("retrying {:?} after {:?}", err, dur);
-            })
-            .await
-            .map_err(|e| Unreachable::new(&e))?;
+        let client_stub = self.new_client().await.unwrap();
+        // let client_stub = (|| async { self.new_client().await })
+        //     .retry(ExponentialBuilder::default())
+        //     .sleep(tokio::time::sleep)
+        //     .when(|e| e.to_string() == "EOF")
+        //     .notify(|err, dur| {
+        //         warn!("retrying {:?} after {:?}", err, dur);
+        //     })
+        //     .await
+        //     .map_err(|e| Unreachable::new(&e))?;
 
         Ok(client_stub)
     }
 }
-pub struct Network {}
+pub struct Network {
+    pub id: NodeId,
+}
 
 impl RaftNetworkFactory<TypeConfig> for Network {
     type Network = Connection;
 
     async fn new_client(&mut self, target: NodeId, node: &Node) -> Self::Network {
+        info!("new client to target {}, addr {}", target, node.rpc_addr);
         let addr: SocketAddr = node.rpc_addr.parse().unwrap();
         Connection {
+            node_id: self.id,
             client: Default::default(),
             target,
             addr,
@@ -74,13 +79,13 @@ impl RaftNetworkV2<TypeConfig> for Connection {
         req: AppendEntriesRequest<TypeConfig>,
         _option: RPCOption,
     ) -> Result<AppendEntriesResponse<TypeConfig>, typ::RPCError> {
+        info!("id:{} append entries take client", self.node_id);
         let client = self.take_client().await?;
         let resp = client.append(context::current(), req).await.unwrap();
-        self.client.lock().await.replace(client);
+        // self.client.lock().await.replace(client);
         Ok(resp)
     }
 
-    /// A real application should replace this method with customized implementation.
     async fn full_snapshot(
         &mut self,
         vote: Vote<NodeId>,
@@ -88,12 +93,13 @@ impl RaftNetworkV2<TypeConfig> for Connection {
         _cancel: impl Future<Output = ReplicationClosed> + OptionalSend + 'static,
         _option: RPCOption,
     ) -> Result<SnapshotResponse<TypeConfig>, typ::StreamingError> {
+        info!("id:{} full snapshot take client", self.node_id);
         let client = self.take_client().await?;
         let resp = client
             .snapshot(context::current(), vote, snapshot.meta, *snapshot.snapshot)
             .await
             .unwrap();
-        self.client.lock().await.replace(client);
+        // self.client.lock().await.replace(client);
         Ok(resp)
     }
 
@@ -102,9 +108,10 @@ impl RaftNetworkV2<TypeConfig> for Connection {
         req: VoteRequest<TypeConfig>,
         _option: RPCOption,
     ) -> Result<VoteResponse<TypeConfig>, typ::RPCError> {
+        info!("id:{} vote take client", self.node_id);
         let client = self.take_client().await?;
         let resp = client.vote(context::current(), req).await.unwrap();
-        self.client.lock().await.replace(client);
+        // self.client.lock().await.replace(client);
         Ok(resp)
     }
 }

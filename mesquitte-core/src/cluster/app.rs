@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
     routing::{get, post},
@@ -17,7 +17,7 @@ use tarpc::{
 
 use crate::cluster::api::*;
 
-use super::{typ, NodeId, TypeConfig};
+use super::{typ, NodeId, StateMachineStore, TypeConfig};
 
 #[tarpc::service]
 pub trait RaftRPC {
@@ -33,21 +33,31 @@ pub trait RaftRPC {
 #[derive(Clone)]
 pub struct App {
     pub id: NodeId,
-    server_addr: SocketAddr,
+    pub rpc_addr: SocketAddr,
+    pub api_addr: SocketAddr,
     pub raft: typ::Raft,
+    pub state_machine_store: Arc<StateMachineStore>,
 }
 
 impl App {
-    pub fn new(id: NodeId, server_addr: SocketAddr, raft: typ::Raft) -> Self {
+    pub fn new(
+        id: NodeId,
+        rpc_addr: SocketAddr,
+        api_addr: SocketAddr,
+        raft: typ::Raft,
+        state_machine_store: Arc<StateMachineStore>,
+    ) -> Self {
         Self {
             id,
-            server_addr,
+            rpc_addr,
+            api_addr,
             raft,
+            state_machine_store,
         }
     }
 
     pub async fn run(&self) {
-        let addr = self.server_addr;
+        let api_addr = self.api_addr;
         let this = self.clone();
         tokio::spawn(async move {
             let app = Router::new()
@@ -58,11 +68,11 @@ impl App {
                 .route("/init", post(init))
                 .route("/metrics", get(metrics))
                 .with_state(this);
-            let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+            let listener = tokio::net::TcpListener::bind(&api_addr).await.unwrap();
             axum::serve(listener, app).await.unwrap();
         });
 
-        let mut listener = tarpc::serde_transport::tcp::listen(addr, Bincode::default)
+        let mut listener = tarpc::serde_transport::tcp::listen(&self.rpc_addr, Bincode::default)
             .await
             .unwrap();
         info!("Listening on port {}", listener.local_addr().port());
