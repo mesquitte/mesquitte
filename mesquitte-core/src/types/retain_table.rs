@@ -1,6 +1,6 @@
 use std::{mem, sync::Arc};
 
-use hashbrown::HashMap;
+use foldhash::HashMap;
 use mqtt_codec_kit::common::{
     LEVEL_SEP, MATCH_ALL_CHAR, MATCH_ALL_STR, MATCH_ONE_CHAR, MATCH_ONE_STR,
 };

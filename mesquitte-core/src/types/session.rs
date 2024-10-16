@@ -1,6 +1,6 @@
 use std::mem;
 
-use hashbrown::HashSet;
+use foldhash::{HashSet, HashSetExt};
 use mqtt_codec_kit::common::TopicFilter;
 use mqtt_codec_kit::v4::packet::connect::LastWill as V4LastWill;
 use mqtt_codec_kit::v5::packet::connect::LastWill as V5LastWill;
@@ -57,7 +57,7 @@ pub struct Session {
     keep_alive: u16,
     clean_session: bool,
     last_will: Option<LastWill>,
-    subscriptions: HashSet<TopicFilter, ahash::RandomState>,
+    subscriptions: HashSet<TopicFilter>,
 
     authorized: bool,
     assigned_client_id: bool,
@@ -111,7 +111,7 @@ impl Session {
             keep_alive: 0,
             clean_session: true,
             last_will: None,
-            subscriptions: HashSet::with_hasher(ahash::RandomState::new()),
+            subscriptions: HashSet::new(),
 
             authorized: false,
             client_disconnected: false,
@@ -232,7 +232,7 @@ impl Session {
         self.clean_session = clean_session;
     }
 
-    pub fn subscriptions(&self) -> &HashSet<TopicFilter, ahash::RandomState> {
+    pub fn subscriptions(&self) -> &HashSet<TopicFilter> {
         &self.subscriptions
     }
 
