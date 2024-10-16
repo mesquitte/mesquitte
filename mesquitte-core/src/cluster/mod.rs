@@ -1,5 +1,6 @@
 mod api;
 mod app;
+pub mod client;
 pub mod error;
 mod log_store;
 mod network;
@@ -65,7 +66,7 @@ pub mod typ {
 
     pub type Infallible = openraft::error::Infallible;
     pub type Fatal = openraft::error::Fatal<TypeConfig>;
-    pub type RaftError<E = openraft::error::Infallible> = openraft::error::RaftError<TypeConfig, E>;
+    pub type RaftError<E> = openraft::error::RaftError<TypeConfig, E>;
     pub type RPCError = openraft::error::RPCError<TypeConfig>;
     pub type StreamingError = openraft::error::StreamingError<TypeConfig>;
 

@@ -40,16 +40,15 @@ impl Connection {
         if let Some(c) = client.take() {
             return Ok(c);
         }
-        let client_stub = self.new_client().await.unwrap();
-        // let client_stub = (|| async { self.new_client().await })
-        //     .retry(ExponentialBuilder::default())
-        //     .sleep(tokio::time::sleep)
-        //     .when(|e| e.to_string() == "EOF")
-        //     .notify(|err, dur| {
-        //         warn!("retrying {:?} after {:?}", err, dur);
-        //     })
-        //     .await
-        //     .map_err(|e| Unreachable::new(&e))?;
+        let client_stub = (|| async { self.new_client().await })
+            .retry(ExponentialBuilder::default())
+            .sleep(tokio::time::sleep)
+            .when(|e| e.to_string() == "EOF")
+            .notify(|err, dur| {
+                warn!("retrying {:?} after {:?}", err, dur);
+            })
+            .await
+            .map_err(|e| Unreachable::new(&e))?;
 
         Ok(client_stub)
     }
@@ -82,7 +81,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
         info!("id:{} append entries take client", self.node_id);
         let client = self.take_client().await?;
         let resp = client.append(context::current(), req).await.unwrap();
-        // self.client.lock().await.replace(client);
+        self.client.lock().await.replace(client);
         Ok(resp)
     }
 
@@ -99,7 +98,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
             .snapshot(context::current(), vote, snapshot.meta, *snapshot.snapshot)
             .await
             .unwrap();
-        // self.client.lock().await.replace(client);
+        self.client.lock().await.replace(client);
         Ok(resp)
     }
 
@@ -111,7 +110,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
         info!("id:{} vote take client", self.node_id);
         let client = self.take_client().await?;
         let resp = client.vote(context::current(), req).await.unwrap();
-        // self.client.lock().await.replace(client);
+        self.client.lock().await.replace(client);
         Ok(resp)
     }
 }
