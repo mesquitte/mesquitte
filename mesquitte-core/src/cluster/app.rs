@@ -1,4 +1,8 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    net::SocketAddr,
+    sync::Arc,
+};
 
 use axum::{
     routing::{get, post},
@@ -17,15 +21,32 @@ use tarpc::{
 
 use crate::cluster::api::*;
 
-use super::{typ, NodeId, StateMachineStore, TypeConfig};
+use super::{
+    store::Request,
+    typ::{
+        ClientWriteError, ClientWriteResponse, InitializeError, Raft, RaftError, RaftMetrics,
+        Snapshot, SnapshotData, SnapshotMeta, Vote,
+    },
+    Node, NodeId, StateMachineStore, TypeConfig,
+};
 
 #[tarpc::service]
 pub trait RaftRPC {
+    async fn read(args: String) -> Option<String>;
+    async fn write(args: Request) -> Result<ClientWriteResponse, RaftError<ClientWriteError>>;
+    async fn init() -> Result<(), RaftError<InitializeError>>;
+    async fn add_learner(
+        args: (NodeId, String, String),
+    ) -> Result<ClientWriteResponse, RaftError<ClientWriteError>>;
+    async fn change_membership(
+        args: BTreeSet<NodeId>,
+    ) -> Result<ClientWriteResponse, RaftError<ClientWriteError>>;
+    async fn metrics() -> RaftMetrics;
     async fn append(args: AppendEntriesRequest<TypeConfig>) -> AppendEntriesResponse<TypeConfig>;
     async fn snapshot(
-        vote: typ::Vote,
-        snapshot_meta: typ::SnapshotMeta,
-        snapshot_data: typ::SnapshotData,
+        vote: Vote,
+        snapshot_meta: SnapshotMeta,
+        snapshot_data: SnapshotData,
     ) -> SnapshotResponse<TypeConfig>;
     async fn vote(args: VoteRequest<TypeConfig>) -> VoteResponse<TypeConfig>;
 }
@@ -35,7 +56,7 @@ pub struct App {
     pub id: NodeId,
     pub rpc_addr: SocketAddr,
     pub api_addr: SocketAddr,
-    pub raft: typ::Raft,
+    pub raft: Raft,
     pub state_machine_store: Arc<StateMachineStore>,
 }
 
@@ -44,7 +65,7 @@ impl App {
         id: NodeId,
         rpc_addr: SocketAddr,
         api_addr: SocketAddr,
-        raft: typ::Raft,
+        raft: Raft,
         state_machine_store: Arc<StateMachineStore>,
     ) -> Self {
         Self {
@@ -93,6 +114,55 @@ impl App {
 }
 
 impl RaftRPC for App {
+    async fn read(self, _: Context, args: String) -> Option<String> {
+        let state_machine = self.state_machine_store.sm.read();
+        state_machine.data.get(&args).cloned()
+    }
+
+    async fn write(
+        self,
+        _: Context,
+        args: Request,
+    ) -> Result<ClientWriteResponse, RaftError<ClientWriteError>> {
+        self.raft.client_write(args).await
+    }
+
+    async fn init(self, _: Context) -> Result<(), RaftError<InitializeError>> {
+        let mut nodes = BTreeMap::new();
+        nodes.insert(
+            self.id,
+            Node {
+                rpc_addr: self.rpc_addr.to_string(),
+                api_addr: self.api_addr.to_string(),
+            },
+        );
+        self.raft.initialize(nodes).await
+    }
+
+    async fn add_learner(
+        self,
+        _: Context,
+        args: (NodeId, String, String),
+    ) -> Result<ClientWriteResponse, RaftError<ClientWriteError>> {
+        let node = Node {
+            rpc_addr: args.1,
+            api_addr: args.2,
+        };
+        self.raft.add_learner(args.0, node, true).await
+    }
+
+    async fn change_membership(
+        self,
+        _: Context,
+        args: BTreeSet<NodeId>,
+    ) -> Result<ClientWriteResponse, RaftError<ClientWriteError>> {
+        self.raft.change_membership(args, false).await
+    }
+
+    async fn metrics(self, _: Context) -> RaftMetrics {
+        self.raft.metrics().borrow().clone()
+    }
+
     async fn append(
         self,
         _: Context,
@@ -104,11 +174,11 @@ impl RaftRPC for App {
     async fn snapshot(
         self,
         _: Context,
-        vote: typ::Vote,
-        snapshot_meta: typ::SnapshotMeta,
-        snapshot_data: typ::SnapshotData,
+        vote: Vote,
+        snapshot_meta: SnapshotMeta,
+        snapshot_data: SnapshotData,
     ) -> SnapshotResponse<TypeConfig> {
-        let snapshot = typ::Snapshot {
+        let snapshot = Snapshot {
             meta: snapshot_meta,
             snapshot: Box::new(snapshot_data),
         };

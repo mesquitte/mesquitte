@@ -6,6 +6,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("Missing tls config")]
     MissingTlsConfig,
+    #[cfg(feature = "rustls")]
     #[error("Wrong tls config: {0}")]
     Rustls(#[from] crate::server::rustls::Error),
 }

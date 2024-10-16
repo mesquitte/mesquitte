@@ -2,10 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use log::info;
-use openraft::RaftMetrics;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use super::{app::App, store::Request, Node, NodeId, TypeConfig};
+use super::{app::App, store::Request, typ::RaftMetrics, Node, NodeId};
 
 pub async fn write(State(app): State<App>, Json(req): Json<Request>) -> impl IntoResponse {
     let res = app.raft.client_write(req).await;
@@ -22,16 +21,13 @@ pub async fn read(
     Ok(Json(value.unwrap_or_default()))
 }
 
-// Management API
-
-#[derive(Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AddLearnerRequest {
-    node_id: u64,
-    rpc_addr: String,
-    api_addr: String,
+    pub node_id: u64,
+    pub rpc_addr: String,
+    pub api_addr: String,
 }
 
-/// Add a node as **Learner**.
 pub async fn add_learner(
     State(app): State<App>,
     Json(req): Json<AddLearnerRequest>,
@@ -44,7 +40,6 @@ pub async fn add_learner(
     Json(res)
 }
 
-/// Changes specified learners to members, or remove members.
 pub async fn change_membership(
     State(app): State<App>,
     Json(node_ids): Json<BTreeSet<NodeId>>,
@@ -53,7 +48,6 @@ pub async fn change_membership(
     Json(res)
 }
 
-/// Initialize a single-node cluster.
 pub async fn init(State(app): State<App>) -> impl IntoResponse {
     let mut nodes = BTreeMap::new();
     nodes.insert(
@@ -67,11 +61,7 @@ pub async fn init(State(app): State<App>) -> impl IntoResponse {
     Json(res)
 }
 
-/// Get the latest metrics of the cluster
-pub async fn metrics(
-    State(app): State<App>,
-) -> Result<Json<RaftMetrics<TypeConfig>>, (StatusCode, String)> {
+pub async fn metrics(State(app): State<App>) -> Result<Json<RaftMetrics>, (StatusCode, String)> {
     let metrics = app.raft.metrics().borrow().clone();
-    // let res: Result<RaftMetrics<TypeConfig>, Infallible> = Ok(metrics);
     Ok(Json(metrics))
 }
