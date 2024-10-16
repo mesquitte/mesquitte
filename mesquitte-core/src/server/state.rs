@@ -32,7 +32,7 @@ pub struct GlobalState {
     // max keep alive
     // min keep alive
     // config: Arc<Config>,
-    clients: DashMap<String, mpsc::Sender<Outgoing>, ahash::RandomState>,
+    clients: DashMap<String, mpsc::Sender<Outgoing>, foldhash::fast::RandomState>,
 
     route_table: RouteTable,
     retain_table: RetainTable,

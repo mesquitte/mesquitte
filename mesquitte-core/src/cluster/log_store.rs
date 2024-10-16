@@ -49,7 +49,7 @@ impl LogStore {
         let t = match v {
             None => None,
             Some(bytes) => Some(
-                serde_json::from_slice(&bytes)
+                bincode::deserialize(&bytes)
                     .map_err(|e| StorageError::new(M::subject(None), ErrorVerb::Read, &e))?,
             ),
         };
@@ -60,11 +60,11 @@ impl LogStore {
         &self,
         value: &M::Value,
     ) -> Result<(), StorageError<TypeConfig>> {
-        let json_value = serde_json::to_vec(value)
+        let encoded = bincode::serialize(value)
             .map_err(|e| StorageError::new(M::subject(Some(value)), ErrorVerb::Write, &e))?;
 
         self.db
-            .put_cf(self.cf_meta(), M::KEY, json_value)
+            .put_cf(self.cf_meta(), M::KEY, encoded)
             .map_err(|e| StorageError::new(M::subject(Some(value)), ErrorVerb::Write, &e))?;
 
         Ok(())
@@ -97,7 +97,7 @@ impl RaftLogReader<TypeConfig> for LogStore {
             }
 
             let entry: Entry<_> =
-                serde_json::from_slice(&val).map_err(|e| StorageError::read_logs(&e))?;
+                bincode::deserialize(&val).map_err(|e| StorageError::read_logs(&e))?;
 
             assert_eq!(id, entry.log_id.index);
 
@@ -124,7 +124,7 @@ impl RaftLogStorage<TypeConfig> for LogStore {
             None => None,
             Some(res) => {
                 let (_log_index, entry_bytes) = res.map_err(|e| StorageError::read_logs(&e))?;
-                let ent = serde_json::from_slice::<Entry<TypeConfig>>(&entry_bytes)
+                let ent = bincode::deserialize::<Entry<TypeConfig>>(&entry_bytes)
                     .map_err(|e| StorageError::read_logs(&e))?;
                 Some(ent.log_id)
             }
@@ -170,7 +170,7 @@ impl RaftLogStorage<TypeConfig> for LogStore {
                 .put_cf(
                     self.cf_logs(),
                     id,
-                    serde_json::to_vec(&entry).map_err(|e| StorageError::write_logs(&e))?,
+                    bincode::serialize(&entry).map_err(|e| StorageError::write_logs(&e))?,
                 )
                 .map_err(|e| StorageError::write_logs(&e))?;
         }
@@ -236,7 +236,7 @@ mod meta {
             ErrorSubject::Store
         }
     }
-    
+
     impl StoreMeta for Vote {
         const KEY: &'static str = "vote";
         type Value = openraft::Vote<NodeId>;

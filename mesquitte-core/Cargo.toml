@@ -48,7 +48,6 @@ rustls = [
 cluster = ["openraft", "rust-rocksdb", "tarpc", "backon", "axum"]
 
 [dependencies]
-ahash.workspace = true
 async-tungstenite = { workspace = true, optional = true, features = [
     "tokio-runtime",
 ] }
@@ -58,13 +57,14 @@ axum = { workspace = true, features = [
     "tokio",
 ], optional = true }
 backon = { workspace = true, features = ["tokio-sleep"], optional = true }
+bincode.workspace = true
 byteorder.workspace = true
 dashmap.workspace = true
 flume = { workspace = true, features = ["async"] }
+foldhash.workspace = true
 futures = { workspace = true, optional = true }
 futures-sink.workspace = true
 futures-util.workspace = true
-hashbrown.workspace = true
 log.workspace = true
 mqtt-codec-kit = { workspace = true, features = ["v4", "v5", "tokio-codec"] }
 nanoid.workspace = true
@@ -72,7 +72,6 @@ parking_lot.workspace = true
 pin-project-lite.workspace = true
 openraft = { workspace = true, features = [
     "serde",
-    # "loosen-follower-log-revert",
     "type-alias",
 ], optional = true }
 rand.workspace = true
@@ -85,7 +84,6 @@ rustls = { workspace = true, default-features = false, optional = true }
 rustls-pemfile = { workspace = true, optional = true }
 s2n-quic = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json.workspace = true
 tarpc = { workspace = true, features = [
     "tokio1",
     "serde-transport",

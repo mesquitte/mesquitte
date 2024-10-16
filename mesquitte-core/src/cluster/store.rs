@@ -98,7 +98,7 @@ impl RaftSnapshotBuilder<TypeConfig> for Arc<StateMachineStore> {
             data: Box::new(sm.clone()),
         };
 
-        let serialized_snapshot = serde_json::to_vec(&snapshot)
+        let serialized_snapshot = bincode::serialize(&snapshot)
             .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
 
         self.db
@@ -180,7 +180,7 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
             let mut sm = self.sm.write();
             *sm = updated_state_machine;
         }
-        let serialized_snapshot = serde_json::to_vec(&new_snapshot)
+        let serialized_snapshot = bincode::serialize(&new_snapshot)
             .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
         self.db
             .put_cf(
@@ -207,7 +207,7 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
             None => return Ok(None),
         };
         let snapshot: StoredSnapshot =
-            serde_json::from_slice(&bytes).map_err(|e| StorageError::write_snapshot(None, &e))?;
+            bincode::deserialize(&bytes).map_err(|e| StorageError::write_snapshot(None, &e))?;
         let data = snapshot.data.clone();
 
         Ok(Some(Snapshot {

@@ -1,7 +1,10 @@
-use std::{hash::Hash, ops::Deref, sync::Arc};
+use std::{
+    hash::{BuildHasher, Hash},
+    ops::Deref,
+    sync::Arc,
+};
 
-use ahash::RandomState;
-use hashbrown::HashMap;
+use foldhash::{HashMap, HashMapExt};
 use mqtt_codec_kit::common::{
     QualityOfService, TopicFilter, TopicName, MATCH_ALL_STR, MATCH_ONE_STR,
 };
@@ -29,7 +32,7 @@ pub struct RouteContent {
 
 #[derive(Debug, Clone, Default)]
 pub struct SharedClients {
-    hash_builder: RandomState,
+    hash_builder: foldhash::fast::RandomState,
     items: Vec<(String, QualityOfService)>,
     index: HashMap<String, usize>,
 }
@@ -181,7 +184,7 @@ impl RouteNode {
                 content
                     .groups
                     .entry(name)
-                    .or_insert_with(SharedClients::default)
+                    .or_default()
                     .insert((id.to_owned(), qos));
             } else {
                 content.clients.insert(id.to_owned(), qos);
