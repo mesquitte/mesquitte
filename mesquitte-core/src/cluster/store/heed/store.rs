@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
+use heed::{byteorder::BE, types::*, Database, Env, EnvOpenOptions};
 use log::debug;
 use openraft::{
     alias::SnapshotDataOf,
@@ -9,10 +10,10 @@ use openraft::{
 };
 use parking_lot::RwLock;
 use rand::Rng as _;
-use rust_rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use serde::{Deserialize, Serialize};
+use tokio::fs;
 
-use super::{typ, LogStore, NodeId, TypeConfig};
+use crate::cluster::{typ, LogStore, NodeId, TypeConfig};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Request {
@@ -49,13 +50,13 @@ pub struct StateMachineData {
 #[derive(Debug)]
 pub struct StateMachineStore {
     pub sm: Arc<RwLock<StateMachineData>>,
-    db: Arc<DB>,
+    env: Arc<Env>,
 }
 
 impl StateMachineStore {
-    async fn new(db: Arc<DB>) -> Arc<Self> {
+    async fn new(env: Arc<Env>) -> Arc<Self> {
         let state_machine = Self {
-            db,
+            env,
             sm: Default::default(),
         };
         let mut state_machine = Arc::new(state_machine);
@@ -101,14 +102,18 @@ impl RaftSnapshotBuilder<TypeConfig> for Arc<StateMachineStore> {
         let serialized_snapshot = bincode::serialize(&snapshot)
             .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
 
-        self.db
-            .put_cf(
-                self.db.cf_handle("sm_meta").unwrap(),
-                "snapshot",
-                serialized_snapshot,
-            )
+        let mut wtxn = self
+            .env
+            .write_txn()
             .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
-
+        let db: Database<Str, Bytes> = self
+            .env
+            .create_database(&mut wtxn, Some("sm_meta"))
+            .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
+        db.put(&mut wtxn, "snapshot", &serialized_snapshot)
+            .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
+        wtxn.commit()
+            .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
         Ok(Snapshot {
             meta,
             snapshot: Box::new(sm.clone()),
@@ -182,15 +187,17 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
         }
         let serialized_snapshot = bincode::serialize(&new_snapshot)
             .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
-        self.db
-            .put_cf(
-                self.db.cf_handle("sm_meta").unwrap(),
-                "snapshot",
-                serialized_snapshot,
-            )
+        let mut wtxn = self
+            .env
+            .write_txn()
             .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
-        self.db
-            .flush_wal(true)
+        let db: Database<Str, Bytes> = self
+            .env
+            .create_database(&mut wtxn, Some("sm_meta"))
+            .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
+        db.put(&mut wtxn, "snapshot", &serialized_snapshot)
+            .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
+        wtxn.commit()
             .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
         Ok(())
     }
@@ -198,16 +205,32 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
     async fn get_current_snapshot(
         &mut self,
     ) -> Result<Option<Snapshot<TypeConfig>>, StorageError<TypeConfig>> {
-        let x = self
-            .db
-            .get_cf(self.db.cf_handle("sm_meta").unwrap(), "snapshot")
+        let rtxn = self
+            .env
+            .read_txn()
+            .map_err(|e| StorageError::write_snapshot(None, &e))?;
+        let db = self
+            .env
+            .open_database::<Str, Bytes>(&rtxn, Some("sm_meta"))
+            .map_err(|e| StorageError::write_snapshot(None, &e))?
+            .unwrap();
+        // let mut wtxn = self
+        //     .env
+        //     .write_txn()
+        //     .map_err(|e| StorageError::write_snapshot(None, &e))?;
+        // let db: Database<Str, Bytes> = self
+        //     .env
+        //     .create_database(&mut wtxn, Some("sm_meta"))
+        //     .map_err(|e| StorageError::write_snapshot(None, &e))?;
+        let x: Option<&[u8]> = db
+            .get(&rtxn, "snapshot")
             .map_err(|e| StorageError::write_snapshot(None, &e))?;
         let bytes = match x {
             Some(x) => x,
             None => return Ok(None),
         };
         let snapshot: StoredSnapshot =
-            bincode::deserialize(&bytes).map_err(|e| StorageError::write_snapshot(None, &e))?;
+            bincode::deserialize(bytes).map_err(|e| StorageError::write_snapshot(None, &e))?;
         let data = snapshot.data.clone();
 
         Ok(Some(Snapshot {
@@ -222,18 +245,29 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
 }
 
 pub async fn new<P: Into<PathBuf>>(db_path: P) -> (LogStore, Arc<StateMachineStore>) {
-    let mut db_opts = Options::default();
-    db_opts.create_missing_column_families(true);
-    db_opts.create_if_missing(true);
+    let p = db_path.into();
+    fs::create_dir_all(p.clone()).await.unwrap();
+    let env = unsafe {
+        EnvOpenOptions::new()
+            .map_size(100 * 1024 * 1024)
+            .max_dbs(3000)
+            .open(p)
+            .unwrap()
+    };
+    let mut wtxn = env.write_txn().unwrap();
+    env.create_database::<Str, Bytes>(&mut wtxn, Some("meta"))
+        .unwrap();
+    env.create_database::<Str, Bytes>(&mut wtxn, Some("sm_meta"))
+        .unwrap();
+    env.create_database::<U64<BE>, Bytes>(&mut wtxn, Some("logs"))
+        .unwrap();
+    wtxn.commit().unwrap();
+    let env = Arc::new(env);
 
-    let meta = ColumnFamilyDescriptor::new("meta", Options::default());
-    let sm_meta = ColumnFamilyDescriptor::new("sm_meta", Options::default());
-    let logs = ColumnFamilyDescriptor::new("logs", Options::default());
-
-    let db = DB::open_cf_descriptors(&db_opts, db_path.into(), vec![meta, sm_meta, logs]).unwrap();
-    let db = Arc::new(db);
-
-    (LogStore::new(db.clone()), StateMachineStore::new(db).await)
+    (
+        LogStore::new(env.clone()),
+        StateMachineStore::new(env).await,
+    )
 }
 
 #[cfg(test)]
@@ -242,25 +276,26 @@ mod tests {
         testing::log::{StoreBuilder, Suite},
         StorageError,
     };
-    use tempfile::TempDir;
+    use tempfile::{tempdir, TempDir};
 
-    use super::*;
+    use crate::cluster::*;
 
-    struct RocksBuilder {}
+    struct HeedBuilder {}
 
-    impl StoreBuilder<TypeConfig, LogStore, Arc<StateMachineStore>, TempDir> for RocksBuilder {
+    impl StoreBuilder<TypeConfig, LogStore, Arc<StateMachineStore>, TempDir> for HeedBuilder {
         async fn build(
             &self,
         ) -> Result<(TempDir, LogStore, Arc<StateMachineStore>), StorageError<TypeConfig>> {
-            let td = TempDir::new().expect("couldn't create temp dir");
-            let (log_store, sm) = super::new(td.path()).await;
-            Ok((td, log_store, sm))
+            let tmp_dir = tempdir().expect("could not create temp dir");
+            let file_path = tmp_dir.path().join("cluster.mdb");
+            let (log_store, sm) = super::new(file_path.as_path()).await;
+            Ok((tmp_dir, log_store, sm))
         }
     }
 
     #[tokio::test]
-    pub async fn test_rocks_store() -> Result<(), StorageError<TypeConfig>> {
-        Suite::test_all(RocksBuilder {}).await?;
+    pub async fn test_heed_store() -> Result<(), StorageError<TypeConfig>> {
+        Suite::test_all(HeedBuilder {}).await?;
         Ok(())
     }
 }

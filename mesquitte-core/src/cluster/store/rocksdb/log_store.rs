@@ -8,7 +8,7 @@ use openraft::{
 };
 use rust_rocksdb::{ColumnFamily, Direction, IteratorMode, DB};
 
-use super::{NodeId, TypeConfig};
+use crate::cluster::{NodeId, TypeConfig};
 
 type StorageResult<T> = Result<T, StorageError<TypeConfig>>;
 
@@ -164,6 +164,7 @@ impl RaftLogStorage<TypeConfig> for LogStore {
         I: IntoIterator<Item = Entry<TypeConfig>> + Send,
     {
         for entry in entries {
+            debug!("append entries: {:?}", entry);
             let id = id_to_bin(entry.log_id.index);
             assert_eq!(bin_to_id(&id), entry.log_id.index);
             self.db
