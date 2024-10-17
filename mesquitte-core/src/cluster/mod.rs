@@ -2,7 +2,6 @@ mod api;
 mod app;
 pub mod client;
 pub mod error;
-mod log_store;
 mod network;
 pub mod store;
 
@@ -12,7 +11,7 @@ use app::App;
 use network::Network;
 use openraft::{Config, Raft};
 use serde::{Deserialize, Serialize};
-use store::{Request, Response, StateMachineData};
+use store::{log_store, Request, Response, StateMachineData};
 
 pub type NodeId = u64;
 

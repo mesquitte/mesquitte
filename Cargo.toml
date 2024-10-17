@@ -34,6 +34,7 @@ foldhash = "0.1"
 futures = "0.3"
 futures-sink = "0.3"
 futures-util = "0.3"
+heed = { version = "0.20", default-features = false }
 maplit = "1.0"
 nanoid = "0.4"
 log = "0.4"

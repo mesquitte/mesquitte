@@ -29,10 +29,10 @@ required-features = ["ws"]
 [[test]]
 name = "raft"
 path = "tests/raft_test.rs"
-required-features = ["cluster"]
+required-features = ["cluster", "heed-storage"]
 
 [features]
-default = ["mqtt", "ws"]
+default = ["mqtt", "ws", "cluster", "heed-storage"]
 
 mqtt = []
 mqtts = ["rustls"]
@@ -45,7 +45,9 @@ rustls = [
     "rustls-pemfile",
     "tokio-rustls/aws-lc-rs",
 ]
-cluster = ["openraft", "rust-rocksdb", "tarpc", "backon", "axum"]
+cluster = ["openraft", "rust-rocksdb", "tarpc", "backon", "axum", "bincode"]
+rocksdb-storage = ["rust-rocksdb"]
+heed-storage = ["heed", "tokio/fs"]
 
 [dependencies]
 async-tungstenite = { workspace = true, optional = true, features = [
@@ -57,7 +59,7 @@ axum = { workspace = true, features = [
     "tokio",
 ], optional = true }
 backon = { workspace = true, features = ["tokio-sleep"], optional = true }
-bincode.workspace = true
+bincode = { workspace = true, optional = true }
 byteorder.workspace = true
 dashmap.workspace = true
 flume = { workspace = true, features = ["async"] }
@@ -65,6 +67,12 @@ foldhash.workspace = true
 futures = { workspace = true, optional = true }
 futures-sink.workspace = true
 futures-util.workspace = true
+heed = { workspace = true, features = [
+    "serde",
+    "serde-bincode",
+    "read-txn-no-tls",
+    "posix-sem",
+], optional = true }
 log.workspace = true
 mqtt-codec-kit = { workspace = true, features = ["v4", "v5", "tokio-codec"] }
 nanoid.workspace = true
