@@ -45,7 +45,15 @@ rustls = [
     "rustls-pemfile",
     "tokio-rustls/aws-lc-rs",
 ]
-cluster = ["openraft", "rust-rocksdb", "tarpc", "backon", "axum", "bincode"]
+cluster = [
+    "axum",
+    "backon",
+    "bincode",
+    "mobc",
+    "openraft",
+    "rust-rocksdb",
+    "tarpc",
+]
 rocksdb-storage = ["rust-rocksdb"]
 heed-storage = ["heed", "tokio/fs"]
 
@@ -75,6 +83,7 @@ heed = { workspace = true, features = [
 ], optional = true }
 log.workspace = true
 mqtt-codec-kit = { workspace = true, features = ["v4", "v5", "tokio-codec"] }
+mobc = { workspace = true, optional = true }
 nanoid.workspace = true
 parking_lot.workspace = true
 pin-project-lite.workspace = true

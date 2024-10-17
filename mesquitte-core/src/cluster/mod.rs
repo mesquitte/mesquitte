@@ -3,6 +3,7 @@ mod app;
 pub mod client;
 pub mod error;
 mod network;
+mod pool;
 pub mod store;
 
 use std::{fmt::Display, net::SocketAddr, path::PathBuf, sync::Arc};
@@ -10,6 +11,7 @@ use std::{fmt::Display, net::SocketAddr, path::PathBuf, sync::Arc};
 use app::App;
 use network::Network;
 use openraft::{Config, Raft};
+use pool::ClientPool;
 use serde::{Deserialize, Serialize};
 use store::{log_store, Request, Response, StateMachineData};
 
@@ -96,7 +98,11 @@ pub async fn new_raft<P: Into<PathBuf>>(
     let config = Arc::new(config.validate().unwrap());
 
     let (log_store, state_machine_store) = store::new(dir).await;
-    let network = Network { id: node_id };
+    let client_poll = Arc::new(ClientPool::new(10));
+    let network = Network {
+        id: node_id,
+        client_poll,
+    };
     let raft = Raft::new(
         node_id,
         config,
