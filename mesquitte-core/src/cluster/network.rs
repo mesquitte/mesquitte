@@ -1,4 +1,4 @@
-use std::{future::Future, net::SocketAddr};
+use std::{future::Future, net::SocketAddr, sync::Arc};
 
 use backon::{ExponentialBuilder, Retryable};
 use log::{info, warn};
@@ -10,51 +10,43 @@ use openraft::{
     },
     OptionalSend, RaftNetworkFactory, Snapshot, Vote,
 };
-use tarpc::{client::Config, context, serde_transport::Transport, tokio_serde::formats::Bincode};
-use tokio::{net::TcpStream, sync::Mutex};
+use tarpc::context;
 
-use super::{app::RaftRPCClient, error::Error, typ, Node, NodeId, TypeConfig};
+use super::{
+    pool::{ClientPool, RPCClientManager},
+    typ, Node, NodeId, TypeConfig,
+};
 
 pub struct Connection {
     node_id: NodeId,
-    client: Mutex<Option<RaftRPCClient>>,
     target: NodeId,
-    addr: SocketAddr,
+    target_addr: SocketAddr,
+    client_poll: Arc<ClientPool>,
 }
 
 impl Connection {
-    pub async fn new_client(&self) -> Result<RaftRPCClient, Error> {
+    async fn take_client(&mut self) -> Result<mobc::Connection<RPCClientManager>, Unreachable> {
         info!(
-            "Raft NetworkConnection connecting to target: {}-{}",
-            self.target, self.addr
+            "take client to target: {}-{}",
+            self.target, self.target_addr
         );
-        let stream = TcpStream::connect(self.addr).await?;
-        let transport = Transport::from((stream, Bincode::default()));
-        let client_stub = RaftRPCClient::new(Config::default(), transport).spawn();
-        Ok(client_stub)
-    }
-
-    async fn take_client(&mut self) -> Result<RaftRPCClient, Unreachable> {
-        let mut client = self.client.lock().await;
-
-        if let Some(c) = client.take() {
-            return Ok(c);
-        }
-        let client_stub = (|| async { self.new_client().await })
-            .retry(ExponentialBuilder::default())
-            .sleep(tokio::time::sleep)
-            .when(|e| e.to_string() == "EOF")
-            .notify(|err, dur| {
-                warn!("retrying {:?} after {:?}", err, dur);
-            })
-            .await
-            .map_err(|e| Unreachable::new(&e))?;
+        let client_stub =
+            (|| async { self.client_poll.make_rpc_connection(self.target_addr).await })
+                .retry(ExponentialBuilder::default())
+                .sleep(tokio::time::sleep)
+                .when(|e| e.to_string() == "EOF")
+                .notify(|err, dur| {
+                    warn!("retrying {:?} after {:?}", err, dur);
+                })
+                .await
+                .map_err(|e| Unreachable::new(&e))?;
 
         Ok(client_stub)
     }
 }
 pub struct Network {
     pub id: NodeId,
+    pub client_poll: Arc<ClientPool>,
 }
 
 impl RaftNetworkFactory<TypeConfig> for Network {
@@ -65,9 +57,9 @@ impl RaftNetworkFactory<TypeConfig> for Network {
         let addr: SocketAddr = node.rpc_addr.parse().unwrap();
         Connection {
             node_id: self.id,
-            client: Default::default(),
             target,
-            addr,
+            target_addr: addr,
+            client_poll: self.client_poll.clone(),
         }
     }
 }
@@ -81,7 +73,6 @@ impl RaftNetworkV2<TypeConfig> for Connection {
         info!("id:{} append entries take client", self.node_id);
         let client = self.take_client().await?;
         let resp = client.append(context::current(), req).await.unwrap();
-        self.client.lock().await.replace(client);
         Ok(resp)
     }
 
@@ -98,7 +89,6 @@ impl RaftNetworkV2<TypeConfig> for Connection {
             .snapshot(context::current(), vote, snapshot.meta, *snapshot.snapshot)
             .await
             .unwrap();
-        self.client.lock().await.replace(client);
         Ok(resp)
     }
 
@@ -110,7 +100,6 @@ impl RaftNetworkV2<TypeConfig> for Connection {
         info!("id:{} vote take client", self.node_id);
         let client = self.take_client().await?;
         let resp = client.vote(context::current(), req).await.unwrap();
-        self.client.lock().await.replace(client);
         Ok(resp)
     }
 }
