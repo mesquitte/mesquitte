@@ -1,5 +1,3 @@
-use std::convert::Infallible;
-
 pub mod server;
 
 #[derive(Debug, thiserror::Error)]
@@ -7,7 +5,7 @@ pub enum Error {
     #[error("Io Error : {0}")]
     Io(#[from] std::io::Error),
     #[error("Infallible Error")]
-    Infallible(#[from] Infallible),
+    Infallible(#[from] std::convert::Infallible),
     #[error("Quic Start Error")]
     StartError(#[from] s2n_quic::provider::StartError),
     #[error("QuicServer Connect Error : {0}")]

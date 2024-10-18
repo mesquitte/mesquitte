@@ -1,6 +1,9 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
-use s2n_quic::{provider::tls, Server};
+use s2n_quic::{
+    provider::{io, tls},
+    Server,
+};
 
 use crate::server::{process_client, state::GlobalState};
 
@@ -21,14 +24,14 @@ where
     MS: MessageStore + Sync + Send + 'static,
     RS: RetainMessageStore + Sync + Send + 'static,
 {
-    pub fn bind<T: tls::TryInto>(
-        addr: SocketAddr,
+    pub fn bind<T: tls::TryInto, A: io::TryInto>(
+        addr: A,
         tls: T,
         global: Arc<GlobalState>,
         storage: Arc<Storage<M, R, T>>,
     ) -> Result<Self, Error>
     where
-        Error: From<<T as tls::TryInto>::Error>,
+        Error: From<<T as tls::TryInto>::Error> + From<<A as io::TryInto>::Error>,
     {
         let server = Server::builder().with_tls(tls)?.with_io(addr)?.start()?;
         Ok(QuicServer {

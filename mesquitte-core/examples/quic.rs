@@ -27,7 +27,7 @@ async fn main() {
     let storage = Arc::new(Storage::new(message_store, retain_message, topic_store));
 
     let broker = QuicServer::bind(
-        "0.0.0.0:1883".parse().unwrap(),
+        "0.0.0.0:1883",
         (
             Path::new("mesquitte-core/examples/certs/cert.pem"),
             Path::new("mesquitte-core/examples/certs/key.pem"),

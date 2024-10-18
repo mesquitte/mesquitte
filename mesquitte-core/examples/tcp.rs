@@ -26,9 +26,7 @@ async fn main() -> io::Result<()> {
 
     let storage = Arc::new(Storage::new(message_store, retain_message, topic_store));
 
-    let broker = TcpServer::bind("0.0.0.0:1883".parse().unwrap(), global, storage)
-        .await
-        .unwrap();
+    let broker = TcpServer::bind("0.0.0.0:1883", global, storage).await.unwrap();
     broker.accept().await.unwrap();
     Ok(())
 }

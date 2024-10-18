@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::Path, sync::Arc};
 
 use log::debug;
 use openraft::{
@@ -221,7 +221,7 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
     }
 }
 
-pub async fn new<P: Into<PathBuf>>(db_path: P) -> (LogStore, Arc<StateMachineStore>) {
+pub async fn new<P: AsRef<Path>>(db_path: P) -> (LogStore, Arc<StateMachineStore>) {
     let mut db_opts = Options::default();
     db_opts.create_missing_column_families(true);
     db_opts.create_if_missing(true);
@@ -230,7 +230,7 @@ pub async fn new<P: Into<PathBuf>>(db_path: P) -> (LogStore, Arc<StateMachineSto
     let sm_meta = ColumnFamilyDescriptor::new("sm_meta", Options::default());
     let logs = ColumnFamilyDescriptor::new("logs", Options::default());
 
-    let db = DB::open_cf_descriptors(&db_opts, db_path.into(), vec![meta, sm_meta, logs]).unwrap();
+    let db = DB::open_cf_descriptors(&db_opts, db_path, vec![meta, sm_meta, logs]).unwrap();
     let db = Arc::new(db);
 
     (LogStore::new(db.clone()), StateMachineStore::new(db).await)
