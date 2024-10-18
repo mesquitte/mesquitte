@@ -17,7 +17,7 @@ pub struct RouteContent {
     pub shared_clients: HashMap<String, Vec<(String, RouteOption)>>,
 }
 
-pub trait TopicStore {
+pub trait TopicStore: Send + Sync {
     fn search(
         &self,
         topic_name: &TopicName,

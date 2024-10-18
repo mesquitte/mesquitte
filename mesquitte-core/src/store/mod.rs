@@ -2,17 +2,16 @@ use message::MessageStore;
 use retain::RetainMessageStore;
 use topic::TopicStore;
 
+pub mod memory;
 pub mod message;
 pub mod retain;
 pub mod topic;
 
-pub mod memory;
-
 pub struct Storage<MS, RS, TS>
 where
-    MS: MessageStore + Sync + Send + 'static,
-    RS: RetainMessageStore + Sync + Send + 'static,
-    TS: TopicStore + Sync + Send + 'static,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     message_store: MS,
     retain_message_store: RS,
@@ -21,9 +20,9 @@ where
 
 impl<MS, RS, TS> Storage<MS, RS, TS>
 where
-    MS: MessageStore + Sync + Send + 'static,
-    RS: RetainMessageStore + Sync + Send + 'static,
-    TS: TopicStore + Sync + Send + 'static,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     pub fn new(message_store: MS, retain_message_store: RS, topic_store: TS) -> Self {
         Self {

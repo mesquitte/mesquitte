@@ -29,9 +29,9 @@ pub(super) async fn handle_publish<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<(bool, Option<VariablePacket>)>
 where
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     log::debug!(
         r#"client#{} received a publish packet:
@@ -102,9 +102,9 @@ pub(super) async fn dispatch_publish<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<()>
 where
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     log::debug!(
         r#"client#{} dispatch publish message:
@@ -172,9 +172,9 @@ pub(super) async fn handle_pubrel<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<PubcompPacket>
 where
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     log::debug!(
         "client#{} received a pubrel packet, id : {}",
@@ -197,9 +197,9 @@ pub(super) async fn receive_outgoing_publish<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<PublishPacket>
 where
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     log::debug!(
         r#"client#{} receive outgoing publish message:
@@ -247,9 +247,9 @@ pub(super) async fn handle_puback<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<()>
 where
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     log::debug!(
         "client#{} received a puback packet, id : {}",
@@ -271,9 +271,9 @@ pub(super) async fn handle_pubrec<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<PubrelPacket>
 where
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     log::debug!(
         "client#{} received a pubrec packet, id : {}",
@@ -295,9 +295,9 @@ pub(super) async fn handle_pubcomp<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<()>
 where
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     log::debug!(
         "client#{} received a pubcomp packet, id : {}",
@@ -319,9 +319,9 @@ pub(super) async fn handle_will<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<()>
 where
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     log::debug!(
         r#"client#{} handle last will:
@@ -346,9 +346,9 @@ pub(crate) async fn get_outgoing_packets<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<Vec<PublishPacket>>
 where
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     let mut packets = Vec::new();
     let messages = storage

@@ -183,7 +183,7 @@ impl OutgoingPublishMessage {
     }
 }
 
-pub trait MessageStore {
+pub trait MessageStore: Send + Sync {
     fn enqueue_incoming(
         &self,
         client_id: &str,

@@ -5,30 +5,35 @@ use s2n_quic::{
     Server,
 };
 
-use crate::server::{process_client, state::GlobalState};
+use crate::{
+    server::{process_client, state::GlobalState},
+    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
+};
 
 use super::Error;
 
-pub struct QuicServer<MS, RS>
+pub struct QuicServer<MS, RS, TS>
 where
-    MS: MessageStore + Sync + Send + 'static,
-    RS: RetainMessageStore + Sync + Send + 'static,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     inner: Server,
     global: Arc<GlobalState>,
-    storage: Arc<Storage<MS, RS>>,
+    storage: Arc<Storage<MS, RS, TS>>,
 }
 
-impl<MS, RS> QuicServer<MS, RS>
+impl<MS, RS, TS> QuicServer<MS, RS, TS>
 where
-    MS: MessageStore + Sync + Send + 'static,
-    RS: RetainMessageStore + Sync + Send + 'static,
+    MS: MessageStore + 'static,
+    RS: RetainMessageStore + 'static,
+    TS: TopicStore + 'static,
 {
     pub fn bind<T: tls::TryInto, A: io::TryInto>(
         addr: A,
         tls: T,
         global: Arc<GlobalState>,
-        storage: Arc<Storage<M, R, T>>,
+        storage: Arc<Storage<MS, RS, TS>>,
     ) -> Result<Self, Error>
     where
         Error: From<<T as tls::TryInto>::Error> + From<<A as io::TryInto>::Error>,
@@ -37,6 +42,7 @@ where
         Ok(QuicServer {
             inner: server,
             global,
+            storage,
         })
     }
 
@@ -46,7 +52,7 @@ where
             let storage = self.storage.clone();
             tokio::spawn(async move {
                 while let Ok(Some(stream)) = connection.accept_bidirectional_stream().await {
-                    process_client(stream, global, storage).await;
+                    process_client(stream, global.clone(), storage.clone()).await;
                 }
             });
         }

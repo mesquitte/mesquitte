@@ -58,9 +58,9 @@ async fn remove_client<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<()>
 where
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     global.remove_client(session.client_id());
     storage
@@ -81,9 +81,9 @@ pub(super) async fn handle_incoming<W, E, MS, RS, TS>(
 where
     W: AsyncWrite + Unpin,
     E: Encoder<VariablePacket, Error = io::Error>,
-    MS: MessageStore + Sync + Send + 'static,
-    RS: RetainMessageStore + Sync + Send + 'static,
-    TS: TopicStore + Sync + Send + 'static,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     log::debug!(
         r#"client#{} receive mqtt client incoming message: {:?}"#,
@@ -155,9 +155,9 @@ pub(super) async fn receive_outgoing<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<(bool, Option<VariablePacket>)>
 where
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     let mut should_stop = false;
     let resp = match packet {
@@ -223,9 +223,9 @@ pub(super) async fn handle_outgoing<T, E, MS, RS, TS>(
 where
     T: AsyncWrite + Unpin,
     E: Encoder<VariablePacket, Error = io::Error>,
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     let (should_stop, resp) = receive_outgoing(session, packet, global, storage).await?;
     if let Some(packet) = resp {
@@ -246,9 +246,9 @@ pub(super) async fn handle_clean_session<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<()>
 where
-    MS: MessageStore + Sync + Send + 'static,
-    RS: RetainMessageStore + Sync + Send + 'static,
-    TS: TopicStore + Sync + Send + 'static,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     log::debug!(
         r#"client#{} handle offline:
@@ -290,9 +290,9 @@ async fn write_to_client<T, E, MS, RS, TS>(
 ) where
     T: AsyncWrite + Unpin,
     E: Encoder<VariablePacket, Error = io::Error>,
-    MS: MessageStore + Sync + Send + 'static,
-    RS: RetainMessageStore + Sync + Send + 'static,
-    TS: TopicStore + Sync + Send + 'static,
+    MS: MessageStore + 'static,
+    RS: RetainMessageStore + 'static,
+    TS: TopicStore + 'static,
 {
     session.set_clean_session(true);
     if session.keep_alive() > 0 {
@@ -390,9 +390,9 @@ pub async fn read_write_loop<R, W, MS, RS, TS>(
 ) where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
-    MS: MessageStore + Sync + Send + 'static,
-    RS: RetainMessageStore + Sync + Send + 'static,
-    TS: TopicStore + Sync + Send + 'static,
+    MS: MessageStore + 'static,
+    RS: RetainMessageStore + 'static,
+    TS: TopicStore + 'static,
 {
     let mut frame_reader = FramedRead::new(reader, MqttDecoder::new());
     let mut frame_writer = FramedWrite::new(writer, MqttEncoder::new());
