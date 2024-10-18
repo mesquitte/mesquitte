@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, future::Future, io, time::SystemTime};
+use std::{collections::VecDeque, io, time::SystemTime};
 
 use foldhash::HashMap;
 use mqtt_codec_kit::common::QualityOfService;
@@ -58,304 +58,254 @@ impl MessageMemoryStore {
 }
 
 impl MessageStore for MessageMemoryStore {
-    fn enqueue_incoming(
+    async fn enqueue_incoming(
         &self,
         client_id: &str,
         packet_id: u16,
         message: IncomingPublishMessage,
-    ) -> impl Future<Output = Result<bool, io::Error>> + Send {
+    ) -> Result<bool, io::Error> {
         let incoming_guard = &self.incoming;
         let max_packets = self.max_packets;
 
-        async move {
-            if let Some(queue) = incoming_guard.read().get(client_id) {
-                if queue.len() > max_packets.into() {
-                    log::error!(
-                        "drop incoming packet {:?}, queue is full: {}",
-                        message,
-                        queue.len()
-                    );
-                    return Ok(true);
-                }
+        if let Some(queue) = incoming_guard.read().get(client_id) {
+            if queue.len() > max_packets {
+                log::error!(
+                    "drop incoming packet {:?}, queue is full: {}",
+                    message,
+                    queue.len()
+                );
+                return Ok(true);
             }
-
-            let mut queue = incoming_guard.write();
-            let packets = queue
-                .entry(client_id.to_string())
-                .or_insert_with(VecDeque::new);
-
-            packets.push_back(IncomingPublishPacket {
-                message,
-                packet_id,
-                receive_at: get_unix_ts(),
-                pubrel_at: None,
-                deliver_at: None,
-            });
-            Ok(false)
         }
+
+        let mut queue = incoming_guard.write();
+        let packets = queue.entry(client_id.to_string()).or_default();
+
+        packets.push_back(IncomingPublishPacket {
+            message,
+            packet_id,
+            receive_at: get_unix_ts(),
+            pubrel_at: None,
+            deliver_at: None,
+        });
+        Ok(false)
     }
 
-    fn enqueue_outgoing(
+    async fn enqueue_outgoing(
         &self,
         client_id: &str,
         message: OutgoingPublishMessage,
-    ) -> impl Future<Output = Result<bool, io::Error>> + Send {
+    ) -> Result<bool, io::Error> {
         let outgoing_guard = &self.outgoing;
         let max_packets = self.max_packets;
 
-        async move {
-            if let Some(queue) = outgoing_guard.read().get(client_id) {
-                if queue.len() > max_packets.into() {
-                    log::error!(
-                        "drop outgoing packet {:?}, queue is full: {}",
-                        message,
-                        queue.len()
-                    );
-                    return Ok(true);
-                }
+        if let Some(queue) = outgoing_guard.read().get(client_id) {
+            if queue.len() > max_packets {
+                log::error!(
+                    "drop outgoing packet {:?}, queue is full: {}",
+                    message,
+                    queue.len()
+                );
+                return Ok(true);
             }
-
-            let mut queue = outgoing_guard.write();
-            let packets = queue
-                .entry(client_id.to_string())
-                .or_insert_with(VecDeque::new);
-
-            packets.push_back(OutgoingPublishPacket {
-                message,
-                added_at: get_unix_ts(),
-                pubrec_at: None,
-                pubcomp_at: None,
-            });
-            Ok(false)
         }
+
+        let mut queue = outgoing_guard.write();
+        let packets = queue.entry(client_id.to_string()).or_default();
+
+        packets.push_back(OutgoingPublishPacket {
+            message,
+            added_at: get_unix_ts(),
+            pubrec_at: None,
+            pubcomp_at: None,
+        });
+        Ok(false)
     }
 
-    fn fetch_ready_incoming(
+    async fn fetch_ready_incoming(
         &self,
         client_id: &str,
         max_inflight: usize,
-    ) -> impl Future<Output = Result<Option<Vec<IncomingPublishMessage>>, io::Error>> + Send {
+    ) -> Result<Option<Vec<IncomingPublishMessage>>, io::Error> {
         let incoming_guard = &self.incoming;
 
-        async move {
-            match incoming_guard.read().get(client_id) {
-                Some(queue) => {
-                    let mut ret = Vec::new();
-                    for packet in queue {
-                        if packet.pubrel_at.is_some() {
-                            ret.push(packet.message.to_owned());
-                        }
-                        if ret.len() >= max_inflight {
-                            return Ok(Some(ret));
-                        }
+        match incoming_guard.read().get(client_id) {
+            Some(queue) => {
+                let mut ret = Vec::new();
+                for packet in queue {
+                    if packet.pubrel_at.is_some() {
+                        ret.push(packet.message.to_owned());
                     }
-
-                    Ok(Some(ret))
+                    if ret.len() >= max_inflight {
+                        return Ok(Some(ret));
+                    }
                 }
-                None => Ok(None),
+
+                Ok(Some(ret))
             }
+            None => Ok(None),
         }
     }
 
-    fn fetch_pending_outgoing(
+    async fn fetch_pending_outgoing(
         &self,
         client_id: &str,
-    ) -> impl Future<Output = Result<Vec<OutgoingPublishMessage>, io::Error>> + Send {
+    ) -> Result<Vec<OutgoingPublishMessage>, io::Error> {
         let outgoing_guard = &self.outgoing;
 
-        async move {
-            let mut pending_packets = Vec::new();
-            if let Some(packets) = outgoing_guard.read().get(client_id) {
-                for packet in packets {
-                    if packet.pubcomp_at.is_none() {
-                        pending_packets.push(packet.message.clone());
-                    }
+        let mut pending_packets = Vec::new();
+        if let Some(packets) = outgoing_guard.read().get(client_id) {
+            for packet in packets {
+                if packet.pubcomp_at.is_none() {
+                    pending_packets.push(packet.message.clone());
                 }
             }
-            Ok(pending_packets)
         }
+        Ok(pending_packets)
     }
 
-    fn pubrel(
-        &self,
-        client_id: &str,
-        packet_id: u16,
-    ) -> impl Future<Output = Result<bool, io::Error>> + Send {
+    async fn pubrel(&self, client_id: &str, packet_id: u16) -> Result<bool, io::Error> {
         let incoming_guard = &self.incoming;
 
-        async move {
-            let mut queue = incoming_guard.write();
+        let mut queue = incoming_guard.write();
 
-            if let Some(packets) = queue.get_mut(client_id) {
-                return if let Some(pos) = packets
-                    .iter()
-                    .position(|packet| packet.packet_id == packet_id)
-                {
-                    packets[pos].pubrel_at = Some(get_unix_ts());
-                    Ok(true)
-                } else {
-                    Ok(false)
-                };
-            }
-
-            Ok(false)
+        if let Some(packets) = queue.get_mut(client_id) {
+            return if let Some(pos) = packets
+                .iter()
+                .position(|packet| packet.packet_id == packet_id)
+            {
+                packets[pos].pubrel_at = Some(get_unix_ts());
+                Ok(true)
+            } else {
+                Ok(false)
+            };
         }
+
+        Ok(false)
     }
 
-    fn puback(
-        &self,
-        client_id: &str,
-        server_packet_id: u16,
-    ) -> impl Future<Output = Result<bool, io::Error>> + Send {
+    async fn puback(&self, client_id: &str, server_packet_id: u16) -> Result<bool, io::Error> {
         let outgoing_guard = &self.outgoing;
 
-        async move {
-            let mut queue = outgoing_guard.write();
+        let mut queue = outgoing_guard.write();
 
-            if let Some(packets) = queue.get_mut(client_id) {
-                return if let Some(pos) = packets.iter().position(|packet| {
-                    packet.message.server_packet_id() == server_packet_id
-                        && packet.message.subscribe_qos() == QualityOfService::Level1
-                }) {
-                    packets[pos].pubcomp_at = Some(get_unix_ts());
-                    Ok(true)
-                } else {
-                    Ok(false)
-                };
-            }
-
-            Ok(false)
+        if let Some(packets) = queue.get_mut(client_id) {
+            return if let Some(pos) = packets.iter().position(|packet| {
+                packet.message.server_packet_id() == server_packet_id
+                    && packet.message.subscribe_qos() == QualityOfService::Level1
+            }) {
+                packets[pos].pubcomp_at = Some(get_unix_ts());
+                Ok(true)
+            } else {
+                Ok(false)
+            };
         }
+
+        Ok(false)
     }
 
-    fn pubrec(
-        &self,
-        client_id: &str,
-        server_packet_id: u16,
-    ) -> impl Future<Output = Result<bool, io::Error>> + Send {
+    async fn pubrec(&self, client_id: &str, server_packet_id: u16) -> Result<bool, io::Error> {
         let outgoing_guard = &self.outgoing;
 
-        async move {
-            let mut queue = outgoing_guard.write();
+        let mut queue = outgoing_guard.write();
 
-            if let Some(packets) = queue.get_mut(client_id) {
-                return if let Some(pos) = packets.iter().position(|packet| {
-                    packet.message.server_packet_id() == server_packet_id
-                        && packet.message.subscribe_qos() == QualityOfService::Level2
-                        && packet.pubrec_at.is_none()
-                }) {
-                    packets[pos].pubrec_at = Some(get_unix_ts());
-                    Ok(true)
-                } else {
-                    Ok(false)
-                };
-            }
-
-            Ok(false)
+        if let Some(packets) = queue.get_mut(client_id) {
+            return if let Some(pos) = packets.iter().position(|packet| {
+                packet.message.server_packet_id() == server_packet_id
+                    && packet.message.subscribe_qos() == QualityOfService::Level2
+                    && packet.pubrec_at.is_none()
+            }) {
+                packets[pos].pubrec_at = Some(get_unix_ts());
+                Ok(true)
+            } else {
+                Ok(false)
+            };
         }
+
+        Ok(false)
     }
 
-    fn pubcomp(
-        &self,
-        client_id: &str,
-        server_packet_id: u16,
-    ) -> impl Future<Output = Result<bool, io::Error>> + Send {
+    async fn pubcomp(&self, client_id: &str, server_packet_id: u16) -> Result<bool, io::Error> {
         let outgoing_guard = &self.outgoing;
 
-        async move {
-            let mut queue = outgoing_guard.write();
+        let mut queue = outgoing_guard.write();
 
-            if let Some(packets) = queue.get_mut(client_id) {
-                return if let Some(pos) = packets.iter().position(|packet| {
-                    packet.message.server_packet_id() == server_packet_id
-                        && packet.message.subscribe_qos() == QualityOfService::Level2
-                        && packet.pubcomp_at.is_none()
-                }) {
-                    packets[pos].pubcomp_at = Some(get_unix_ts());
-                    Ok(true)
-                } else {
-                    Ok(false)
-                };
-            }
-
-            Ok(false)
+        if let Some(packets) = queue.get_mut(client_id) {
+            return if let Some(pos) = packets.iter().position(|packet| {
+                packet.message.server_packet_id() == server_packet_id
+                    && packet.message.subscribe_qos() == QualityOfService::Level2
+                    && packet.pubcomp_at.is_none()
+            }) {
+                packets[pos].pubcomp_at = Some(get_unix_ts());
+                Ok(true)
+            } else {
+                Ok(false)
+            };
         }
+
+        Ok(false)
     }
 
-    fn purge_completed_incoming_messages(
-        &self,
-        client_id: &str,
-    ) -> impl Future<Output = Result<(), io::Error>> + Send {
+    async fn purge_completed_incoming_messages(&self, client_id: &str) -> Result<(), io::Error> {
         let incoming_guard = &self.incoming;
         let timeout = self.timeout;
 
-        async move {
-            let mut p = incoming_guard.write();
-            if let Some(queue) = p.get_mut(client_id) {
-                let now_ts = get_unix_ts();
-                let original_len = queue.len();
-                queue.retain(|packet| {
-                    !(packet.deliver_at.is_some() || now_ts >= timeout + packet.receive_at)
-                });
+        let mut p = incoming_guard.write();
+        if let Some(queue) = p.get_mut(client_id) {
+            let now_ts = get_unix_ts();
+            let original_len = queue.len();
+            queue.retain(|packet| {
+                !(packet.deliver_at.is_some() || now_ts >= timeout + packet.receive_at)
+            });
 
-                if queue.len() < original_len {
-                    Self::shrink_queue(queue);
-                }
+            if queue.len() < original_len {
+                Self::shrink_queue(queue);
             }
-            Ok(())
         }
+        Ok(())
     }
 
-    fn purge_completed_outgoing_messages(
-        &self,
-        client_id: &str,
-    ) -> impl Future<Output = Result<(), io::Error>> + Send {
+    async fn purge_completed_outgoing_messages(&self, client_id: &str) -> Result<(), io::Error> {
         let outgoing_guard = &self.outgoing;
 
-        async move {
-            let mut p = outgoing_guard.write();
-            if let Some(queue) = p.get_mut(client_id) {
-                let mut changed = false;
-                let now_ts = get_unix_ts();
-                if let Some(pos) = queue.iter().position(|packet| {
-                    packet.pubcomp_at.is_some() || now_ts >= self.timeout + packet.added_at
-                }) {
-                    changed = true;
-                    queue.remove(pos);
-                }
-
-                if changed {
-                    Self::shrink_queue(queue);
-                }
+        let mut p = outgoing_guard.write();
+        if let Some(queue) = p.get_mut(client_id) {
+            let mut changed = false;
+            let now_ts = get_unix_ts();
+            if let Some(pos) = queue.iter().position(|packet| {
+                packet.pubcomp_at.is_some() || now_ts >= self.timeout + packet.added_at
+            }) {
+                changed = true;
+                queue.remove(pos);
             }
 
-            Ok(())
+            if changed {
+                Self::shrink_queue(queue);
+            }
         }
+
+        Ok(())
     }
 
-    fn is_full(&self, client_id: &str) -> impl Future<Output = Result<bool, io::Error>> + Send {
+    async fn is_full(&self, client_id: &str) -> Result<bool, io::Error> {
         let incoming_guard = &self.incoming;
         let outgoing_guard = &self.outgoing;
 
-        async move {
-            let x = match incoming_guard.read().get(client_id) {
-                Some(v) => v.len(),
-                None => 0,
-            };
-            let y = match outgoing_guard.read().get(client_id) {
-                Some(v) => v.len(),
-                None => 0,
-            };
+        let x = match incoming_guard.read().get(client_id) {
+            Some(v) => v.len(),
+            None => 0,
+        };
+        let y = match outgoing_guard.read().get(client_id) {
+            Some(v) => v.len(),
+            None => 0,
+        };
 
-            Ok(x + y > self.max_packets)
-        }
+        Ok(x + y > self.max_packets)
     }
 
-    fn remove_all(&self, client_id: &str) -> impl Future<Output = Result<(), io::Error>> + Send {
-        async move {
-            self.outgoing.write().remove(client_id);
-            self.incoming.write().remove(client_id);
-            Ok(())
-        }
+    async fn remove_all(&self, client_id: &str) -> Result<(), io::Error> {
+        self.outgoing.write().remove(client_id);
+        self.incoming.write().remove(client_id);
+        Ok(())
     }
 }

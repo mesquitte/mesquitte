@@ -101,7 +101,7 @@ impl GlobalState {
         AddClientReceipt::New
     }
 
-    pub fn remove_client<'a>(&self, client_id: &str) {
+    pub fn remove_client(&self, client_id: &str) {
         self.clients.remove(client_id);
     }
 
