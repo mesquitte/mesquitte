@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use log::info;
-use serde::{Deserialize, Serialize};
 
 use super::{app::App, store::Request, typ::RaftMetrics, Node, NodeId};
 
@@ -21,22 +20,15 @@ pub async fn read(
     Ok(Json(value.unwrap_or_default()))
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AddLearnerRequest {
-    pub node_id: u64,
-    pub rpc_addr: String,
-    pub api_addr: String,
-}
-
 pub async fn add_learner(
     State(app): State<App>,
-    Json(req): Json<AddLearnerRequest>,
+    Json(req): Json<(u64, String, String)>,
 ) -> impl IntoResponse {
     let node = Node {
-        rpc_addr: req.rpc_addr,
-        api_addr: req.api_addr,
+        rpc_addr: req.1,
+        api_addr: req.2,
     };
-    let res = app.raft.add_learner(req.node_id, node, true).await;
+    let res = app.raft.add_learner(req.0, node, true).await;
     Json(res)
 }
 

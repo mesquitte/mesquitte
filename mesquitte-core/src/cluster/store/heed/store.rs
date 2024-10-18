@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::Path, sync::Arc};
 
 use heed::{byteorder::BE, types::*, Database, Env, EnvOpenOptions};
 use log::debug;
@@ -244,14 +244,13 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
     }
 }
 
-pub async fn new<P: Into<PathBuf>>(db_path: P) -> (LogStore, Arc<StateMachineStore>) {
-    let p = db_path.into();
-    fs::create_dir_all(p.clone()).await.unwrap();
+pub async fn new<P: AsRef<Path>>(db_path: P) -> (LogStore, Arc<StateMachineStore>) {
+    fs::create_dir_all(db_path.as_ref()).await.unwrap();
     let env = unsafe {
         EnvOpenOptions::new()
             .map_size(100 * 1024 * 1024)
             .max_dbs(3000)
-            .open(p)
+            .open(db_path)
             .unwrap()
     };
     let mut wtxn = env.write_txn().unwrap();

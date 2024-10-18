@@ -26,7 +26,7 @@ async fn main() -> io::Result<()> {
 
     let storage = Arc::new(Storage::new(message_store, retain_message, topic_store));
 
-    let broker = WsServer::bind("0.0.0.0:6666".parse().unwrap(), global, storage)
+    let broker = WsServer::bind("0.0.0.0:6666", global, storage)
         .await
         .unwrap();
     broker.accept().await.unwrap();
