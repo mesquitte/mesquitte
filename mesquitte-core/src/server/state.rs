@@ -1,16 +1,37 @@
-use std::time::Duration;
+use std::{fmt::Display, time::Duration};
 
 use dashmap::DashMap;
-use mqtt_codec_kit::common::{QualityOfService, TopicFilter};
+use mqtt_codec_kit::common::QualityOfService;
 use tokio::{
     sync::mpsc::{self, channel},
     time,
 };
 
-use crate::types::{
-    client::AddClientReceipt, outgoing::Outgoing, retain_table::RetainTable,
-    topic_router::RouteTable,
-};
+use crate::store::message::IncomingPublishMessage;
+
+pub enum AddClientReceipt {
+    Present(u16),
+    New,
+}
+
+#[derive(PartialEq)]
+pub enum KickReason {
+    FromAdmin,
+}
+
+impl Display for KickReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            KickReason::FromAdmin => write!(f, "kicked by admin"),
+        }
+    }
+}
+
+pub enum DispatchMessage {
+    Publish(QualityOfService, Box<IncomingPublishMessage>),
+    Online(mpsc::Sender<u16>),
+    Kick(KickReason),
+}
 
 #[derive(Default)]
 pub struct GlobalState {
@@ -32,10 +53,7 @@ pub struct GlobalState {
     // max keep alive
     // min keep alive
     // config: Arc<Config>,
-    clients: DashMap<String, mpsc::Sender<Outgoing>, foldhash::fast::RandomState>,
-
-    route_table: RouteTable,
-    retain_table: RetainTable,
+    clients: DashMap<String, mpsc::Sender<DispatchMessage>, foldhash::fast::RandomState>,
 }
 
 impl GlobalState {
@@ -48,12 +66,15 @@ impl GlobalState {
     pub async fn add_client(
         &self,
         client_id: &str,
-        new_sender: mpsc::Sender<Outgoing>,
+        new_sender: mpsc::Sender<DispatchMessage>,
     ) -> AddClientReceipt {
         if let Some(old_sender) = self.get_outgoing_sender(client_id) {
             if !old_sender.is_closed() {
                 let (control_sender, mut control_receiver) = channel(1);
-                match old_sender.send(Outgoing::Online(control_sender)).await {
+                match old_sender
+                    .send(DispatchMessage::Online(control_sender))
+                    .await
+                {
                     Ok(()) => {
                         // TODO: config: build session state timeout
                         match time::timeout(Duration::from_secs(10), control_receiver.recv()).await
@@ -80,34 +101,11 @@ impl GlobalState {
         AddClientReceipt::New
     }
 
-    pub fn remove_client<'a>(
-        &self,
-        client_id: &str,
-        subscribes: impl IntoIterator<Item = &'a TopicFilter>,
-    ) {
+    pub fn remove_client<'a>(&self, client_id: &str) {
         self.clients.remove(client_id);
-        for filter in subscribes {
-            self.route_table.unsubscribe(filter, client_id);
-        }
     }
 
-    pub fn subscribe(&self, filter: &TopicFilter, id: &str, qos: QualityOfService) {
-        self.route_table.subscribe(filter, id, qos);
-    }
-
-    pub fn unsubscribe(&self, filter: &TopicFilter, id: &str) {
-        self.route_table.unsubscribe(filter, id);
-    }
-
-    pub fn get_outgoing_sender(&self, client_id: &str) -> Option<mpsc::Sender<Outgoing>> {
+    pub fn get_outgoing_sender(&self, client_id: &str) -> Option<mpsc::Sender<DispatchMessage>> {
         self.clients.get(client_id).map(|s| s.value().clone())
-    }
-
-    pub fn retain_table(&self) -> &RetainTable {
-        &self.retain_table
-    }
-
-    pub fn route_table(&self) -> &RouteTable {
-        &self.route_table
     }
 }

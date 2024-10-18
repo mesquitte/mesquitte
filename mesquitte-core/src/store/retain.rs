@@ -1,8 +1,9 @@
-use mqtt_codec_kit::common::{QualityOfService, TopicName};
-// #[cfg(feature = "v5")]
+use std::{future::Future, io, sync::Arc};
+
+use mqtt_codec_kit::common::{QualityOfService, TopicFilter, TopicName};
 use mqtt_codec_kit::v5::control::PublishProperties;
 
-use super::publish::PublishMessage;
+use super::message::IncomingPublishMessage;
 
 #[derive(Clone)]
 pub struct RetainContent {
@@ -37,11 +38,11 @@ impl RetainContent {
     }
 }
 
-impl<T> From<(T, &PublishMessage)> for RetainContent
+impl<T> From<(T, &IncomingPublishMessage)> for RetainContent
 where
     T: Into<String>,
 {
-    fn from((client_id, packet): (T, &PublishMessage)) -> Self {
+    fn from((client_id, packet): (T, &IncomingPublishMessage)) -> Self {
         Self {
             client_id: client_id.into(),
             topic_name: packet.topic_name().clone(),
@@ -50,4 +51,21 @@ where
             properties: packet.properties().map(|p| p.to_owned()),
         }
     }
+}
+
+pub trait RetainMessageStore {
+    fn search(
+        &self,
+        topic_filter: &TopicFilter,
+    ) -> impl Future<Output = Result<Vec<Arc<RetainContent>>, io::Error>> + Send;
+
+    fn insert(
+        &self,
+        content: RetainContent,
+    ) -> impl Future<Output = Result<Option<Arc<RetainContent>>, io::Error>> + Send;
+
+    fn remove(
+        &self,
+        topic_name: &TopicName,
+    ) -> impl Future<Output = Result<Option<Arc<RetainContent>>, io::Error>> + Send;
 }

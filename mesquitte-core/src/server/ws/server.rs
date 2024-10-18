@@ -7,21 +7,40 @@ use tungstenite::{handshake::server::ErrorResponse, http};
 
 #[cfg(feature = "wss")]
 use crate::server::config::TlsConfig;
-use crate::server::{process_client, state::GlobalState};
+use crate::{
+    server::{process_client, state::GlobalState},
+    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
+};
 
 use super::{ws_stream::WsByteStream, Error};
 
-pub struct WsServer {
+pub struct WsServer<MS, RS, TS>
+where
+    MS: MessageStore + Sync + Send + 'static,
+    RS: RetainMessageStore + Sync + Send + 'static,
+    TS: TopicStore + Sync + Send + 'static,
+{
     inner: TcpListener,
     global: Arc<GlobalState>,
+    storage: Arc<Storage<MS, RS, TS>>,
 }
 
-impl WsServer {
-    pub async fn bind(addr: SocketAddr, global: Arc<GlobalState>) -> Result<Self, Error> {
+impl<MS, RS, TS> WsServer<MS, RS, TS>
+where
+    MS: MessageStore + Sync + Send + 'static,
+    RS: RetainMessageStore + Sync + Send + 'static,
+    TS: TopicStore + Sync + Send + 'static,
+{
+    pub async fn bind(
+        addr: SocketAddr,
+        global: Arc<GlobalState>,
+        storage: Arc<Storage<MS, RS, TS>>,
+    ) -> Result<Self, Error> {
         let listener = TcpListener::bind(addr).await?;
         Ok(Self {
             inner: listener,
             global,
+            storage,
         })
     }
 
@@ -29,9 +48,10 @@ impl WsServer {
     pub async fn accept(&self) -> Result<(), Error> {
         while let Ok((stream, _addr)) = self.inner.accept().await {
             let global = self.global.clone();
+            let storage = self.storage.clone();
             let ws_stream =
                 WsByteStream::new(accept_hdr_async(TokioAdapter::new(stream), ws_callback).await?);
-            tokio::spawn(async move { process_client(ws_stream, global).await });
+            tokio::spawn(async move { process_client(ws_stream, global, storage).await });
         }
         Ok(())
     }

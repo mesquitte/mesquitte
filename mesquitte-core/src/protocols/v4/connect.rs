@@ -10,19 +10,14 @@ use mqtt_codec_kit::{
 use nanoid::nanoid;
 use tokio::sync::mpsc;
 
-use crate::{
-    server::state::GlobalState,
-    types::{
-        client::AddClientReceipt,
-        outgoing::Outgoing,
-        session::{LastWill, Session},
-    },
-};
+use crate::server::state::{AddClientReceipt, GlobalState, DispatchMessage};
+
+use super::session::Session;
 
 pub(super) async fn handle_connect(
     packet: ConnectPacket,
     global: Arc<GlobalState>,
-) -> Result<(ConnackPacket, Session, mpsc::Receiver<Outgoing>), ConnackPacket> {
+) -> Result<(ConnackPacket, Session, mpsc::Receiver<DispatchMessage>), ConnackPacket> {
     log::debug!(
         r#"client#{} received a connect packet:
 protocol level : {:?}
@@ -79,17 +74,10 @@ protocol level : {:?}
         (false, packet.client_identifier().to_owned())
     };
 
-    // TODO: config: max inflight size
-    // TODO: config: max inflight message size
-    // TODO: config: inflight message timeout
-    // TODO: config: max packet size
-
-    let mut session = Session::new(client_id, assigned_client_id, 12, 1024, 10);
+    let mut session = Session::new(client_id, assigned_client_id);
     session.set_clean_session(packet.clean_session());
     session.set_username(packet.username().map(|name| name.to_owned()));
     session.set_keep_alive(packet.keep_alive());
-    let server_keep_alive = session.keep_alive() != packet.keep_alive();
-    session.set_server_keep_alive(server_keep_alive);
 
     if let Some(last_will) = packet.will() {
         let topic_name = last_will.topic();
@@ -120,19 +108,19 @@ protocol level : {:?}
             ));
         }
 
-        session.set_last_will(LastWill::V4(last_will))
+        session.set_last_will(last_will)
     }
 
     // FIXME: to many clients cause memory leak
 
     // TODO: outgoing channel size
-    let (outgoing_tx, outgoing_rx) = mpsc::channel::<Outgoing>(8);
+    let (outgoing_tx, outgoing_rx) = mpsc::channel::<DispatchMessage>(8);
     let receipt = global.add_client(session.client_id(), outgoing_tx).await;
 
     let session_present = match receipt {
-        AddClientReceipt::Present(old_state) => {
+        AddClientReceipt::Present(server_packet_id) => {
             if !session.clean_session() {
-                session.copy_from_state(old_state);
+                session.set_server_packet_id(server_packet_id);
                 true
             } else {
                 log::info!(

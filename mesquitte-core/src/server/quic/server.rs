@@ -6,16 +6,26 @@ use crate::server::{process_client, state::GlobalState};
 
 use super::Error;
 
-pub struct QuicServer {
+pub struct QuicServer<MS, RS>
+where
+    MS: MessageStore + Sync + Send + 'static,
+    RS: RetainMessageStore + Sync + Send + 'static,
+{
     inner: Server,
     global: Arc<GlobalState>,
+    storage: Arc<Storage<MS, RS>>,
 }
 
-impl QuicServer {
+impl<MS, RS> QuicServer<MS, RS>
+where
+    MS: MessageStore + Sync + Send + 'static,
+    RS: RetainMessageStore + Sync + Send + 'static,
+{
     pub fn bind<T: tls::TryInto>(
         addr: SocketAddr,
         tls: T,
         global: Arc<GlobalState>,
+        storage: Arc<Storage<M, R, T>>,
     ) -> Result<Self, Error>
     where
         Error: From<<T as tls::TryInto>::Error>,
@@ -29,10 +39,11 @@ impl QuicServer {
 
     pub async fn accept(mut self) -> Result<(), Error> {
         while let Some(mut connection) = self.inner.accept().await {
-            let g = self.global.clone();
+            let global = self.global.clone();
+            let storage = self.storage.clone();
             tokio::spawn(async move {
                 while let Ok(Some(stream)) = connection.accept_bidirectional_stream().await {
-                    process_client(stream, g.clone()).await;
+                    process_client(stream, global, storage).await;
                 }
             });
         }

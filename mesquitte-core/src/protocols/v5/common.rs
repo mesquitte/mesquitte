@@ -8,7 +8,7 @@ use mqtt_codec_kit::{
     },
 };
 
-use crate::types::session::Session;
+use super::session::Session;
 
 pub(crate) fn build_error_connack<S: Into<String>>(
     session: &mut Session,

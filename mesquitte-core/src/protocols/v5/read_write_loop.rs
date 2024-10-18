@@ -19,10 +19,7 @@ use tokio::{
 };
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
-use crate::{
-    server::state::GlobalState,
-    types::{outgoing::Outgoing, session::Session},
-};
+use crate::server::state::{DispatchMessage, GlobalState};
 
 use super::{
     connect::{handle_connect, handle_disconnect},
@@ -30,6 +27,7 @@ use super::{
         get_unsent_outgoing_packet, handle_puback, handle_pubcomp, handle_publish, handle_pubrec,
         handle_pubrel, handle_will, receive_outgoing_publish,
     },
+    session::Session,
     subscribe::{handle_subscribe, handle_unsubscribe},
 };
 
@@ -120,12 +118,12 @@ where
 
 pub(super) async fn receive_outgoing(
     session: &mut Session,
-    packet: Outgoing,
+    packet: DispatchMessage,
     global: Arc<GlobalState>,
 ) -> (bool, Option<VariablePacket>) {
     let mut should_stop = false;
     let resp = match packet {
-        Outgoing::Publish(subscribe_qos, packet) => {
+        DispatchMessage::Publish(subscribe_qos, packet) => {
             let packet = receive_outgoing_publish(session, subscribe_qos, *packet);
             if session.disconnected() {
                 None
@@ -133,13 +131,13 @@ pub(super) async fn receive_outgoing(
                 Some(packet.into())
             }
         }
-        Outgoing::Online(sender) => {
+        DispatchMessage::Online(sender) => {
             log::debug!(
                 "handle outgoing client#{} receive new client online",
                 session.client_id(),
             );
 
-            if let Err(err) = sender.send(session.into()).await {
+            if let Err(err) = sender.send(session.server_packet_id()).await {
                 log::error!(
                     "handle outgoing client#{} send session state: {err}",
                     session.client_id(),
@@ -152,7 +150,7 @@ pub(super) async fn receive_outgoing(
                 Some(DisconnectPacket::new(DisconnectReasonCode::SessionTakenOver).into())
             }
         }
-        Outgoing::Kick(reason) => {
+        DispatchMessage::Kick(reason) => {
             log::debug!(
                 "handle outgoing client#{} receive kick message: {}",
                 session.client_id(),
@@ -175,7 +173,7 @@ pub(super) async fn receive_outgoing(
 pub(super) async fn handle_outgoing<T, E>(
     writer: &mut FramedWrite<T, E>,
     session: &mut Session,
-    packet: Outgoing,
+    packet: DispatchMessage,
     global: Arc<GlobalState>,
 ) -> bool
 where
@@ -196,7 +194,7 @@ where
 
 pub(super) async fn handle_clean_session(
     mut session: Session,
-    mut outgoing_rx: mpsc::Receiver<Outgoing>,
+    mut outgoing_rx: mpsc::Receiver<DispatchMessage>,
     global: Arc<GlobalState>,
 ) {
     log::debug!(
@@ -284,7 +282,7 @@ async fn write_to_client<T, E>(
     mut session: Session,
     mut writer: FramedWrite<T, E>,
     mut incoming_rx: mpsc::Receiver<VariablePacket>,
-    mut outgoing_rx: mpsc::Receiver<Outgoing>,
+    mut outgoing_rx: mpsc::Receiver<DispatchMessage>,
     global: Arc<GlobalState>,
 ) where
     T: AsyncWrite + Unpin,
