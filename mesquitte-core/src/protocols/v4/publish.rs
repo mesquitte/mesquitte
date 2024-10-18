@@ -1,4 +1,4 @@
-use std::{cmp, sync::Arc};
+use std::{cmp, io, sync::Arc};
 
 use mqtt_codec_kit::{
     common::{
@@ -11,19 +11,28 @@ use mqtt_codec_kit::{
 };
 
 use crate::{
-    server::state::GlobalState,
-    types::{
-        outgoing::Outgoing,
-        publish::PublishMessage,
-        session::{LastWill, Session},
+    server::state::{DispatchMessage, GlobalState},
+    store::{
+        message::{IncomingPublishMessage, MessageStore, OutgoingPublishMessage},
+        retain::RetainMessageStore,
+        topic::{RouteOption, TopicStore},
+        Storage,
     },
 };
 
-pub(super) async fn handle_publish(
+use super::session::Session;
+
+pub(super) async fn handle_publish<MS, RS, TS>(
     session: &mut Session,
     packet: PublishPacket,
     global: Arc<GlobalState>,
-) -> (bool, Option<VariablePacket>) {
+    storage: Arc<Storage<MS, RS, TS>>,
+) -> io::Result<(bool, Option<VariablePacket>)>
+where
+    MS: MessageStore + Sync + Send,
+    RS: RetainMessageStore + Sync + Send,
+    TS: TopicStore + Sync + Send,
+{
     log::debug!(
         r#"client#{} received a publish packet:
 topic name : {:?}
@@ -40,49 +49,63 @@ topic name : {:?}
     let topic_name = packet.topic_name();
     if topic_name.is_empty() {
         log::debug!("Publish topic name cannot be empty");
-        return (true, Some(DisconnectPacket::new().into()));
+        return Ok((true, Some(DisconnectPacket::new().into())));
     }
 
     if topic_name.starts_with(SHARED_PREFIX)
         || topic_name.contains(MATCH_ALL_STR)
         || topic_name.contains(MATCH_ONE_STR)
     {
-        log::debug!("invalid topic name: {:?}", topic_name);
-        return (true, Some(DisconnectPacket::new().into()));
+        log::debug!(
+            "client#{} invalid topic name: {:?}",
+            session.client_id(),
+            topic_name
+        );
+        return Ok((true, Some(DisconnectPacket::new().into())));
     }
     if packet.qos() == QoSWithPacketIdentifier::Level0 && packet.dup() {
-        log::debug!("invalid duplicate flag in QoS 0 publish message");
-        return (true, Some(DisconnectPacket::new().into()));
+        log::debug!(
+            "client#{} invalid duplicate flag in QoS 0 publish message",
+            session.client_id()
+        );
+        return Ok((true, Some(DisconnectPacket::new().into())));
     }
 
     match packet.qos() {
         QoSWithPacketIdentifier::Level0 => {
-            dispatch_publish(session, packet.into(), global).await;
-            (false, None)
+            dispatch_publish(session, packet.into(), global, storage).await?;
+            Ok((false, None))
         }
         QoSWithPacketIdentifier::Level1(packet_id) => {
             if !packet.dup() {
-                dispatch_publish(session, packet.into(), global).await;
+                dispatch_publish(session, packet.into(), global, storage).await?;
             }
-            (false, Some(PubackPacket::new(packet_id).into()))
+            Ok((false, Some(PubackPacket::new(packet_id).into())))
         }
         QoSWithPacketIdentifier::Level2(packet_id) => {
             if !packet.dup() {
-                session
-                    .pending_packets()
-                    .push_incoming(packet_id, packet.into());
+                storage
+                    .message_store()
+                    .enqueue_incoming(session.client_id(), packet_id, packet.into())
+                    .await?;
             }
-            (false, Some(PubrecPacket::new(packet_id).into()))
+            Ok((false, Some(PubrecPacket::new(packet_id).into())))
         }
     }
 }
 
 // Dispatch a publish message from client or will to matched clients
-pub(super) async fn dispatch_publish(
+pub(super) async fn dispatch_publish<MS, RS, TS>(
     session: &mut Session,
-    packet: PublishMessage,
+    packet: IncomingPublishMessage,
     global: Arc<GlobalState>,
-) {
+    storage: Arc<Storage<MS, RS, TS>>,
+) -> io::Result<()>
+where
+    MS: MessageStore + Sync + Send,
+    RS: RetainMessageStore + Sync + Send,
+    TS: TopicStore + Sync + Send,
+{
     log::debug!(
         r#"client#{} dispatch publish message:
 topic name : {:?}
@@ -98,29 +121,31 @@ topic name : {:?}
 
     if packet.retain() {
         if packet.payload().is_empty() {
-            global.retain_table().remove(packet.topic_name());
+            storage
+                .retain_message_store()
+                .remove(packet.topic_name())
+                .await?;
         } else {
-            global
-                .retain_table()
-                .insert(Arc::new((session.client_id(), &packet).into()));
+            storage
+                .retain_message_store()
+                .insert((session.client_id(), &packet).into())
+                .await?;
         }
     }
-
-    let matches = global.route_table().get_matches(packet.topic_name());
-    let mut senders = Vec::with_capacity(matches.len());
-    for content in matches {
-        let content = content.read();
-        match content.topic_filter.as_ref() {
-            Some(filter) => {
-                for (client_id, subscribe_qos) in &content.clients {
-                    senders.push((client_id.to_owned(), filter.clone(), *subscribe_qos));
-                }
+    let matches = storage.topic_store().search(packet.topic_name()).await?;
+    let mut senders = Vec::with_capacity(matches.normal_clients.len());
+    for (client_id, opt) in matches.normal_clients {
+        match opt {
+            RouteOption::V4(qos) => {
+                senders.push((client_id.to_owned(), qos));
             }
-            None => log::warn!("topic filter is empty in content : {:?}", content),
+            RouteOption::V5(subscribe_options) => {
+                senders.push((client_id.to_owned(), subscribe_options.qos));
+            }
         }
     }
 
-    for (receiver_client_id, _, qos) in senders {
+    for (receiver_client_id, qos) in senders {
         if let Some(sender) = global.get_outgoing_sender(&receiver_client_id) {
             if sender.is_closed() {
                 log::warn!(
@@ -130,45 +155,52 @@ topic name : {:?}
                 continue;
             }
             if let Err(err) = sender
-                .send(Outgoing::Publish(qos, Box::new(packet.clone())))
+                .send(DispatchMessage::Publish(qos, Box::new(packet.clone())))
                 .await
             {
                 log::error!("{} send publish message: {}", receiver_client_id, err,)
             }
         }
     }
+
+    Ok(())
 }
 
-pub(super) async fn handle_pubrel(
+pub(super) async fn handle_pubrel<MS, RS, TS>(
     session: &mut Session,
-    global: Arc<GlobalState>,
-    pid: u16,
-) -> PubcompPacket {
+    packet_id: u16,
+    storage: Arc<Storage<MS, RS, TS>>,
+) -> io::Result<PubcompPacket>
+where
+    MS: MessageStore + Sync + Send,
+    RS: RetainMessageStore + Sync + Send,
+    TS: TopicStore + Sync + Send,
+{
     log::debug!(
         "client#{} received a pubrel packet, id : {}",
         session.client_id(),
-        pid
+        packet_id
     );
 
-    session.pending_packets().clean_incoming();
-    let mut start_idx = 0;
-    while let Some((idx, msg)) = session
-        .pending_packets()
-        .get_ready_incoming_packet(start_idx)
-    {
-        start_idx = idx + 1;
-        let inner = msg.message().to_owned();
-        dispatch_publish(session, inner, global.clone()).await;
-    }
+    storage
+        .message_store()
+        .pubrel(session.client_id(), packet_id)
+        .await?;
 
-    PubcompPacket::new(pid)
+    Ok(PubcompPacket::new(packet_id))
 }
 
-pub(super) fn receive_outgoing_publish(
+pub(super) async fn receive_outgoing_publish<MS, RS, TS>(
     session: &mut Session,
     subscribe_qos: QualityOfService,
-    message: PublishMessage,
-) -> PublishPacket {
+    message: IncomingPublishMessage,
+    storage: Arc<Storage<MS, RS, TS>>,
+) -> io::Result<PublishPacket>
+where
+    MS: MessageStore + Sync + Send,
+    RS: RetainMessageStore + Sync + Send,
+    TS: TopicStore + Sync + Send,
+{
     log::debug!(
         r#"client#{} receive outgoing publish message:
 topic name : {:?}
@@ -199,50 +231,98 @@ topic name : {:?}
     packet.set_dup(message.dup());
 
     if let Some(packet_id) = packet_id {
-        session
-            .pending_packets()
-            .push_outgoing(packet_id, subscribe_qos, message);
+        let m = OutgoingPublishMessage::new(packet_id, subscribe_qos, message);
+        storage
+            .message_store()
+            .enqueue_outgoing(session.client_id(), m)
+            .await?;
     }
 
-    packet
+    Ok(packet)
 }
 
-pub(super) fn handle_puback(session: &mut Session, pid: u16) {
+pub(super) async fn handle_puback<MS, RS, TS>(
+    session: &mut Session,
+    packet_id: u16,
+    storage: Arc<Storage<MS, RS, TS>>,
+) -> io::Result<()>
+where
+    MS: MessageStore + Sync + Send,
+    RS: RetainMessageStore + Sync + Send,
+    TS: TopicStore + Sync + Send,
+{
     log::debug!(
         "client#{} received a puback packet, id : {}",
         session.client_id(),
-        pid
+        packet_id
     );
 
-    let _matched = session.pending_packets().puback(pid);
+    storage
+        .message_store()
+        .puback(session.client_id(), packet_id)
+        .await?;
 
-    session.pending_packets().clean_outgoing();
+    Ok(())
 }
 
-pub(super) fn handle_pubrec(session: &mut Session, pid: u16) -> PubrelPacket {
+pub(super) async fn handle_pubrec<MS, RS, TS>(
+    session: &mut Session,
+    packet_id: u16,
+    storage: Arc<Storage<MS, RS, TS>>,
+) -> io::Result<PubrelPacket>
+where
+    MS: MessageStore + Sync + Send,
+    RS: RetainMessageStore + Sync + Send,
+    TS: TopicStore + Sync + Send,
+{
     log::debug!(
         "client#{} received a pubrec packet, id : {}",
         session.client_id(),
-        pid
+        packet_id
     );
 
-    let _matched = session.pending_packets().pubrec(pid);
+    storage
+        .message_store()
+        .pubrec(session.client_id(), packet_id)
+        .await?;
 
-    PubrelPacket::new(pid)
+    Ok(PubrelPacket::new(packet_id))
 }
 
-pub(super) fn handle_pubcomp(session: &mut Session, pid: u16) {
+pub(super) async fn handle_pubcomp<MS, RS, TS>(
+    session: &mut Session,
+    packet_id: u16,
+    storage: Arc<Storage<MS, RS, TS>>,
+) -> io::Result<()>
+where
+    MS: MessageStore + Sync + Send,
+    RS: RetainMessageStore + Sync + Send,
+    TS: TopicStore + Sync + Send,
+{
     log::debug!(
         "client#{} received a pubcomp packet, id : {}",
         session.client_id(),
-        pid
+        packet_id
     );
 
-    session.pending_packets().pubcomp(pid);
-    session.pending_packets().clean_outgoing();
+    storage
+        .message_store()
+        .pubcomp(session.client_id(), packet_id)
+        .await?;
+
+    Ok(())
 }
 
-pub(super) async fn handle_will(session: &mut Session, global: Arc<GlobalState>) {
+pub(super) async fn handle_will<MS, RS, TS>(
+    session: &mut Session,
+    global: Arc<GlobalState>,
+    storage: Arc<Storage<MS, RS, TS>>,
+) -> io::Result<()>
+where
+    MS: MessageStore + Sync + Send,
+    RS: RetainMessageStore + Sync + Send,
+    TS: TopicStore + Sync + Send,
+{
     log::debug!(
         r#"client#{} handle last will:
 client side disconnected : {}
@@ -254,25 +334,32 @@ server side disconnected : {}
         session.last_will(),
     );
 
-    if let Some(LastWill::V4(last_will)) = session.take_last_will() {
-        dispatch_publish(session, last_will.into(), global.clone()).await;
+    if let Some(last_will) = session.take_last_will() {
+        dispatch_publish(session, last_will.into(), global, storage).await?;
         session.clear_last_will();
     }
+    Ok(())
 }
 
-pub(crate) fn get_unsent_outgoing_packet(session: &mut Session) -> Vec<PublishPacket> {
+pub(crate) async fn get_outgoing_packets<MS, RS, TS>(
+    session: &mut Session,
+    storage: Arc<Storage<MS, RS, TS>>,
+) -> io::Result<Vec<PublishPacket>>
+where
+    MS: MessageStore + Sync + Send,
+    RS: RetainMessageStore + Sync + Send,
+    TS: TopicStore + Sync + Send,
+{
     let mut packets = Vec::new();
-    let mut start_idx = 0;
-    while let Some((idx, msg)) = session
-        .pending_packets()
-        .get_unsent_outgoing_packet(start_idx)
-    {
-        start_idx = idx + 1;
-
+    let messages = storage
+        .message_store()
+        .fetch_pending_outgoing(session.client_id())
+        .await?;
+    for msg in messages {
         let qos = match msg.final_qos() {
             QualityOfService::Level0 => QoSWithPacketIdentifier::Level0,
-            QualityOfService::Level1 => QoSWithPacketIdentifier::Level1(msg.packet_id()),
-            QualityOfService::Level2 => QoSWithPacketIdentifier::Level2(msg.packet_id()),
+            QualityOfService::Level1 => QoSWithPacketIdentifier::Level1(msg.server_packet_id()),
+            QualityOfService::Level2 => QoSWithPacketIdentifier::Level2(msg.server_packet_id()),
         };
         let topic_name = msg.message().topic_name().to_owned();
         let mut packet = PublishPacket::new(topic_name, qos, msg.message().payload());
@@ -281,5 +368,5 @@ pub(crate) fn get_unsent_outgoing_packet(session: &mut Session) -> Vec<PublishPa
         packets.push(packet);
     }
 
-    packets
+    Ok(packets)
 }

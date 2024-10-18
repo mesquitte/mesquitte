@@ -1,25 +1,14 @@
-use std::{mem, sync::Arc};
+use std::{future::Future, io, mem, sync::Arc};
 
-use foldhash::HashMap;
+use foldhash::{HashMap, HashMapExt};
 use mqtt_codec_kit::common::{
-    LEVEL_SEP, MATCH_ALL_CHAR, MATCH_ALL_STR, MATCH_ONE_CHAR, MATCH_ONE_STR,
+    TopicName, LEVEL_SEP, MATCH_ALL_CHAR, MATCH_ALL_STR, MATCH_ONE_CHAR, MATCH_ONE_STR,
 };
 use parking_lot::RwLock;
 
-use super::retain_content::RetainContent;
+use crate::store::retain::{RetainContent, RetainMessageStore};
 
-#[derive(Default)]
-pub struct RetainTable {
-    inner: RetainNode,
-}
-
-#[derive(Default)]
-struct RetainNode {
-    content: Option<Arc<RetainContent>>,
-    nodes: Arc<RwLock<HashMap<String, RetainNode>>>,
-}
-
-pub(crate) fn split_topic(topic: &str) -> (&str, Option<&str>) {
+fn split_topic(topic: &str) -> (&str, Option<&str>) {
     if let Some((head, rest)) = topic.split_once(LEVEL_SEP) {
         (head, Some(rest))
     } else {
@@ -27,27 +16,24 @@ pub(crate) fn split_topic(topic: &str) -> (&str, Option<&str>) {
     }
 }
 
-impl RetainTable {
-    pub fn get_matches(&self, topic_filter: &str) -> Vec<Arc<RetainContent>> {
-        // [MQTT-4.7.2-1] The Server MUST NOT match Topic Filters starting with a
-        // wildcard character (# or +) with Topic Names beginning with a $ character
-        let wildcard_first = topic_filter.starts_with([MATCH_ONE_CHAR, MATCH_ALL_CHAR]);
-        let (filter_item, rest_items) = split_topic(topic_filter);
-        let mut retains = Vec::new();
-        self.inner
-            .get_matches(filter_item, rest_items, wildcard_first, &mut retains);
-        retains
-    }
+#[derive(Default)]
+struct RetainNode {
+    content: Option<Arc<RetainContent>>,
+    nodes: RwLock<HashMap<String, RetainNode>>,
+}
 
-    pub fn insert(&self, content: Arc<RetainContent>) -> Option<Arc<RetainContent>> {
-        let content_clone = Arc::clone(&content);
-        let (topic_item, rest_items) = split_topic(content_clone.topic_name());
-        self.inner.insert(topic_item, rest_items, content)
-    }
+pub struct RetainMessageMemoryStore {
+    inner: RetainNode,
+}
 
-    pub fn remove(&self, topic_name: &str) -> Option<Arc<RetainContent>> {
-        let (topic_item, rest_items) = split_topic(topic_name);
-        self.inner.remove(topic_item, rest_items)
+impl RetainMessageMemoryStore {
+    pub fn new() -> Self {
+        Self {
+            inner: RetainNode {
+                content: None,
+                nodes: RwLock::new(HashMap::new()),
+            },
+        }
     }
 }
 
@@ -149,5 +135,47 @@ impl RetainNode {
             nodes.remove(prev_item);
         }
         old_content
+    }
+}
+
+impl RetainMessageStore for RetainMessageMemoryStore {
+    fn search(
+        &self,
+        topic_filter: &mqtt_codec_kit::common::TopicFilter,
+    ) -> impl Future<Output = Result<Vec<Arc<RetainContent>>, io::Error>> + Send {
+        async move {
+            // [MQTT-4.7.2-1] The Server MUST NOT match Topic Filters starting with a
+            // wildcard character (# or +) with Topic Names beginning with a $ character
+            let wildcard_first = topic_filter.starts_with([MATCH_ONE_CHAR, MATCH_ALL_CHAR]);
+
+            let (filter_item, rest_items) = split_topic(topic_filter);
+            let mut retains = Vec::new();
+            self.inner
+                .get_matches(filter_item, rest_items, wildcard_first, &mut retains);
+
+            Ok(retains)
+        }
+    }
+
+    fn insert(
+        &self,
+        content: RetainContent,
+    ) -> impl Future<Output = Result<Option<Arc<RetainContent>>, io::Error>> + Send {
+        async move {
+            let topic_name = content.topic_name().to_owned();
+            let (topic_item, rest_items) = split_topic(&topic_name);
+
+            Ok(self.inner.insert(topic_item, rest_items, Arc::new(content)))
+        }
+    }
+
+    fn remove(
+        &self,
+        topic_name: &TopicName,
+    ) -> impl Future<Output = Result<Option<Arc<RetainContent>>, io::Error>> + Send {
+        async move {
+            let (topic_item, rest_items) = split_topic(topic_name);
+            Ok(self.inner.remove(topic_item, rest_items))
+        }
     }
 }

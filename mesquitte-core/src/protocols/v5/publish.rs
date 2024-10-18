@@ -16,16 +16,9 @@ use mqtt_codec_kit::{
     },
 };
 
-use crate::{
-    server::state::GlobalState,
-    types::{
-        outgoing::Outgoing,
-        publish::PublishMessage,
-        session::{LastWill, Session},
-    },
-};
+use crate::{server::state::GlobalState, store::message::IncomingPublishMessage};
 
-use super::common::build_error_disconnect;
+use super::{common::build_error_disconnect, session::Session};
 
 pub(super) async fn handle_publish(
     session: &mut Session,
@@ -114,7 +107,7 @@ topic name : {:?}
 // Dispatch a publish message from client or will to matched clients
 pub(super) async fn dispatch_publish(
     session: &mut Session,
-    packet: PublishMessage,
+    packet: IncomingPublishMessage,
     global: Arc<GlobalState>,
 ) {
     log::debug!(
@@ -189,12 +182,12 @@ properties : {:?}
 pub(super) async fn handle_pubrel(
     session: &mut Session,
     global: Arc<GlobalState>,
-    pid: u16,
+    packet_id: u16,
 ) -> PubcompPacket {
     log::debug!(
         "client#{} received a pubrel packet, id : {}",
         session.client_id(),
-        pid
+        packet_id
     );
 
     session.pending_packets().clean_incoming();
@@ -208,14 +201,14 @@ pub(super) async fn handle_pubrel(
         dispatch_publish(session, message, global.clone()).await;
     }
 
-    PubcompPacket::new(pid, PubcompReasonCode::Success)
+    PubcompPacket::new(packet_id, PubcompReasonCode::Success)
 }
 
-pub(super) fn receive_outgoing_publish(
+pub(super) async fn receive_outgoing_publish(
     session: &mut Session,
     subscribe_qos: QualityOfService,
     // retain_as_published: bool,
-    message: PublishMessage,
+    message: IncomingPublishMessage,
 ) -> PublishPacket {
     log::debug!(
         r#"client#{} receive outgoing publish message:
@@ -273,39 +266,39 @@ properties : {:?}
     packet
 }
 
-pub(super) fn handle_puback(session: &mut Session, pid: u16) {
+pub(super) async fn handle_puback(session: &mut Session, packet_id: u16) {
     log::debug!(
         "client#{} received a puback packet, id : {}",
         session.client_id(),
-        pid
+        packet_id
     );
 
-    session.pending_packets().puback(pid);
+    session.pending_packets().puback(packet_id);
     session.pending_packets().clean_outgoing();
 }
 
-pub(super) fn handle_pubrec(session: &mut Session, pid: u16) -> PubrelPacket {
+pub(super) async fn handle_pubrec(session: &mut Session, packet_id: u16) -> PubrelPacket {
     log::debug!(
         "client#{} received a pubrec packet, id : {}",
         session.client_id(),
-        pid
+        packet_id
     );
 
-    if session.pending_packets().pubrec(pid) {
-        PubrelPacket::new(pid, PubrelReasonCode::Success)
+    if session.pending_packets().pubrec(packet_id) {
+        PubrelPacket::new(packet_id, PubrelReasonCode::Success)
     } else {
-        PubrelPacket::new(pid, PubrelReasonCode::PacketIdentifierNotFound)
+        PubrelPacket::new(packet_id, PubrelReasonCode::PacketIdentifierNotFound)
     }
 }
 
-pub(super) fn handle_pubcomp(session: &mut Session, pid: u16) {
+pub(super) async fn handle_pubcomp(session: &mut Session, packet_id: u16) {
     log::debug!(
         "client#{} received a pubcomp packet, id : {}",
         session.client_id(),
-        pid
+        packet_id
     );
 
-    session.pending_packets().pubcomp(pid);
+    session.pending_packets().pubcomp(packet_id);
     session.pending_packets().clean_outgoing();
 }
 
@@ -321,7 +314,7 @@ server side disconnected : {}
         session.last_will(),
     );
 
-    if let Some(LastWill::V5(last_will)) = session.take_last_will() {
+    if let Some(last_will) = session.take_last_will() {
         dispatch_publish(session, last_will.into(), global.clone()).await;
         session.clear_last_will();
     }

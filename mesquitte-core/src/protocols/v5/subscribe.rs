@@ -11,11 +11,11 @@ use mqtt_codec_kit::{
     },
 };
 
-use crate::{server::state::GlobalState, types::session::Session};
+use crate::server::state::GlobalState;
 
-use super::{common::build_error_disconnect, publish::receive_outgoing_publish};
+use super::{common::build_error_disconnect, publish::receive_outgoing_publish, session::Session};
 
-pub(super) fn handle_subscribe(
+pub(super) async fn handle_subscribe(
     session: &mut Session,
     packet: SubscribePacket,
     global: Arc<GlobalState>,
@@ -92,7 +92,7 @@ properties : {:?}"#,
     Ok(queue.into())
 }
 
-pub(super) fn handle_unsubscribe(
+pub(super) async fn handle_unsubscribe(
     session: &mut Session,
     packet: &UnsubscribePacket,
     global: Arc<GlobalState>,

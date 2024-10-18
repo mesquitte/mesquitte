@@ -1,5 +1,4 @@
 mod protocols;
-mod types;
 
 #[cfg(all(
     feature = "cluster",
@@ -10,3 +9,4 @@ mod types;
 ))]
 pub mod cluster;
 pub mod server;
+pub mod store;

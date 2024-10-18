@@ -1,47 +1,8 @@
-use std::mem;
-
 use foldhash::{HashSet, HashSetExt};
-use mqtt_codec_kit::common::TopicFilter;
-use mqtt_codec_kit::v4::packet::connect::LastWill as V4LastWill;
-use mqtt_codec_kit::v5::packet::connect::LastWill as V5LastWill;
+use mqtt_codec_kit::{common::TopicFilter, v5::packet::connect::LastWill};
 use tokio::time::Instant;
 
-use super::pending_packets::PendingPackets;
-
 pub const DEFAULT_MAX_PACKET_SIZE: u32 = 5 + 268_435_455;
-
-#[derive(Debug, Clone)]
-pub enum LastWill {
-    V4(V4LastWill),
-    V5(V5LastWill),
-}
-
-pub struct SessionState {
-    server_packet_id: u16,
-    pending_packets: PendingPackets,
-}
-
-impl SessionState {
-    pub fn server_packet_id(&self) -> u16 {
-        self.server_packet_id
-    }
-
-    pub fn pending_packets(&mut self) -> &mut PendingPackets {
-        &mut self.pending_packets
-    }
-}
-
-impl From<&mut Session> for SessionState {
-    fn from(val: &mut Session) -> Self {
-        let mut pending_packets = PendingPackets::new(0, 0, 0);
-        mem::swap(&mut val.pending_packets, &mut pending_packets);
-
-        Self {
-            server_packet_id: val.server_packet_id,
-            pending_packets,
-        }
-    }
-}
 
 pub struct Session {
     connected_at: Instant,
@@ -49,8 +10,6 @@ pub struct Session {
     last_packet_at: Instant,
     // For record packet id send from server to client
     server_packet_id: u16,
-
-    pending_packets: PendingPackets,
 
     client_id: String,
     username: Option<String>,
@@ -64,46 +23,24 @@ pub struct Session {
     client_disconnected: bool,
     server_disconnected: bool,
 
-    // #[cfg(feature = "v5")]
     server_keep_alive: bool,
-    // #[cfg(feature = "v5")]
     session_expiry_interval: u32,
-    // #[cfg(feature = "v5")]
     receive_maximum: u16,
-    // #[cfg(feature = "v5")]
     max_packet_size: u32,
-    // #[cfg(feature = "v5")]
     topic_alias_max: u16,
-    // #[cfg(feature = "v5")]
     request_response_info: bool,
-    // #[cfg(feature = "v5")]
     request_problem_info: bool,
-    // #[cfg(feature = "v5")]
     user_properties: Vec<(String, String)>,
-    // #[cfg(feature = "v5")]
     authentication_method: Option<String>,
-    // #[cfg(feature = "v5")]
     // authentication_data: Option<Arc<String>>,
 }
 
 impl Session {
-    pub fn new(
-        client_id: String,
-        assigned_client_id: bool,
-        max_inflight_client: u16,
-        max_in_mem_pending_messages: usize,
-        inflight_timeout: u64,
-    ) -> Self {
+    pub fn new(client_id: String, assigned_client_id: bool, receive_maximum: u16) -> Self {
         Self {
             connected_at: Instant::now(),
             last_packet_at: Instant::now(),
             server_packet_id: 1,
-
-            pending_packets: PendingPackets::new(
-                max_inflight_client,
-                max_in_mem_pending_messages,
-                inflight_timeout,
-            ),
 
             client_id,
             assigned_client_id,
@@ -119,7 +56,7 @@ impl Session {
             server_keep_alive: false,
 
             session_expiry_interval: 0,
-            receive_maximum: max_inflight_client,
+            receive_maximum,
             max_packet_size: DEFAULT_MAX_PACKET_SIZE,
             // TODO: config: max topic alias
             topic_alias_max: 65535,
@@ -140,10 +77,6 @@ impl Session {
 
     pub fn renew_last_packet_at(&mut self) {
         self.last_packet_at = Instant::now();
-    }
-
-    pub fn pending_packets(&mut self) -> &mut PendingPackets {
-        &mut self.pending_packets
     }
 
     pub fn client_id(&self) -> &str {
@@ -326,11 +259,5 @@ impl Session {
 
     pub fn set_authentication_method(&mut self, authentication_method: &str) {
         self.authentication_method = Some(authentication_method.to_owned());
-    }
-
-    pub fn copy_from_state(&mut self, mut state: SessionState) {
-        self.server_packet_id = state.server_packet_id;
-
-        mem::swap(&mut state.pending_packets, &mut self.pending_packets);
     }
 }

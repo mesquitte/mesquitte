@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{cmp, fmt::Debug, future::Future, io, sync::Arc};
 
 use mqtt_codec_kit::common::{QualityOfService, TopicName};
 // #[cfg(feature = "v4")]
@@ -11,10 +11,10 @@ use mqtt_codec_kit::v5::{
     packet::PublishPacket as V5PublishPacket,
 };
 
-use super::retain_content::RetainContent;
+use super::retain::RetainContent;
 
 #[derive(Clone, Debug)]
-pub struct PublishMessage {
+pub struct IncomingPublishMessage {
     topic_name: TopicName,
     payload: Vec<u8>,
     qos: QualityOfService,
@@ -23,7 +23,7 @@ pub struct PublishMessage {
     properties: Option<PublishProperties>,
 }
 
-impl PublishMessage {
+impl IncomingPublishMessage {
     pub fn topic_name(&self) -> &TopicName {
         &self.topic_name
     }
@@ -53,7 +53,7 @@ impl PublishMessage {
     }
 }
 
-impl From<V4PublishPacket> for PublishMessage {
+impl From<V4PublishPacket> for IncomingPublishMessage {
     fn from(packet: V4PublishPacket) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
@@ -69,7 +69,7 @@ impl From<V4PublishPacket> for PublishMessage {
     }
 }
 
-impl From<V5PublishPacket> for PublishMessage {
+impl From<V5PublishPacket> for IncomingPublishMessage {
     fn from(packet: V5PublishPacket) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
@@ -85,7 +85,7 @@ impl From<V5PublishPacket> for PublishMessage {
     }
 }
 
-impl From<Arc<RetainContent>> for PublishMessage {
+impl From<Arc<RetainContent>> for IncomingPublishMessage {
     fn from(packet: Arc<RetainContent>) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
@@ -102,7 +102,7 @@ impl From<Arc<RetainContent>> for PublishMessage {
 }
 
 // #[cfg(feature = "v4")]
-impl From<V4LastWill> for PublishMessage {
+impl From<V4LastWill> for IncomingPublishMessage {
     fn from(value: V4LastWill) -> Self {
         let mut payload = vec![0u8; value.message().0.len()];
         payload.copy_from_slice(&value.message().0);
@@ -119,7 +119,7 @@ impl From<V4LastWill> for PublishMessage {
 }
 
 // #[cfg(feature = "v5")]
-impl From<V5LastWill> for PublishMessage {
+impl From<V5LastWill> for IncomingPublishMessage {
     fn from(value: V5LastWill) -> Self {
         let mut payload = vec![0u8; value.message().0.len()];
         payload.copy_from_slice(&value.message().0);
@@ -144,4 +144,105 @@ impl From<V5LastWill> for PublishMessage {
             properties: Some(publish_properties),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct OutgoingPublishMessage {
+    server_packet_id: u16,
+    subscribe_qos: QualityOfService,
+    message: IncomingPublishMessage,
+}
+
+impl OutgoingPublishMessage {
+    pub fn new(
+        server_packet_id: u16,
+        subscribe_qos: QualityOfService,
+        message: IncomingPublishMessage,
+    ) -> Self {
+        Self {
+            server_packet_id,
+            subscribe_qos,
+            message,
+        }
+    }
+
+    pub fn server_packet_id(&self) -> u16 {
+        self.server_packet_id
+    }
+
+    pub fn message(&self) -> &IncomingPublishMessage {
+        &self.message
+    }
+
+    pub fn subscribe_qos(&self) -> QualityOfService {
+        self.subscribe_qos
+    }
+
+    pub fn final_qos(&self) -> QualityOfService {
+        cmp::min(self.message.qos, self.subscribe_qos)
+    }
+}
+
+pub trait MessageStore {
+    fn enqueue_incoming(
+        &self,
+        client_id: &str,
+        packet_id: u16,
+        message: IncomingPublishMessage,
+    ) -> impl Future<Output = Result<bool, io::Error>> + Send;
+
+    fn enqueue_outgoing(
+        &self,
+        client_id: &str,
+        message: OutgoingPublishMessage,
+    ) -> impl Future<Output = Result<bool, io::Error>> + Send;
+
+    fn fetch_pending_outgoing(
+        &self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<Vec<OutgoingPublishMessage>, io::Error>> + Send;
+
+    fn fetch_ready_incoming(
+        &self,
+        client_id: &str,
+        max_inflight: usize,
+    ) -> impl Future<Output = Result<Option<Vec<IncomingPublishMessage>>, io::Error>> + Send;
+
+    fn pubrel(
+        &self,
+        client_id: &str,
+        packet_id: u16,
+    ) -> impl Future<Output = Result<bool, io::Error>> + Send;
+
+    fn puback(
+        &self,
+        client_id: &str,
+        server_packet_id: u16,
+    ) -> impl Future<Output = Result<bool, io::Error>> + Send;
+
+    fn pubrec(
+        &self,
+        client_id: &str,
+        server_packet_id: u16,
+    ) -> impl Future<Output = Result<bool, io::Error>> + Send;
+
+    fn pubcomp(
+        &self,
+        client_id: &str,
+        server_packet_id: u16,
+    ) -> impl Future<Output = Result<bool, io::Error>> + Send;
+
+    fn purge_completed_incoming_messages(
+        &self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<(), io::Error>> + Send;
+
+    fn purge_completed_outgoing_messages(
+        &self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<(), io::Error>> + Send;
+
+    fn is_full(&self, client_id: &str) -> impl Future<Output = Result<bool, io::Error>> + Send;
+
+    fn remove_all(&self, client_id: &str) -> impl Future<Output = Result<(), io::Error>> + Send;
 }

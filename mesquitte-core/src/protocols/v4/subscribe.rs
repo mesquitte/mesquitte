@@ -1,19 +1,29 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::{collections::VecDeque, io, sync::Arc};
 
 use mqtt_codec_kit::v4::packet::{
     suback::SubscribeReturnCode, SubackPacket, SubscribePacket, UnsubackPacket, UnsubscribePacket,
     VariablePacket,
 };
 
-use crate::{server::state::GlobalState, types::session::Session};
+use crate::store::{
+    message::MessageStore,
+    retain::RetainMessageStore,
+    topic::{RouteOption, TopicStore},
+    Storage,
+};
 
-use super::publish::receive_outgoing_publish;
+use super::{publish::receive_outgoing_publish, session::Session};
 
-pub(super) fn handle_subscribe(
+pub(super) async fn handle_subscribe<MS, RS, TS>(
     session: &mut Session,
     packet: SubscribePacket,
-    global: Arc<GlobalState>,
-) -> Vec<VariablePacket> {
+    storage: Arc<Storage<MS, RS, TS>>,
+) -> io::Result<Vec<VariablePacket>>
+where
+    MS: MessageStore + Sync + Send,
+    RS: RetainMessageStore + Sync + Send,
+    TS: TopicStore + Sync + Send,
+{
     log::debug!(
         r#"client#{} received a subscribe packet:
 packet id : {}
@@ -33,13 +43,17 @@ packet id : {}
 
         // TODO: granted max qos from config
         let granted_qos = subscribe_qos.to_owned();
+        storage
+            .topic_store()
+            .subscribe(session.client_id(), filter, RouteOption::V4(granted_qos))
+            .await?;
         session.subscribe(filter.clone());
-        global.subscribe(filter, session.client_id(), granted_qos);
 
-        for msg in global.retain_table().get_matches(filter) {
-            let mut packet = receive_outgoing_publish(session, granted_qos, msg.into());
+        let retain_messages = storage.retain_message_store().search(filter).await?;
+        for msg in retain_messages {
+            let mut packet =
+                receive_outgoing_publish(session, granted_qos, msg.into(), storage.clone()).await?;
             packet.set_retain(true);
-
             retain_packets.push(packet.into());
         }
 
@@ -48,14 +62,17 @@ packet id : {}
 
     let mut queue: VecDeque<VariablePacket> = VecDeque::from(retain_packets);
     queue.push_front(SubackPacket::new(packet.packet_identifier(), return_codes).into());
-    queue.into()
+    Ok(queue.into())
 }
 
-pub(super) fn handle_unsubscribe(
+pub(super) async fn handle_unsubscribe<TS>(
     session: &mut Session,
+    topic_store: &TS,
     packet: &UnsubscribePacket,
-    global: Arc<GlobalState>,
-) -> UnsubackPacket {
+) -> io::Result<UnsubackPacket>
+where
+    TS: TopicStore,
+{
     log::debug!(
         r#"client#{} received a unsubscribe packet:
 packet id : {}
@@ -65,9 +82,9 @@ packet id : {}
         packet.subscribes(),
     );
     for filter in packet.subscribes() {
-        global.unsubscribe(filter, session.client_id());
         session.unsubscribe(filter);
+        topic_store.unsubscribe(session.client_id(), filter).await?;
     }
 
-    UnsubackPacket::new(packet.packet_identifier())
+    Ok(UnsubackPacket::new(packet.packet_identifier()))
 }
