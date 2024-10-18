@@ -1,10 +1,10 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, ToSocketAddrs};
 
-#[cfg(feature = "mqtts")]
-use crate::server::config::TlsConfig;
 use crate::server::{process_client, state::GlobalState};
+#[cfg(feature = "mqtts")]
+use {crate::server::config::TlsConfig, crate::server::rustls::rustls_acceptor, std::path::Path};
 
 use super::Error;
 
@@ -14,7 +14,7 @@ pub struct TcpServer {
 }
 
 impl TcpServer {
-    pub async fn bind(addr: SocketAddr, global: Arc<GlobalState>) -> Result<Self, Error> {
+    pub async fn bind<A: ToSocketAddrs>(addr: A, global: Arc<GlobalState>) -> Result<Self, Error> {
         let listener = TcpListener::bind(addr).await?;
         Ok(Self {
             inner: listener,
@@ -34,9 +34,7 @@ impl TcpServer {
     }
 
     #[cfg(feature = "mqtts")]
-    pub async fn accept_tls(&self, tls: &TlsConfig) -> Result<(), Error> {
-        use crate::server::rustls::rustls_acceptor;
-
+    pub async fn accept_tls<P: AsRef<Path>>(&self, tls: &TlsConfig<P>) -> Result<(), Error> {
         let acceptor = rustls_acceptor(tls)?;
         while let Ok((stream, _addr)) = self.inner.accept().await {
             match acceptor.accept(stream).await {

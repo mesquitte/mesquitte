@@ -1,6 +1,9 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
-use s2n_quic::{provider::tls, Server};
+use s2n_quic::{
+    provider::{io, tls},
+    Server,
+};
 
 use crate::server::{process_client, state::GlobalState};
 
@@ -12,13 +15,13 @@ pub struct QuicServer {
 }
 
 impl QuicServer {
-    pub fn bind<T: tls::TryInto>(
-        addr: SocketAddr,
+    pub fn bind<T: tls::TryInto, A: io::TryInto>(
+        addr: A,
         tls: T,
         global: Arc<GlobalState>,
     ) -> Result<Self, Error>
     where
-        Error: From<<T as tls::TryInto>::Error>,
+        Error: From<<T as tls::TryInto>::Error> + From<<A as io::TryInto>::Error>,
     {
         let server = Server::builder().with_tls(tls)?.with_io(addr)?.start()?;
         Ok(QuicServer {

@@ -1,13 +1,13 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use async_tungstenite::{accept_hdr_async, tokio::TokioAdapter};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, ToSocketAddrs};
 #[cfg(any(feature = "ws", feature = "wss"))]
 use tungstenite::{handshake::server::ErrorResponse, http};
 
-#[cfg(feature = "wss")]
-use crate::server::config::TlsConfig;
 use crate::server::{process_client, state::GlobalState};
+#[cfg(feature = "wss")]
+use {crate::server::config::TlsConfig, crate::server::rustls::rustls_acceptor, std::path::Path};
 
 use super::{ws_stream::WsByteStream, Error};
 
@@ -17,7 +17,7 @@ pub struct WsServer {
 }
 
 impl WsServer {
-    pub async fn bind(addr: SocketAddr, global: Arc<GlobalState>) -> Result<Self, Error> {
+    pub async fn bind<A: ToSocketAddrs>(addr: A, global: Arc<GlobalState>) -> Result<Self, Error> {
         let listener = TcpListener::bind(addr).await?;
         Ok(Self {
             inner: listener,
@@ -37,9 +37,7 @@ impl WsServer {
     }
 
     #[cfg(feature = "wss")]
-    pub async fn accept_tls(&self, tls: &TlsConfig) -> Result<(), Error> {
-        use crate::server::rustls::rustls_acceptor;
-
+    pub async fn accept_tls<P: AsRef<Path>>(&self, tls: &TlsConfig<P>) -> Result<(), Error> {
         let acceptor = rustls_acceptor(tls)?;
         while let Ok((stream, _addr)) = self.inner.accept().await {
             let global = self.global.clone();
@@ -60,6 +58,7 @@ impl WsServer {
     }
 }
 
+#[allow(clippy::result_large_err)]
 #[cfg(any(feature = "ws", feature = "wss"))]
 pub fn ws_callback(
     req: &http::Request<()>,

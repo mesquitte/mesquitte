@@ -6,7 +6,7 @@ mod network;
 mod pool;
 pub mod store;
 
-use std::{fmt::Display, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{fmt::Display, net::SocketAddr, path::Path, sync::Arc};
 
 use app::App;
 use network::Network;
@@ -81,7 +81,7 @@ pub mod typ {
     pub type ClientWriteResponse = openraft::raft::ClientWriteResponse<TypeConfig>;
 }
 
-pub async fn new_raft<P: Into<PathBuf>>(
+pub async fn new_raft<P: AsRef<Path>>(
     node_id: NodeId,
     rpc_addr: SocketAddr,
     api_addr: SocketAddr,

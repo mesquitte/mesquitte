@@ -12,7 +12,7 @@ async fn main() {
 
     let global = Arc::new(GlobalState::new());
     let broker = QuicServer::bind(
-        "0.0.0.0:1883".parse().unwrap(),
+        "0.0.0.0:1883",
         (
             Path::new("mesquitte-core/examples/certs/cert.pem"),
             Path::new("mesquitte-core/examples/certs/key.pem"),
