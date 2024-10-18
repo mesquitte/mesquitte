@@ -98,11 +98,8 @@ pub async fn new_raft<P: AsRef<Path>>(
     let config = Arc::new(config.validate().unwrap());
 
     let (log_store, state_machine_store) = store::new(dir).await;
-    let client_poll = Arc::new(ClientPool::new(10));
-    let network = Network {
-        id: node_id,
-        client_poll,
-    };
+    let client_poll = ClientPool::new(10);
+    let network = Network::new(node_id, client_poll);
     let raft = Raft::new(
         node_id,
         config,

@@ -400,7 +400,7 @@ pub async fn read_write_loop<R, W, MS, RS, TS>(
     let packet = match frame_reader.next().await {
         Some(Ok(VariablePacket::ConnectPacket(packet))) => packet,
         _ => {
-            log::warn!("first packet is not CONNECT packet");
+            log::error!("first packet is not CONNECT packet");
             return;
         }
     };
@@ -414,9 +414,10 @@ pub async fn read_write_loop<R, W, MS, RS, TS>(
             (session, outgoing_rx)
         }
         Err(pkt) => {
-            if let Err(err) = frame_writer.send(pkt).await {
-                log::error!("handle connect write connect ack: {err}");
-            }
+            let _ = frame_writer
+                .send(pkt)
+                .await
+                .map_err(|e| log::error!("handle connect write connect ack: {e}"));
             return;
         }
     };

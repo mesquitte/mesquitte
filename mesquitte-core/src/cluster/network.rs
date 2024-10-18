@@ -1,4 +1,4 @@
-use std::{future::Future, net::SocketAddr, sync::Arc};
+use std::{future::Future, net::SocketAddr};
 
 use backon::{ExponentialBuilder, Retryable};
 use log::{info, warn};
@@ -21,10 +21,24 @@ pub struct Connection {
     node_id: NodeId,
     target: NodeId,
     target_addr: SocketAddr,
-    client_poll: Arc<ClientPool>,
+    client_poll: ClientPool,
 }
 
 impl Connection {
+    pub fn new(
+        node_id: NodeId,
+        target: NodeId,
+        target_addr: SocketAddr,
+        client_poll: &ClientPool,
+    ) -> Self {
+        Self {
+            node_id,
+            target,
+            target_addr,
+            client_poll: client_poll.clone(),
+        }
+    }
+
     async fn take_client(&mut self) -> Result<mobc::Connection<RPCClientManager>, Unreachable> {
         info!(
             "take client to target: {}-{}",
@@ -46,7 +60,13 @@ impl Connection {
 }
 pub struct Network {
     pub id: NodeId,
-    pub client_poll: Arc<ClientPool>,
+    pub client_poll: ClientPool,
+}
+
+impl Network {
+    pub fn new(id: NodeId, client_poll: ClientPool) -> Self {
+        Self { id, client_poll }
+    }
 }
 
 impl RaftNetworkFactory<TypeConfig> for Network {
@@ -55,12 +75,7 @@ impl RaftNetworkFactory<TypeConfig> for Network {
     async fn new_client(&mut self, target: NodeId, node: &Node) -> Self::Network {
         info!("new client to target {}, addr {}", target, node.rpc_addr);
         let addr: SocketAddr = node.rpc_addr.parse().unwrap();
-        Connection {
-            node_id: self.id,
-            target,
-            target_addr: addr,
-            client_poll: self.client_poll.clone(),
-        }
+        Connection::new(self.id, target, addr, &self.client_poll)
     }
 }
 
