@@ -45,15 +45,7 @@ rustls = [
     "rustls-pemfile",
     "tokio-rustls/aws-lc-rs",
 ]
-cluster = [
-    "axum",
-    "backon",
-    "bincode",
-    "mobc",
-    "openraft",
-    "rust-rocksdb",
-    "tarpc",
-]
+cluster = ["axum", "backon", "bincode", "mobc", "openraft", "tarpc"]
 rocksdb-storage = ["rust-rocksdb"]
 heed-storage = ["heed", "tokio/fs"]
 
