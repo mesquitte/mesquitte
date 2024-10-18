@@ -53,7 +53,7 @@ where
     }
 }
 
-pub trait RetainMessageStore {
+pub trait RetainMessageStore: Send + Sync {
     fn search(
         &self,
         topic_filter: &TopicFilter,

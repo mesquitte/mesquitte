@@ -16,9 +16,9 @@ use super::{ws_stream::WsByteStream, Error};
 
 pub struct WsServer<MS, RS, TS>
 where
-    MS: MessageStore + Sync + Send + 'static,
-    RS: RetainMessageStore + Sync + Send + 'static,
-    TS: TopicStore + Sync + Send + 'static,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     inner: TcpListener,
     global: Arc<GlobalState>,
@@ -27,9 +27,9 @@ where
 
 impl<MS, RS, TS> WsServer<MS, RS, TS>
 where
-    MS: MessageStore + Sync + Send + 'static,
-    RS: RetainMessageStore + Sync + Send + 'static,
-    TS: TopicStore + Sync + Send + 'static,
+    MS: MessageStore + 'static,
+    RS: RetainMessageStore + 'static,
+    TS: TopicStore + 'static,
 {
     pub async fn bind<A: ToSocketAddrs>(
         addr: A,

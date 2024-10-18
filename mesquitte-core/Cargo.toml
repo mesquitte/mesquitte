@@ -32,7 +32,7 @@ path = "tests/raft_test.rs"
 required-features = ["cluster", "heed-storage"]
 
 [features]
-default = ["mqtt", "ws", "cluster", "heed-storage"]
+default = ["mqtt", "ws", "quic", "cluster", "heed-storage"]
 
 mqtt = []
 mqtts = ["rustls"]

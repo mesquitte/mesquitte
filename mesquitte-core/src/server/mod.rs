@@ -25,9 +25,9 @@ async fn process_client<S, MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) where
     S: AsyncRead + AsyncWrite + Send + 'static,
-    MS: MessageStore + Sync + Send + 'static,
-    RS: RetainMessageStore + Sync + Send + 'static,
-    TS: TopicStore + Sync + Send + 'static,
+    MS: MessageStore + 'static,
+    RS: RetainMessageStore + 'static,
+    TS: TopicStore + 'static,
 {
     let (rd, wr) = split(stream);
     read_write_loop(rd, wr, global, storage).await;

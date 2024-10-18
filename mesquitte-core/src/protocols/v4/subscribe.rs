@@ -20,9 +20,9 @@ pub(super) async fn handle_subscribe<MS, RS, TS>(
     storage: Arc<Storage<MS, RS, TS>>,
 ) -> io::Result<Vec<VariablePacket>>
 where
-    MS: MessageStore + Sync + Send,
-    RS: RetainMessageStore + Sync + Send,
-    TS: TopicStore + Sync + Send,
+    MS: MessageStore,
+    RS: RetainMessageStore,
+    TS: TopicStore,
 {
     log::debug!(
         r#"client#{} received a subscribe packet:
