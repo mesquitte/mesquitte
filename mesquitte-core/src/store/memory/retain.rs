@@ -1,6 +1,6 @@
-use std::{future::Future, io, mem, sync::Arc};
+use std::{io, mem, sync::Arc};
 
-use foldhash::{HashMap, HashMapExt};
+use foldhash::HashMap;
 use mqtt_codec_kit::common::{
     TopicName, LEVEL_SEP, MATCH_ALL_CHAR, MATCH_ALL_STR, MATCH_ONE_CHAR, MATCH_ONE_STR,
 };
@@ -22,19 +22,9 @@ struct RetainNode {
     nodes: RwLock<HashMap<String, RetainNode>>,
 }
 
+#[derive(Default)]
 pub struct RetainMessageMemoryStore {
     inner: RetainNode,
-}
-
-impl RetainMessageMemoryStore {
-    pub fn new() -> Self {
-        Self {
-            inner: RetainNode {
-                content: None,
-                nodes: RwLock::new(HashMap::new()),
-            },
-        }
-    }
 }
 
 impl RetainNode {
@@ -139,43 +129,37 @@ impl RetainNode {
 }
 
 impl RetainMessageStore for RetainMessageMemoryStore {
-    fn search(
+    async fn search(
         &self,
         topic_filter: &mqtt_codec_kit::common::TopicFilter,
-    ) -> impl Future<Output = Result<Vec<Arc<RetainContent>>, io::Error>> + Send {
-        async move {
-            // [MQTT-4.7.2-1] The Server MUST NOT match Topic Filters starting with a
-            // wildcard character (# or +) with Topic Names beginning with a $ character
-            let wildcard_first = topic_filter.starts_with([MATCH_ONE_CHAR, MATCH_ALL_CHAR]);
+    ) -> Result<Vec<Arc<RetainContent>>, io::Error> {
+        // [MQTT-4.7.2-1] The Server MUST NOT match Topic Filters starting with a
+        // wildcard character (# or +) with Topic Names beginning with a $ character
+        let wildcard_first = topic_filter.starts_with([MATCH_ONE_CHAR, MATCH_ALL_CHAR]);
 
-            let (filter_item, rest_items) = split_topic(topic_filter);
-            let mut retains = Vec::new();
-            self.inner
-                .get_matches(filter_item, rest_items, wildcard_first, &mut retains);
+        let (filter_item, rest_items) = split_topic(topic_filter);
+        let mut retains = Vec::new();
+        self.inner
+            .get_matches(filter_item, rest_items, wildcard_first, &mut retains);
 
-            Ok(retains)
-        }
+        Ok(retains)
     }
 
-    fn insert(
+    async fn insert(
         &self,
         content: RetainContent,
-    ) -> impl Future<Output = Result<Option<Arc<RetainContent>>, io::Error>> + Send {
-        async move {
-            let topic_name = content.topic_name().to_owned();
-            let (topic_item, rest_items) = split_topic(&topic_name);
+    ) -> Result<Option<Arc<RetainContent>>, io::Error> {
+        let topic_name = content.topic_name().to_owned();
+        let (topic_item, rest_items) = split_topic(&topic_name);
 
-            Ok(self.inner.insert(topic_item, rest_items, Arc::new(content)))
-        }
+        Ok(self.inner.insert(topic_item, rest_items, Arc::new(content)))
     }
 
-    fn remove(
+    async fn remove(
         &self,
         topic_name: &TopicName,
-    ) -> impl Future<Output = Result<Option<Arc<RetainContent>>, io::Error>> + Send {
-        async move {
-            let (topic_item, rest_items) = split_topic(topic_name);
-            Ok(self.inner.remove(topic_item, rest_items))
-        }
+    ) -> Result<Option<Arc<RetainContent>>, io::Error> {
+        let (topic_item, rest_items) = split_topic(topic_name);
+        Ok(self.inner.remove(topic_item, rest_items))
     }
 }
