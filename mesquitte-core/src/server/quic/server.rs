@@ -12,28 +12,24 @@ use crate::{
 
 use super::Error;
 
-pub struct QuicServer<MS, RS, TS>
+pub struct QuicServer<S>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     inner: Server,
     global: Arc<GlobalState>,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 }
 
-impl<MS, RS, TS> QuicServer<MS, RS, TS>
+impl<S> QuicServer<S>
 where
-    MS: MessageStore + 'static,
-    RS: RetainMessageStore + 'static,
-    TS: TopicStore + 'static,
+    S: MessageStore + RetainMessageStore + TopicStore + 'static,
 {
     pub fn bind<T: tls::TryInto, A: io::TryInto>(
         addr: A,
         tls: T,
         global: Arc<GlobalState>,
-        storage: Arc<Storage<MS, RS, TS>>,
+        storage: Arc<Storage<S>>,
     ) -> Result<Self, Error>
     where
         Error: From<<T as tls::TryInto>::Error> + From<<A as io::TryInto>::Error>,

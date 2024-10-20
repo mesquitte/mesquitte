@@ -57,12 +57,6 @@ pub struct GlobalState {
 }
 
 impl GlobalState {
-    pub fn new() -> Self {
-        Self {
-            ..Default::default()
-        }
-    }
-
     pub async fn add_client(
         &self,
         client_id: &str,

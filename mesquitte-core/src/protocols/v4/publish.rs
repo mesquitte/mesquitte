@@ -22,16 +22,14 @@ use crate::{
 
 use super::session::Session;
 
-pub(super) async fn handle_publish<MS, RS, TS>(
+pub(super) async fn handle_publish<S>(
     session: &mut Session,
     packet: PublishPacket,
     global: Arc<GlobalState>,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 ) -> io::Result<(bool, Option<VariablePacket>)>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     log::debug!(
         r#"client#{} received a publish packet:
@@ -85,7 +83,7 @@ topic name : {:?}
         QoSWithPacketIdentifier::Level2(packet_id) => {
             if !packet.dup() {
                 storage
-                    .message_store()
+                    .inner
                     .enqueue_incoming(session.client_id(), packet_id, packet.into())
                     .await?;
             }
@@ -95,16 +93,14 @@ topic name : {:?}
 }
 
 // Dispatch a publish message from client or will to matched clients
-pub(super) async fn dispatch_publish<MS, RS, TS>(
+pub(super) async fn dispatch_publish<S>(
     session: &mut Session,
     packet: IncomingPublishMessage,
     global: Arc<GlobalState>,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 ) -> io::Result<()>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     log::debug!(
         r#"client#{} dispatch publish message:
@@ -121,18 +117,15 @@ topic name : {:?}
 
     if packet.retain() {
         if packet.payload().is_empty() {
-            storage
-                .retain_message_store()
-                .remove(packet.topic_name())
-                .await?;
+            storage.inner.remove(packet.topic_name()).await?;
         } else {
             storage
-                .retain_message_store()
+                .inner
                 .insert((session.client_id(), &packet).into())
                 .await?;
         }
     }
-    let matches = storage.topic_store().search(packet.topic_name()).await?;
+    let matches = TopicStore::search(&storage.inner, packet.topic_name()).await?;
     let mut senders = Vec::with_capacity(matches.normal_clients.len());
     for (client_id, opt) in matches.normal_clients {
         match opt {
@@ -166,15 +159,13 @@ topic name : {:?}
     Ok(())
 }
 
-pub(super) async fn handle_pubrel<MS, RS, TS>(
+pub(super) async fn handle_pubrel<S>(
     session: &mut Session,
     packet_id: u16,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 ) -> io::Result<PubcompPacket>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     log::debug!(
         "client#{} received a pubrel packet, id : {}",
@@ -182,24 +173,19 @@ where
         packet_id
     );
 
-    storage
-        .message_store()
-        .pubrel(session.client_id(), packet_id)
-        .await?;
+    storage.inner.pubrel(session.client_id(), packet_id).await?;
 
     Ok(PubcompPacket::new(packet_id))
 }
 
-pub(super) async fn receive_outgoing_publish<MS, RS, TS>(
+pub(super) async fn receive_outgoing_publish<S>(
     session: &mut Session,
     subscribe_qos: QualityOfService,
     message: IncomingPublishMessage,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 ) -> io::Result<PublishPacket>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     log::debug!(
         r#"client#{} receive outgoing publish message:
@@ -233,7 +219,7 @@ topic name : {:?}
     if let Some(packet_id) = packet_id {
         let m = OutgoingPublishMessage::new(packet_id, subscribe_qos, message);
         storage
-            .message_store()
+            .inner
             .enqueue_outgoing(session.client_id(), m)
             .await?;
     }
@@ -241,15 +227,13 @@ topic name : {:?}
     Ok(packet)
 }
 
-pub(super) async fn handle_puback<MS, RS, TS>(
+pub(super) async fn handle_puback<S>(
     session: &mut Session,
     packet_id: u16,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 ) -> io::Result<()>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     log::debug!(
         "client#{} received a puback packet, id : {}",
@@ -257,23 +241,18 @@ where
         packet_id
     );
 
-    storage
-        .message_store()
-        .puback(session.client_id(), packet_id)
-        .await?;
+    storage.inner.puback(session.client_id(), packet_id).await?;
 
     Ok(())
 }
 
-pub(super) async fn handle_pubrec<MS, RS, TS>(
+pub(super) async fn handle_pubrec<S>(
     session: &mut Session,
     packet_id: u16,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 ) -> io::Result<PubrelPacket>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     log::debug!(
         "client#{} received a pubrec packet, id : {}",
@@ -281,23 +260,18 @@ where
         packet_id
     );
 
-    storage
-        .message_store()
-        .pubrec(session.client_id(), packet_id)
-        .await?;
+    storage.inner.pubrec(session.client_id(), packet_id).await?;
 
     Ok(PubrelPacket::new(packet_id))
 }
 
-pub(super) async fn handle_pubcomp<MS, RS, TS>(
+pub(super) async fn handle_pubcomp<S>(
     session: &mut Session,
     packet_id: u16,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 ) -> io::Result<()>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     log::debug!(
         "client#{} received a pubcomp packet, id : {}",
@@ -306,22 +280,20 @@ where
     );
 
     storage
-        .message_store()
+        .inner
         .pubcomp(session.client_id(), packet_id)
         .await?;
 
     Ok(())
 }
 
-pub(super) async fn handle_will<MS, RS, TS>(
+pub(super) async fn handle_will<S>(
     session: &mut Session,
     global: Arc<GlobalState>,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 ) -> io::Result<()>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     log::debug!(
         r#"client#{} handle last will:
@@ -341,18 +313,16 @@ server side disconnected : {}
     Ok(())
 }
 
-pub(crate) async fn get_outgoing_packets<MS, RS, TS>(
+pub(crate) async fn get_outgoing_packets<S>(
     session: &mut Session,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 ) -> io::Result<Vec<PublishPacket>>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     let mut packets = Vec::new();
     let messages = storage
-        .message_store()
+        .inner
         .fetch_pending_outgoing(session.client_id())
         .await?;
     for msg in messages {

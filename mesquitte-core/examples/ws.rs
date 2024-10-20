@@ -5,6 +5,7 @@ use mesquitte_core::{
     store::{
         memory::{
             message::MessageMemoryStore, retain::RetainMessageMemoryStore, topic::TopicMemoryStore,
+            MemoryStore,
         },
         Storage,
     },
@@ -18,13 +19,14 @@ async fn main() -> io::Result<()> {
     );
     env_logger::init();
 
-    let global = Arc::new(GlobalState::new());
+    let global = Arc::new(GlobalState::default());
 
     let topic_store = TopicMemoryStore::default();
     let message_store = MessageMemoryStore::new(102400, 30);
-    let retain_message = RetainMessageMemoryStore::default();
+    let retain_message_store = RetainMessageMemoryStore::default();
 
-    let storage = Arc::new(Storage::new(message_store, retain_message, topic_store));
+    let mem_store = MemoryStore::new(message_store, retain_message_store, topic_store);
+    let storage = Arc::new(Storage::new(mem_store));
 
     let broker = WsServer::bind("0.0.0.0:6666", global, storage)
         .await
