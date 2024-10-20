@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use tokio::net::{TcpListener, ToSocketAddrs};
 
 use crate::{
-    server::{process_client, state::GlobalState},
+    server::{config::ServerConfig, process_client, state::GlobalState},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
 #[cfg(feature = "mqtts")]
@@ -11,31 +11,32 @@ use {crate::server::config::TlsConfig, crate::server::rustls::rustls_acceptor, s
 
 use super::Error;
 
-pub struct TcpServer<MS, RS, TS>
+pub struct TcpServer<P, S>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    P: AsRef<Path>,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     inner: TcpListener,
+    config: ServerConfig<P>,
     global: Arc<GlobalState>,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 }
 
-impl<MS, RS, TS> TcpServer<MS, RS, TS>
+impl<P, S> TcpServer<P, S>
 where
-    MS: MessageStore + 'static,
-    RS: RetainMessageStore + 'static,
-    TS: TopicStore + 'static,
+    P: AsRef<Path>,
+    S: MessageStore + RetainMessageStore + TopicStore + 'static,
 {
     pub async fn bind<A: ToSocketAddrs>(
         addr: A,
+        config: ServerConfig<P>,
         global: Arc<GlobalState>,
-        storage: Arc<Storage<MS, RS, TS>>,
+        storage: Arc<Storage<S>>,
     ) -> Result<Self, Error> {
         let listener = TcpListener::bind(addr).await?;
         Ok(Self {
             inner: listener,
+            config,
             global,
             storage,
         })

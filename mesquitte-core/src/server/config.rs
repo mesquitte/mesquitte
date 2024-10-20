@@ -1,14 +1,19 @@
-use std::{net::SocketAddr, path::Path};
+use std::path::Path;
 
 #[derive(Clone, Debug)]
 pub struct ServerConfig<P: AsRef<Path>> {
-    pub addr: SocketAddr,
+    pub addr: String,
     pub tls: Option<TlsConfig<P>>,
+    pub version: String,
 }
 
 impl<P: AsRef<Path>> ServerConfig<P> {
-    pub fn new(addr: SocketAddr, tls: Option<TlsConfig<P>>) -> Self {
-        Self { addr, tls }
+    pub fn new(addr: String, tls: Option<TlsConfig<P>>, version: &str) -> Self {
+        Self {
+            addr,
+            tls,
+            version: version.to_string(),
+        }
     }
 }
 

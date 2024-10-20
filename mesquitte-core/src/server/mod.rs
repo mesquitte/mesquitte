@@ -4,7 +4,7 @@ use state::GlobalState;
 use tokio::io::{split, AsyncRead, AsyncWrite};
 
 use crate::{
-    protocols::v4::read_write_loop::read_write_loop,
+    protocols,
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
 
@@ -19,16 +19,17 @@ pub mod tcp;
 #[cfg(any(feature = "ws", feature = "wss"))]
 pub mod ws;
 
-async fn process_client<S, MS, RS, TS>(
-    stream: S,
-    global: Arc<GlobalState>,
-    storage: Arc<Storage<MS, RS, TS>>,
-) where
+async fn process_client<S, T>(stream: S, global: Arc<GlobalState>, storage: Arc<Storage<T>>)
+where
     S: AsyncRead + AsyncWrite + Send + 'static,
-    MS: MessageStore + 'static,
-    RS: RetainMessageStore + 'static,
-    TS: TopicStore + 'static,
+    T: MessageStore + RetainMessageStore + TopicStore + 'static,
 {
     let (rd, wr) = split(stream);
-    read_write_loop(rd, wr, global, storage).await;
+    cfg_if::cfg_if! {
+        if #[cfg(feature="v4")] {
+            protocols::v4::read_write_loop::read_write_loop(rd, wr, global, storage).await;
+        } else if #[cfg(feature="v5")] {
+            protocols::v5::read_write_loop::read_write_loop(rd, wr, global, storage).await;
+        }
+    }
 }

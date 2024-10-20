@@ -14,15 +14,13 @@ use crate::store::{
 
 use super::{publish::receive_outgoing_publish, session::Session};
 
-pub(super) async fn handle_subscribe<MS, RS, TS>(
+pub(super) async fn handle_subscribe<S>(
     session: &mut Session,
     packet: SubscribePacket,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 ) -> io::Result<Vec<VariablePacket>>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     log::debug!(
         r#"client#{} received a subscribe packet:
@@ -44,12 +42,12 @@ packet id : {}
         // TODO: granted max qos from config
         let granted_qos = subscribe_qos.to_owned();
         storage
-            .topic_store()
+            .inner
             .subscribe(session.client_id(), filter, RouteOption::V4(granted_qos))
             .await?;
         session.subscribe(filter.clone());
 
-        let retain_messages = storage.retain_message_store().search(filter).await?;
+        let retain_messages = RetainMessageStore::search(&storage.inner, filter).await?;
         for msg in retain_messages {
             let mut packet =
                 receive_outgoing_publish(session, granted_qos, msg.into(), storage.clone()).await?;
@@ -65,13 +63,13 @@ packet id : {}
     Ok(queue.into())
 }
 
-pub(super) async fn handle_unsubscribe<TS>(
+pub(super) async fn handle_unsubscribe<S>(
     session: &mut Session,
-    topic_store: &TS,
+    store: Arc<Storage<S>>,
     packet: &UnsubscribePacket,
 ) -> io::Result<UnsubackPacket>
 where
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     log::debug!(
         r#"client#{} received a unsubscribe packet:
@@ -83,7 +81,7 @@ packet id : {}
     );
     for filter in packet.subscribes() {
         session.unsubscribe(filter);
-        topic_store.unsubscribe(session.client_id(), filter).await?;
+        store.inner.unsubscribe(session.client_id(), filter).await?;
     }
 
     Ok(UnsubackPacket::new(packet.packet_identifier()))

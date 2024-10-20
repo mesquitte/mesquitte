@@ -14,27 +14,23 @@ use {crate::server::config::TlsConfig, crate::server::rustls::rustls_acceptor, s
 
 use super::{ws_stream::WsByteStream, Error};
 
-pub struct WsServer<MS, RS, TS>
+pub struct WsServer<S>
 where
-    MS: MessageStore,
-    RS: RetainMessageStore,
-    TS: TopicStore,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     inner: TcpListener,
     global: Arc<GlobalState>,
-    storage: Arc<Storage<MS, RS, TS>>,
+    storage: Arc<Storage<S>>,
 }
 
-impl<MS, RS, TS> WsServer<MS, RS, TS>
+impl<S> WsServer<S>
 where
-    MS: MessageStore + 'static,
-    RS: RetainMessageStore + 'static,
-    TS: TopicStore + 'static,
+    S: MessageStore + RetainMessageStore + TopicStore + 'static,
 {
     pub async fn bind<A: ToSocketAddrs>(
         addr: A,
         global: Arc<GlobalState>,
-        storage: Arc<Storage<MS, RS, TS>>,
+        storage: Arc<Storage<S>>,
     ) -> Result<Self, Error> {
         let listener = TcpListener::bind(addr).await?;
         Ok(Self {

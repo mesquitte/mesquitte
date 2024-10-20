@@ -32,8 +32,10 @@ path = "tests/raft_test.rs"
 required-features = ["cluster", "heed-storage"]
 
 [features]
-default = ["mqtt", "ws", "quic", "cluster", "heed-storage"]
+default = ["v4", "mqtt", "ws", "quic", "cluster", "heed-storage"]
 
+v4 = []
+v5 = []
 mqtt = []
 mqtts = ["rustls"]
 ws = ["async-tungstenite", "futures", "tungstenite"]
@@ -61,6 +63,7 @@ axum = { workspace = true, features = [
 backon = { workspace = true, features = ["tokio-sleep"], optional = true }
 bincode = { workspace = true, optional = true }
 byteorder.workspace = true
+cfg-if.workspace = true
 dashmap.workspace = true
 flume = { workspace = true, features = ["async"] }
 foldhash.workspace = true
