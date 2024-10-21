@@ -244,5 +244,7 @@ pub trait MessageStore: Send + Sync {
 
     fn is_full(&self, client_id: &str) -> impl Future<Output = Result<bool, io::Error>> + Send;
 
+    fn len(&self, client_id: &str) -> impl Future<Output = Result<usize, io::Error>> + Send;
+
     fn remove_all(&self, client_id: &str) -> impl Future<Output = Result<(), io::Error>> + Send;
 }

@@ -313,7 +313,7 @@ server side disconnected : {}
     Ok(())
 }
 
-pub(crate) async fn get_outgoing_packets<S>(
+pub(crate) async fn fetch_pending_outgoing_messages<S>(
     session: &mut Session,
     storage: Arc<Storage<S>>,
 ) -> io::Result<Vec<PublishPacket>>

@@ -14,7 +14,7 @@ pub enum RouteOption {
 #[derive(Debug, Clone)]
 pub struct RouteContent {
     pub normal_clients: Vec<(String, RouteOption)>,
-    pub shared_clients: HashMap<String, Vec<(String, RouteOption)>>,
+    pub shared_clients: HashMap<String, HashMap<String, RouteOption>>,
 }
 
 pub trait TopicStore: Send + Sync {
