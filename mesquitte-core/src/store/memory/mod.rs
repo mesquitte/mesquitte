@@ -119,6 +119,10 @@ impl MessageStore for MemoryStore {
         self.message_store.is_full(client_id).await
     }
 
+    async fn len(&self, client_id: &str) -> Result<usize, std::io::Error> {
+        self.message_store.len(client_id).await
+    }
+
     async fn remove_all(&self, client_id: &str) -> Result<(), std::io::Error> {
         self.message_store.remove_all(client_id).await
     }

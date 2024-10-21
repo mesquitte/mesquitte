@@ -1,25 +1,38 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::{collections::VecDeque, io, sync::Arc};
 
-use mqtt_codec_kit::{
-    common::QualityOfService,
-    v5::{
-        control::DisconnectReasonCode,
-        packet::{
-            suback::SubscribeReasonCode, subscribe::RetainHandling, DisconnectPacket, SubackPacket,
-            SubscribePacket, UnsubackPacket, UnsubscribePacket, VariablePacket,
-        },
+use mqtt_codec_kit::{common::QualityOfService, v5::{
+    control::DisconnectReasonCode,
+    packet::{
+        suback::SubscribeReasonCode, subscribe::RetainHandling, DisconnectPacket, SubackPacket,
+        SubscribePacket, UnsubackPacket, UnsubscribePacket, VariablePacket,
+    },
+}};
+
+use crate::{
+    protocols::v5::common::build_error_disconnect,
+    store::{
+        message::MessageStore,
+        retain::RetainMessageStore,
+        topic::{RouteOption, TopicStore},
+        Storage,
     },
 };
 
-use crate::server::state::GlobalState;
+use super::{publish::receive_outgoing_publish, session::Session};
 
-use super::{common::build_error_disconnect, publish::receive_outgoing_publish, session::Session};
+pub(super) enum SubscribeAck {
+    Success(Vec<VariablePacket>),
+    Disconnect(DisconnectPacket),
+}
 
-pub(super) async fn handle_subscribe(
+pub(super) async fn handle_subscribe<S>(
     session: &mut Session,
     packet: SubscribePacket,
-    global: Arc<GlobalState>,
-) -> Result<Vec<VariablePacket>, DisconnectPacket> {
+    storage: Arc<Storage<S>>,
+) -> io::Result<SubscribeAck>
+where
+    S: MessageStore + RetainMessageStore + TopicStore,
+{
     log::debug!(
         r#"{} received a subscribe packet:
  packet id : {}
@@ -38,7 +51,7 @@ properties : {:?}"#,
             DisconnectReasonCode::ProtocolError,
             "Subscription identifier value=0 is not allowed",
         );
-        return Err(disconnect_packet);
+        return Ok(SubscribeAck::Disconnect(disconnect_packet));
     }
 
     // TODO: config subscription identifier available false
@@ -53,8 +66,15 @@ properties : {:?}"#,
 
         let granted_qos = subscribe_opts.qos().to_owned();
         // TODO: granted max qos from config
+        storage
+            .inner
+            .subscribe(
+                session.client_id(),
+                filter,
+                RouteOption::V5(subscribe_opts.clone()),
+            )
+            .await?;
         let exist = session.subscribe(filter.clone());
-        global.subscribe(filter, session.client_id(), granted_qos);
 
         // TODO: config: retain available?
         let send_retain = !filter.is_shared()
@@ -65,12 +85,15 @@ properties : {:?}"#,
             };
 
         if send_retain {
-            for msg in global.retain_table().get_matches(filter) {
+            let retain_messages = RetainMessageStore::search(&storage.inner, filter).await?;
+            for msg in retain_messages {
                 if subscribe_opts.no_local && msg.client_id().eq(session.client_id()) {
                     continue;
                 }
 
-                let mut packet = receive_outgoing_publish(session, granted_qos, msg.into());
+                let mut packet =
+                    receive_outgoing_publish(session, granted_qos, msg.into(), storage.clone())
+                        .await?;
                 packet.set_retain(true);
 
                 retain_packets.push(packet.into());
@@ -85,18 +108,22 @@ properties : {:?}"#,
 
         reason_codes.push(reason_code);
     }
+
     let mut queue: VecDeque<VariablePacket> = VecDeque::from(retain_packets);
     let suback_packet = SubackPacket::new(packet.packet_identifier(), reason_codes);
     // TODO: user properties
     queue.push_front(suback_packet.into());
-    Ok(queue.into())
+    Ok(SubscribeAck::Success(queue.into()))
 }
 
-pub(super) async fn handle_unsubscribe(
+pub(super) async fn handle_unsubscribe<S>(
     session: &mut Session,
+    store: Arc<Storage<S>>,
     packet: &UnsubscribePacket,
-    global: Arc<GlobalState>,
-) -> UnsubackPacket {
+) -> io::Result<UnsubackPacket>
+where
+    S: MessageStore + RetainMessageStore + TopicStore,
+{
     log::debug!(
         r#"client#{} received a unsubscribe packet:
 packet id : {}
@@ -108,9 +135,12 @@ packet id : {}
 
     let reason_codes = Vec::new();
     for filter in packet.subscribes() {
-        global.unsubscribe(filter, session.client_id());
         session.unsubscribe(filter);
+        store.inner.unsubscribe(session.client_id(), filter).await?;
     }
 
-    UnsubackPacket::new(packet.packet_identifier(), reason_codes)
+    Ok(UnsubackPacket::new(
+        packet.packet_identifier(),
+        reason_codes,
+    ))
 }

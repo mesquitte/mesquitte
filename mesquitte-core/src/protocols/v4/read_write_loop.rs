@@ -20,8 +20,8 @@ use crate::{
 use super::{
     connect::{handle_connect, handle_disconnect},
     publish::{
-        get_outgoing_packets, handle_puback, handle_pubcomp, handle_publish, handle_pubrec,
-        handle_pubrel, receive_outgoing_publish,
+        fetch_pending_outgoing_messages, handle_puback, handle_pubcomp, handle_publish,
+        handle_pubrec, handle_pubrel, receive_outgoing_publish,
     },
     session::Session,
     subscribe::{handle_subscribe, handle_unsubscribe},
@@ -61,10 +61,13 @@ where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
     global.remove_client(session.client_id());
-    storage
-        .inner
-        .unsubscribe_topics(session.client_id(), session.subscriptions())
-        .await?;
+    if session.clean_session() {
+        storage
+            .inner
+            .unsubscribe_topics(session.client_id(), session.subscriptions())
+            .await?;
+        storage.inner.remove_all(session.client_id()).await?;
+    }
 
     Ok(())
 }
@@ -176,9 +179,10 @@ where
                     session.client_id(),
                 );
             }
-            should_stop = true;
 
             remove_client(session, global.clone(), storage.clone()).await?;
+
+            should_stop = true;
 
             if session.disconnected() {
                 None
@@ -196,9 +200,9 @@ where
             if session.disconnected() && !session.clean_session() {
                 None
             } else {
-                should_stop = true;
-
                 remove_client(session, global.clone(), storage.clone()).await?;
+
+                should_stop = true;
 
                 Some(DisconnectPacket::new().into())
             }
@@ -282,7 +286,6 @@ async fn write_to_client<T, E, S>(
     E: Encoder<VariablePacket, Error = io::Error>,
     S: MessageStore + RetainMessageStore + TopicStore + 'static,
 {
-    session.set_clean_session(true);
     if session.keep_alive() > 0 {
         let half_interval = Duration::from_millis(session.keep_alive() as u64 * 500);
         let mut keep_alive_tick = interval_at(Instant::now() + half_interval, half_interval);
@@ -408,7 +411,7 @@ pub async fn read_write_loop<R, W, S>(
         }
     };
 
-    match get_outgoing_packets(&mut session, storage.clone()).await {
+    match fetch_pending_outgoing_messages(&mut session, storage.clone()).await {
         Ok(packets) => {
             for pkt in packets {
                 if let Err(err) = frame_writer.send(pkt).await {
@@ -443,5 +446,6 @@ pub async fn read_write_loop<R, W, S>(
     if tokio::try_join!(&mut read_task, &mut write_task).is_err() {
         log::warn!("read_task/write_task terminated");
         read_task.abort();
+        write_task.abort();
     };
 }

@@ -303,6 +303,22 @@ impl MessageStore for MessageMemoryStore {
         Ok(x + y > self.max_packets)
     }
 
+    async fn len(&self, client_id: &str) -> Result<usize, io::Error> {
+        let incoming_guard = &self.incoming;
+        let outgoing_guard = &self.outgoing;
+
+        let x = match incoming_guard.read().get(client_id) {
+            Some(v) => v.len(),
+            None => 0,
+        };
+        let y = match outgoing_guard.read().get(client_id) {
+            Some(v) => v.len(),
+            None => 0,
+        };
+
+        Ok(x + y)
+    }
+
     async fn remove_all(&self, client_id: &str) -> Result<(), io::Error> {
         self.outgoing.write().remove(client_id);
         self.incoming.write().remove(client_id);
