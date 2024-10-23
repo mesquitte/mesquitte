@@ -31,13 +31,13 @@ encodable_packet!(SubscribePacket(packet_identifier, payload));
 
 impl SubscribePacket {
     pub fn new(pkid: u16, subscribes: Vec<(TopicFilter, QualityOfService)>) -> SubscribePacket {
-        let mut pk = SubscribePacket {
+        let mut pkt = SubscribePacket {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::Subscribe), 0),
             packet_identifier: PacketIdentifier(pkid),
             payload: SubscribePacketPayload::new(subscribes),
         };
-        pk.fix_header_remaining_len();
-        pk
+        pkt.fix_header_remaining_len();
+        pkt
     }
 
     pub fn packet_identifier(&self) -> u16 {

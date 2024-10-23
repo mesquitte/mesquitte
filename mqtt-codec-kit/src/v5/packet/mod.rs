@@ -583,17 +583,15 @@ mod test {
         use tokio_util::codec::{FramedRead, FramedWrite};
 
         let conn_packet = ConnectPacket::new("1234".to_owned());
+        let mut subscribe_options = SubscribeOptions::default();
+        subscribe_options.set_qos(QualityOfService::Level0);
+        subscribe_options.set_no_local(false);
+        subscribe_options.set_retain_as_published(false);
+        subscribe_options.set_retain_handling(RetainHandling::SendAtSubscribe);
+
         let sub_packet = SubscribePacket::new(
             1,
-            vec![(
-                TopicFilter::new("foo/#").unwrap(),
-                SubscribeOptions {
-                    qos: QualityOfService::Level0,
-                    no_local: false,
-                    retain_as_published: false,
-                    retain_handling: RetainHandling::SendAtSubscribe,
-                },
-            )],
+            vec![(TopicFilter::new("foo/#").unwrap(), subscribe_options)],
         );
 
         // small, to make sure buffering and stuff works

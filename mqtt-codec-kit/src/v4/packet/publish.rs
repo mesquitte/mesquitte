@@ -32,14 +32,14 @@ impl PublishPacket {
         payload: P,
     ) -> PublishPacket {
         let (qos, pkid) = qos.split();
-        let mut pk = PublishPacket {
+        let mut pkt = PublishPacket {
             fixed_header: FixedHeader::new(PacketType::publish(qos), 0),
             topic_name,
             packet_identifier: pkid.map(PacketIdentifier),
             payload: payload.into(),
         };
-        pk.fix_header_remaining_len();
-        pk
+        pkt.fix_header_remaining_len();
+        pkt
     }
 
     pub fn set_dup(&mut self, dup: bool) {

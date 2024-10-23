@@ -133,7 +133,7 @@ topic name : {:?}
                 senders.push((client_id.to_owned(), qos));
             }
             RouteOption::V5(subscribe_options) => {
-                senders.push((client_id.to_owned(), subscribe_options.qos));
+                senders.push((client_id.to_owned(), subscribe_options.qos()));
             }
         }
     }

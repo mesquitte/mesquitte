@@ -38,7 +38,7 @@ pub enum ConnectReasonCode {
 
 impl ConnectReasonCode {
     /// Get the value
-    fn to_u8(self) -> u8 {
+    pub fn to_u8(self) -> u8 {
         match self {
             ConnectReasonCode::Success => SUCCESS,
             ConnectReasonCode::UnspecifiedError => UNSPECIFIED_ERROR,

@@ -28,14 +28,14 @@ pub struct UnsubscribePacket {
 encodable_packet!(UnsubscribePacket(packet_identifier, payload));
 
 impl UnsubscribePacket {
-    pub fn new(pkid: u16, subscribes: Vec<TopicFilter>) -> UnsubscribePacket {
-        let mut pk = UnsubscribePacket {
+    pub fn new(pkid: u16, topics: Vec<TopicFilter>) -> UnsubscribePacket {
+        let mut pkt = UnsubscribePacket {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::Unsubscribe), 0),
             packet_identifier: PacketIdentifier(pkid),
-            payload: UnsubscribePacketPayload::new(subscribes),
+            payload: UnsubscribePacketPayload::new(topics),
         };
-        pk.fix_header_remaining_len();
-        pk
+        pkt.fix_header_remaining_len();
+        pkt
     }
 
     pub fn packet_identifier(&self) -> u16 {
@@ -46,8 +46,8 @@ impl UnsubscribePacket {
         self.packet_identifier.0 = pkid;
     }
 
-    pub fn subscribes(&self) -> &[TopicFilter] {
-        &self.payload.subscribes[..]
+    pub fn topic_filters(&self) -> &[TopicFilter] {
+        &self.payload.topic_filters[..]
     }
 }
 
@@ -73,18 +73,18 @@ impl DecodablePacket for UnsubscribePacket {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct UnsubscribePacketPayload {
-    subscribes: Vec<TopicFilter>,
+    topic_filters: Vec<TopicFilter>,
 }
 
 impl UnsubscribePacketPayload {
-    pub fn new(subs: Vec<TopicFilter>) -> UnsubscribePacketPayload {
-        UnsubscribePacketPayload { subscribes: subs }
+    pub fn new(topic_filters: Vec<TopicFilter>) -> UnsubscribePacketPayload {
+        UnsubscribePacketPayload { topic_filters }
     }
 }
 
 impl Encodable for UnsubscribePacketPayload {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        for filter in self.subscribes.iter() {
+        for filter in self.topic_filters.iter() {
             filter.encode(writer)?;
         }
 
@@ -92,7 +92,7 @@ impl Encodable for UnsubscribePacketPayload {
     }
 
     fn encoded_length(&self) -> u32 {
-        self.subscribes
+        self.topic_filters
             .iter()
             .fold(0, |b, a| b + a.encoded_length())
     }
@@ -106,15 +106,15 @@ impl Decodable for UnsubscribePacketPayload {
         reader: &mut R,
         mut payload_len: u32,
     ) -> Result<UnsubscribePacketPayload, UnsubscribePacketError> {
-        let mut subs = Vec::new();
+        let mut topic_filters = Vec::new();
 
         while payload_len > 0 {
             let filter = TopicFilter::decode(reader)?;
             payload_len -= filter.encoded_length();
-            subs.push(filter);
+            topic_filters.push(filter);
         }
 
-        Ok(UnsubscribePacketPayload::new(subs))
+        Ok(UnsubscribePacketPayload::new(topic_filters))
     }
 }
 

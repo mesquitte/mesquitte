@@ -236,7 +236,9 @@ pub struct ConnectProperties {
     max_packet_size: Option<u32>,
     /// Maximum mapping integer for a topic
     topic_alias_max: Option<u16>,
+    /// Response information
     request_response_info: Option<u8>,
+    /// Problem information
     request_problem_info: Option<u8>,
     /// List of user properties
     user_properties: Vec<(String, String)>,
@@ -783,8 +785,8 @@ impl LastWillProperties {
         &self.correlation_data
     }
 
-    pub fn user_properties(&self) -> &Vec<(String, String)> {
-        &self.user_properties
+    pub fn user_properties(&self) -> &[(String, String)] {
+        &self.user_properties[..]
     }
 
     #[inline]

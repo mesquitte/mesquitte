@@ -25,7 +25,7 @@ pub enum PubackReasonCode {
 
 impl PubackReasonCode {
     /// Get the value
-    fn to_u8(self) -> u8 {
+    pub fn to_u8(self) -> u8 {
         match self {
             PubackReasonCode::Success => SUCCESS,
             PubackReasonCode::NoMatchingSubscribers => NO_MATCHING_SUBSCRIBERS,

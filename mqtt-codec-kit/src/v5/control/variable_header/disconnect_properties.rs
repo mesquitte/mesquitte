@@ -58,8 +58,8 @@ impl DisconnectProperties {
         &self.reason_string
     }
 
-    pub fn user_properties(&self) -> &Vec<(String, String)> {
-        &self.user_properties
+    pub fn user_properties(&self) -> &[(String, String)] {
+        &self.user_properties[..]
     }
 
     pub fn server_reference(&self) -> &Option<String> {
@@ -167,14 +167,12 @@ impl Decodable for DisconnectProperties {
             }
         }
 
-        let properties = DisconnectProperties {
+        Ok(DisconnectProperties {
             total_length,
             session_expiry_interval,
             reason_string,
             user_properties,
             server_reference,
-        };
-
-        Ok(properties)
+        })
     }
 }
