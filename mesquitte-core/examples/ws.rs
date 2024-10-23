@@ -1,7 +1,7 @@
-use std::{env, io, sync::Arc};
+use std::{env, io, sync::OnceLock};
 
 use mesquitte_core::{
-    server::{state::GlobalState, ws::server::WsServer},
+    server::{config::ServerConfig, state::GlobalState, ws::server::WsServer},
     store::{
         memory::{
             message::MessageMemoryStore, retain::RetainMessageMemoryStore, topic::TopicMemoryStore,
@@ -19,18 +19,27 @@ async fn main() -> io::Result<()> {
     );
     env_logger::init();
 
-    let global = Arc::new(GlobalState::default());
+    let global = GlobalState::default();
 
     let topic_store = TopicMemoryStore::default();
     let message_store = MessageMemoryStore::new(102400, 30);
     let retain_message_store = RetainMessageMemoryStore::default();
 
     let mem_store = MemoryStore::new(message_store, retain_message_store, topic_store);
-    let storage = Arc::new(Storage::new(mem_store));
+    let storage = Storage::new(mem_store);
 
-    let broker = WsServer::bind("0.0.0.0:6666", global, storage)
-        .await
-        .unwrap();
+    static GLOBAL: OnceLock<GlobalState> = OnceLock::new();
+    static STORAGE: OnceLock<Storage<MemoryStore>> = OnceLock::new();
+
+    let config = ServerConfig::<String>::new("0.0.0.0:8883".to_string(), None, "v4");
+    let broker = WsServer::bind(
+        "0.0.0.0:8883",
+        config.clone(),
+        GLOBAL.get_or_init(|| global),
+        STORAGE.get_or_init(|| storage),
+    )
+    .await
+    .unwrap();
     broker.accept().await.unwrap();
     Ok(())
 }

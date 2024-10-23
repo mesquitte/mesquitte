@@ -69,6 +69,22 @@ impl From<V4PublishPacket> for IncomingPublishMessage {
     }
 }
 
+impl From<&V4PublishPacket> for IncomingPublishMessage {
+    fn from(packet: &V4PublishPacket) -> Self {
+        let mut payload = vec![0u8; packet.payload().len()];
+        payload.copy_from_slice(packet.payload());
+
+        Self {
+            topic_name: packet.topic_name().to_owned(),
+            payload,
+            qos: packet.qos().into(),
+            retain: packet.retain(),
+            dup: packet.dup(),
+            properties: None,
+        }
+    }
+}
+
 impl From<V5PublishPacket> for IncomingPublishMessage {
     fn from(packet: V5PublishPacket) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];

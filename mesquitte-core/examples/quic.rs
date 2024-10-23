@@ -1,7 +1,7 @@
-use std::{env, path::Path, sync::Arc};
+use std::{env, path::Path, sync::OnceLock};
 
 use mesquitte_core::{
-    server::{quic::server::QuicServer, state::GlobalState},
+    server::{config::ServerConfig, quic::server::QuicServer, state::GlobalState},
     store::{
         memory::{
             message::MessageMemoryStore, retain::RetainMessageMemoryStore, topic::TopicMemoryStore,
@@ -19,23 +19,28 @@ async fn main() {
     );
     env_logger::init();
 
-    let global = Arc::new(GlobalState::default());
+    let global = GlobalState::default();
 
     let topic_store = TopicMemoryStore::default();
     let message_store = MessageMemoryStore::new(102400, 30);
     let retain_message_store = RetainMessageMemoryStore::default();
 
     let mem_store = MemoryStore::new(message_store, retain_message_store, topic_store);
-    let storage = Arc::new(Storage::new(mem_store));
+    let storage = Storage::new(mem_store);
 
+    static GLOBAL: OnceLock<GlobalState> = OnceLock::new();
+    static STORAGE: OnceLock<Storage<MemoryStore>> = OnceLock::new();
+
+    let config = ServerConfig::<String>::new("0.0.0.0:1883".to_string(), None, "v4");
     let broker = QuicServer::bind(
         "0.0.0.0:1883",
         (
             Path::new("mesquitte-core/examples/certs/cert.pem"),
             Path::new("mesquitte-core/examples/certs/key.pem"),
         ),
-        global,
-        storage,
+        config.clone(),
+        GLOBAL.get_or_init(|| global),
+        STORAGE.get_or_init(|| storage),
     )
     .unwrap();
     broker.accept().await.unwrap();
