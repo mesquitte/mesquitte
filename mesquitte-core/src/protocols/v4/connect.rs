@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use mqtt_codec_kit::{
     common::{ProtocolLevel, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX, SYS_PREFIX},
     v4::{
@@ -10,13 +8,13 @@ use mqtt_codec_kit::{
 use nanoid::nanoid;
 use tokio::sync::mpsc;
 
-use crate::server::state::{AddClientReceipt, GlobalState, DispatchMessage};
+use crate::server::state::{AddClientReceipt, DispatchMessage, GlobalState};
 
 use super::session::Session;
 
 pub(super) async fn handle_connect(
-    packet: ConnectPacket,
-    global: Arc<GlobalState>,
+    packet: &ConnectPacket,
+    global: &'static GlobalState,
 ) -> Result<(ConnackPacket, Session, mpsc::Receiver<DispatchMessage>), ConnackPacket> {
     log::debug!(
         r#"client#{} received a connect packet:

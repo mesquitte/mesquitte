@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, io, sync::Arc};
+use std::{collections::VecDeque, io};
 
 use mqtt_codec_kit::v4::packet::{
     suback::SubscribeReturnCode, SubackPacket, SubscribePacket, UnsubackPacket, UnsubscribePacket,
@@ -16,8 +16,8 @@ use super::{publish::receive_outgoing_publish, session::Session};
 
 pub(super) async fn handle_subscribe<S>(
     session: &mut Session,
-    packet: SubscribePacket,
-    storage: Arc<Storage<S>>,
+    packet: &SubscribePacket,
+    storage: &'static Storage<S>,
 ) -> io::Result<Vec<VariablePacket>>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -50,7 +50,7 @@ packet id : {}
         let retain_messages = RetainMessageStore::search(&storage.inner, filter).await?;
         for msg in retain_messages {
             let mut packet =
-                receive_outgoing_publish(session, granted_qos, msg.into(), storage.clone()).await?;
+                receive_outgoing_publish(session, &granted_qos, &msg.into(), storage).await?;
             packet.set_retain(true);
             retain_packets.push(packet.into());
         }
@@ -65,7 +65,7 @@ packet id : {}
 
 pub(super) async fn handle_unsubscribe<S>(
     session: &mut Session,
-    store: Arc<Storage<S>>,
+    store: &'static Storage<S>,
     packet: &UnsubscribePacket,
 ) -> io::Result<UnsubackPacket>
 where

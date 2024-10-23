@@ -14,7 +14,7 @@ pub enum AddClientReceipt {
     New,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum KickReason {
     FromAdmin,
 }
@@ -27,6 +27,7 @@ impl Display for KickReason {
     }
 }
 
+#[derive(Debug)]
 pub enum DispatchMessage {
     Publish(QualityOfService, Box<IncomingPublishMessage>),
     Online(mpsc::Sender<u16>),

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::path::Path;
 
 use async_tungstenite::{accept_hdr_async, tokio::TokioAdapter};
 use tokio::net::{TcpListener, ToSocketAddrs};
@@ -6,7 +6,7 @@ use tokio::net::{TcpListener, ToSocketAddrs};
 use tungstenite::{handshake::server::ErrorResponse, http};
 
 use crate::{
-    server::{process_client, state::GlobalState},
+    server::{config::ServerConfig, process_client, state::GlobalState},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
 #[cfg(feature = "wss")]
@@ -14,40 +14,54 @@ use {crate::server::config::TlsConfig, crate::server::rustls::rustls_acceptor, s
 
 use super::{ws_stream::WsByteStream, Error};
 
-pub struct WsServer<S>
+pub struct WsServer<P, S>
 where
-    S: MessageStore + RetainMessageStore + TopicStore,
+    P: AsRef<Path>,
+    S: MessageStore + RetainMessageStore + TopicStore + 'static,
 {
     inner: TcpListener,
-    global: Arc<GlobalState>,
-    storage: Arc<Storage<S>>,
+    config: ServerConfig<P>,
+    global: &'static GlobalState,
+    storage: &'static Storage<S>,
 }
 
-impl<S> WsServer<S>
+impl<P, S> WsServer<P, S>
 where
+    P: AsRef<Path>,
     S: MessageStore + RetainMessageStore + TopicStore + 'static,
 {
     pub async fn bind<A: ToSocketAddrs>(
         addr: A,
-        global: Arc<GlobalState>,
-        storage: Arc<Storage<S>>,
+        config: ServerConfig<P>,
+        global: &'static GlobalState,
+        storage: &'static Storage<S>,
     ) -> Result<Self, Error> {
         let listener = TcpListener::bind(addr).await?;
         Ok(Self {
             inner: listener,
+            config,
             global,
             storage,
         })
     }
 
     #[cfg(feature = "ws")]
-    pub async fn accept(&self) -> Result<(), Error> {
+    pub async fn accept(self) -> Result<(), Error> {
         while let Ok((stream, _addr)) = self.inner.accept().await {
-            let global = self.global.clone();
-            let storage = self.storage.clone();
+            let v = self.config.version.clone();
             let ws_stream =
                 WsByteStream::new(accept_hdr_async(TokioAdapter::new(stream), ws_callback).await?);
-            tokio::spawn(async move { process_client(ws_stream, global, storage).await });
+            tokio::spawn(async move {
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "v4")] {
+                        assert_eq!(v, "v4");
+                        process_client(ws_stream, "v4", self.global, self.storage).await;
+                    } else if #[cfg(feature = "v5")] {
+                        assert_eq!(v, "v5");
+                        process_client(ws_stream, "v5", self.global, self.storage).await;
+                    }
+                }
+            });
         }
         Ok(())
     }
