@@ -35,8 +35,8 @@ impl SubscribeProperties {
         self.identifier
     }
 
-    pub fn user_properties(&self) -> &Vec<(String, String)> {
-        &self.user_properties
+    pub fn user_properties(&self) -> &[(String, String)] {
+        &self.user_properties[..]
     }
 
     #[inline]

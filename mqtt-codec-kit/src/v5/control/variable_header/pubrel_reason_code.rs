@@ -18,7 +18,7 @@ pub enum PubrelReasonCode {
 
 impl PubrelReasonCode {
     /// Get the value
-    fn to_u8(self) -> u8 {
+    pub fn to_u8(self) -> u8 {
         match self {
             PubrelReasonCode::Success => SUCCESS,
             PubrelReasonCode::PacketIdentifierNotFound => PACKET_IDENTIFIER_NOT_FOUND,

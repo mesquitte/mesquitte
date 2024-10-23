@@ -18,20 +18,20 @@ use crate::{
 pub struct ConnackPacket {
     fixed_header: FixedHeader,
     flags: ConnackFlags,
-    ret_code: ConnectReturnCode,
+    return_code: ConnectReturnCode,
 }
 
-encodable_packet!(ConnackPacket(flags, ret_code));
+encodable_packet!(ConnackPacket(flags, return_code));
 
 impl ConnackPacket {
-    pub fn new(session_present: bool, ret_code: ConnectReturnCode) -> ConnackPacket {
+    pub fn new(session_present: bool, return_code: ConnectReturnCode) -> ConnackPacket {
         ConnackPacket {
             fixed_header: FixedHeader::new(
                 PacketType::with_default(ControlType::ConnectAcknowledgement),
                 2,
             ),
             flags: ConnackFlags { session_present },
-            ret_code,
+            return_code,
         }
     }
 
@@ -40,7 +40,7 @@ impl ConnackPacket {
     }
 
     pub fn connect_return_code(&self) -> ConnectReturnCode {
-        self.ret_code
+        self.return_code
     }
 }
 
@@ -54,12 +54,12 @@ impl DecodablePacket for ConnackPacket {
             ConnectAckFlagsError::IoError(err) => VariableHeaderError::IoError(err),
             ConnectAckFlagsError::InvalidReservedFlag => VariableHeaderError::InvalidReservedFlag,
         })?;
-        let code: ConnectReturnCode = Decodable::decode(reader)?;
+        let return_code: ConnectReturnCode = Decodable::decode(reader)?;
 
         Ok(ConnackPacket {
             fixed_header,
             flags,
-            ret_code: code,
+            return_code,
         })
     }
 }

@@ -162,8 +162,8 @@ impl ConnackProperties {
         &self.reason_string
     }
 
-    pub fn user_properties(&self) -> &Vec<(String, String)> {
-        &self.user_properties
+    pub fn user_properties(&self) -> &[(String, String)] {
+        &self.user_properties[..]
     }
 
     pub fn wildcard_subscription_available(&self) -> Option<u8> {

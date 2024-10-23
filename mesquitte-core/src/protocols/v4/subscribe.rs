@@ -77,9 +77,9 @@ packet id : {}
    topics : {:?}"#,
         session.client_id(),
         packet.packet_identifier(),
-        packet.subscribes(),
+        packet.topic_filters(),
     );
-    for filter in packet.subscribes() {
+    for filter in packet.topic_filters() {
         session.unsubscribe(filter);
         store.inner.unsubscribe(session.client_id(), filter).await?;
     }

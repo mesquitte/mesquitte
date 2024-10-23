@@ -63,17 +63,17 @@ pub struct SubackPacket {
 encodable_packet!(SubackPacket(packet_identifier, payload));
 
 impl SubackPacket {
-    pub fn new(pkid: u16, subscribes: Vec<SubscribeReturnCode>) -> SubackPacket {
-        let mut pk = SubackPacket {
+    pub fn new(pkid: u16, return_codes: Vec<SubscribeReturnCode>) -> SubackPacket {
+        let mut pkt = SubackPacket {
             fixed_header: FixedHeader::new(
                 PacketType::with_default(ControlType::SubscribeAcknowledgement),
                 0,
             ),
             packet_identifier: PacketIdentifier(pkid),
-            payload: SubackPacketPayload::new(subscribes),
+            payload: SubackPacketPayload::new(return_codes),
         };
-        pk.fix_header_remaining_len();
-        pk
+        pkt.fix_header_remaining_len();
+        pkt
     }
 
     pub fn packet_identifier(&self) -> u16 {
@@ -84,8 +84,8 @@ impl SubackPacket {
         self.packet_identifier.0 = pkid;
     }
 
-    pub fn subscribes(&self) -> &[SubscribeReturnCode] {
-        &self.payload.subscribes[..]
+    pub fn return_codes(&self) -> &[SubscribeReturnCode] {
+        &self.payload.return_codes[..]
     }
 }
 
@@ -111,18 +111,20 @@ impl DecodablePacket for SubackPacket {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct SubackPacketPayload {
-    subscribes: Vec<SubscribeReturnCode>,
+    return_codes: Vec<SubscribeReturnCode>,
 }
 
 impl SubackPacketPayload {
-    pub fn new(subs: Vec<SubscribeReturnCode>) -> SubackPacketPayload {
-        SubackPacketPayload { subscribes: subs }
+    pub fn new(codes: Vec<SubscribeReturnCode>) -> SubackPacketPayload {
+        SubackPacketPayload {
+            return_codes: codes,
+        }
     }
 }
 
 impl Encodable for SubackPacketPayload {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        for code in self.subscribes.iter() {
+        for code in self.return_codes.iter() {
             writer.write_u8(*code as u8)?;
         }
 
@@ -130,7 +132,7 @@ impl Encodable for SubackPacketPayload {
     }
 
     fn encoded_length(&self) -> u32 {
-        self.subscribes.len() as u32
+        self.return_codes.len() as u32
     }
 }
 
@@ -142,10 +144,10 @@ impl Decodable for SubackPacketPayload {
         reader: &mut R,
         payload_len: u32,
     ) -> Result<SubackPacketPayload, SubackPacketError> {
-        let mut subs = Vec::new();
+        let mut codes = Vec::new();
 
         for _ in 0..payload_len {
-            let retcode = match reader.read_u8()? {
+            let return_code = match reader.read_u8()? {
                 0x00 => SubscribeReturnCode::MaximumQoSLevel0,
                 0x01 => SubscribeReturnCode::MaximumQoSLevel1,
                 0x02 => SubscribeReturnCode::MaximumQoSLevel2,
@@ -153,10 +155,10 @@ impl Decodable for SubackPacketPayload {
                 code => return Err(SubackPacketError::InvalidSubscribeReturnCode(code)),
             };
 
-            subs.push(retcode);
+            codes.push(return_code);
         }
 
-        Ok(SubackPacketPayload::new(subs))
+        Ok(SubackPacketPayload::new(codes))
     }
 }
 

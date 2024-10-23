@@ -55,7 +55,7 @@ impl ConnectPacket {
         C: Into<String>,
     {
         let protocol_level = ProtocolLevel::from_u8(level)?;
-        let mut pk = ConnectPacket {
+        let mut pkt = ConnectPacket {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::Connect), 0),
             protocol_name: ProtocolName(protoname.into()),
             protocol_level,
@@ -64,9 +64,9 @@ impl ConnectPacket {
             payload: ConnectPacketPayload::new(client_identifier.into()),
         };
 
-        pk.fix_header_remaining_len();
+        pkt.fix_header_remaining_len();
 
-        Ok(pk)
+        Ok(pkt)
     }
 
     pub fn set_keep_alive(&mut self, keep_alive: u16) {

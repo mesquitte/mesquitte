@@ -139,30 +139,39 @@ impl Decodable for SubscribePayload {
 /// SubscribePayload options of subscribe packet
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SubscribeOptions {
-    pub qos: QualityOfService,
-    pub no_local: bool,
-    pub retain_as_published: bool,
-    pub retain_handling: RetainHandling,
+    qos: QualityOfService,
+    no_local: bool,
+    retain_as_published: bool,
+    retain_handling: RetainHandling,
 }
 
 impl SubscribeOptions {
-    pub fn qos(&self) -> &QualityOfService {
-        &self.qos
+    pub fn qos(&self) -> QualityOfService {
+        self.qos
     }
     pub fn set_qos(&mut self, qos: QualityOfService) {
         self.qos = qos;
     }
+    pub fn no_local(&self) -> bool {
+        self.no_local
+    }
     pub fn set_no_local(&mut self, no_local: bool) {
         self.no_local = no_local;
     }
+    pub fn retain_as_published(&self) -> bool {
+        self.retain_as_published
+    }
     pub fn set_retain_as_published(&mut self, retain_as_published: bool) {
         self.retain_as_published = retain_as_published;
+    }
+    pub fn retain_handling(&self) -> RetainHandling {
+        self.retain_handling
     }
     pub fn set_retain_handling(&mut self, retain_handling: RetainHandling) {
         self.retain_handling = retain_handling;
     }
 
-    pub fn to_u8(&self) -> u8 {
+    fn to_u8(&self) -> u8 {
         let mut byte = self.qos as u8;
         if self.no_local {
             byte |= 0b100;

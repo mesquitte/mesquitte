@@ -90,12 +90,12 @@ impl PublishProperties {
         &self.correlation_data
     }
 
-    pub fn user_properties(&self) -> &Vec<(String, String)> {
-        &self.user_properties
+    pub fn user_properties(&self) -> &[(String, String)] {
+        &self.user_properties[..]
     }
 
-    pub fn subscription_identifiers(&self) -> &Vec<usize> {
-        &self.subscription_identifiers
+    pub fn subscription_identifiers(&self) -> &[usize] {
+        &self.subscription_identifiers[..]
     }
 
     pub fn content_type(&self) -> &Option<String> {
