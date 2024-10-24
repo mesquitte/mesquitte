@@ -6,11 +6,9 @@ use s2n_quic::{
 };
 
 use crate::{
-    server::{config::ServerConfig, process_client, state::GlobalState},
+    server::{config::ServerConfig, process_client, state::GlobalState, Error},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
-
-use super::Error;
 
 pub struct QuicServer<P, S>
 where
@@ -49,19 +47,16 @@ where
 
     pub async fn accept(mut self) -> Result<(), Error> {
         while let Some(mut connection) = self.inner.accept().await {
-            let v = self.config.version.clone();
             tokio::spawn(async move {
                 while let Ok(Some(stream)) = connection.accept_bidirectional_stream().await {
-                    cfg_if::cfg_if! {
-                        if #[cfg(feature = "v4")] {
-                            assert_eq!(v, "v4");
-                            process_client(stream, "v4", self.global, self.storage).await;
-                        } else if #[cfg(feature = "v5")] {
-                            assert_eq!(v, "v5");
-                            process_client(stream, "v5", self.global, self.storage).await;
-                        }
+                    match process_client(stream, self.config.version, self.global, self.storage)
+                        .await
+                    {
+                        Ok(v) => v,
+                        Err(e) => return Err(e),
                     }
                 }
+                Ok(())
             });
         }
         Ok(())

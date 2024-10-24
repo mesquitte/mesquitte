@@ -1,18 +1,21 @@
 use std::path::Path;
 
+use mqtt_codec_kit::common::ProtocolLevel;
+
 #[derive(Clone, Debug)]
 pub struct ServerConfig<P: AsRef<Path>> {
     pub addr: String,
     pub tls: Option<TlsConfig<P>>,
-    pub version: String,
+    pub version: ProtocolLevel,
 }
 
 impl<P: AsRef<Path>> ServerConfig<P> {
     pub fn new(addr: String, tls: Option<TlsConfig<P>>, version: &str) -> Self {
+        let v = version.parse::<u8>().unwrap();
         Self {
             addr,
             tls,
-            version: version.to_string(),
+            version: ProtocolLevel::from_u8(v).unwrap(),
         }
     }
 }

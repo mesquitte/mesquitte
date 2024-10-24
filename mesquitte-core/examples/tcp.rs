@@ -32,7 +32,7 @@ async fn main() -> io::Result<()> {
     static GLOBAL: OnceLock<GlobalState> = OnceLock::new();
     static STORAGE: OnceLock<Storage<MemoryStore>> = OnceLock::new();
 
-    let config = ServerConfig::<String>::new("0.0.0.0:1883".to_string(), None, "v4");
+    let config = ServerConfig::<String>::new("0.0.0.0:1883".to_string(), None, "4");
     info!("server config: {:?}", config);
     let broker = TcpServer::bind(
         &config.addr,
