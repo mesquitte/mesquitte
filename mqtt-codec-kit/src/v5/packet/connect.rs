@@ -58,7 +58,7 @@ impl ConnectPacket {
         P: Into<String>,
         C: Into<String>,
     {
-        let protocol_level = ProtocolLevel::from_u8(level)?;
+        let protocol_level = ProtocolLevel::try_from(level)?;
         let mut pkt = ConnectPacket {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::Connect), 0),
             protocol_name: ProtocolName(protoname.into()),

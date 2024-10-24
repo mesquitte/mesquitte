@@ -19,9 +19,11 @@ pub enum ProtocolLevel {
     Version50 = SPEC_5_0,
 }
 
-impl ProtocolLevel {
-    pub fn from_u8(n: u8) -> Result<ProtocolLevel, ProtocolLevelError> {
-        match n {
+impl TryFrom<u8> for ProtocolLevel {
+    type Error = ProtocolLevelError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
             SPEC_3_1_0 => Ok(ProtocolLevel::Version310),
             SPEC_3_1_1 => Ok(ProtocolLevel::Version311),
             SPEC_5_0 => Ok(ProtocolLevel::Version50),
@@ -48,7 +50,7 @@ impl Decodable for ProtocolLevel {
         reader: &mut R,
         _rest: (),
     ) -> Result<ProtocolLevel, ProtocolLevelError> {
-        reader.read_u8().map(ProtocolLevel::from_u8)?
+        reader.read_u8().map(ProtocolLevel::try_from)?
     }
 }
 

@@ -142,10 +142,9 @@ pub enum SubscribeReasonCode {
     WildcardSubscriptionsNotSupported,
 }
 
-impl SubscribeReasonCode {
-    /// Get the value
-    fn to_u8(self) -> u8 {
-        match self {
+impl From<SubscribeReasonCode> for u8 {
+    fn from(value: SubscribeReasonCode) -> Self {
+        match value {
             SubscribeReasonCode::GrantedQos0 => GRANTED_QOS_0,
             SubscribeReasonCode::GrantedQos1 => GRANTED_QOS_1,
             SubscribeReasonCode::GrantedQos2 => GRANTED_QOS_2,
@@ -168,14 +167,20 @@ impl SubscribeReasonCode {
     }
 }
 
+impl From<&SubscribeReasonCode> for u8 {
+    fn from(value: &SubscribeReasonCode) -> Self {
+        (*value).into()
+    }
+}
+
 /// Create `SubscribeReasonCode` from value
 impl TryFrom<u8> for SubscribeReasonCode {
     type Error = SubackPacketError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            SUCCESS => Ok(Self::GrantedQos0),
-            NO_MATCHING_SUBSCRIBERS => Ok(Self::GrantedQos1),
+            GRANTED_QOS_0 => Ok(Self::GrantedQos0),
+            GRANTED_QOS_1 => Ok(Self::GrantedQos1),
             GRANTED_QOS_2 => Ok(Self::GrantedQos2),
             UNSPECIFIED_ERROR => Ok(Self::UnspecifiedError),
             IMPLEMENTATION_SPECIFIC_ERROR => Ok(Self::ImplementationSpecificError),
@@ -193,7 +198,7 @@ impl TryFrom<u8> for SubscribeReasonCode {
 
 impl Encodable for SubscribeReasonCode {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        writer.write_u8(self.to_u8())
+        writer.write_u8(self.into())
     }
 
     fn encoded_length(&self) -> u32 {
@@ -259,6 +264,36 @@ mod test {
     #[test]
     pub fn test_suback_packet_basic() {
         let subscribes = vec![SubscribeReasonCode::GrantedQos0];
+
+        let packet = SubackPacket::new(10001, subscribes);
+
+        let mut buf = Vec::new();
+        packet.encode(&mut buf).unwrap();
+
+        let mut decode_buf = Cursor::new(buf);
+        let decoded = SubackPacket::decode(&mut decode_buf).unwrap();
+
+        assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    pub fn test_suback_packet_qos1() {
+        let subscribes = vec![SubscribeReasonCode::GrantedQos1];
+
+        let packet = SubackPacket::new(10001, subscribes);
+
+        let mut buf = Vec::new();
+        packet.encode(&mut buf).unwrap();
+
+        let mut decode_buf = Cursor::new(buf);
+        let decoded = SubackPacket::decode(&mut decode_buf).unwrap();
+
+        assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    pub fn test_suback_packet_qos2() {
+        let subscribes = vec![SubscribeReasonCode::GrantedQos2];
 
         let packet = SubackPacket::new(10001, subscribes);
 

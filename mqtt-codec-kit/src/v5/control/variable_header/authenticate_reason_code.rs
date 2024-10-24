@@ -17,14 +17,19 @@ pub enum AuthenticateReasonCode {
     ReAuthenticate,
 }
 
-impl AuthenticateReasonCode {
-    /// Get the value
-    pub fn to_u8(self) -> u8 {
-        match self {
+impl From<AuthenticateReasonCode> for u8 {
+    fn from(value: AuthenticateReasonCode) -> Self {
+        match value {
             AuthenticateReasonCode::Success => SUCCESS,
             AuthenticateReasonCode::ContinueAuthentication => CONTINUE_AUTHENTICATION,
             AuthenticateReasonCode::ReAuthenticate => RE_AUTHENTICATE,
         }
+    }
+}
+
+impl From<&AuthenticateReasonCode> for u8 {
+    fn from(value: &AuthenticateReasonCode) -> Self {
+        (*value).into()
     }
 }
 
@@ -44,7 +49,7 @@ impl TryFrom<u8> for AuthenticateReasonCode {
 
 impl Encodable for AuthenticateReasonCode {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        writer.write_u8(self.to_u8())
+        writer.write_u8(self.into())
     }
 
     fn encoded_length(&self) -> u32 {

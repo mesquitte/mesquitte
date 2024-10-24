@@ -26,10 +26,9 @@ pub enum ConnectReturnCode {
     Reserved(u8),
 }
 
-impl ConnectReturnCode {
-    /// Get the code
-    pub fn to_u8(self) -> u8 {
-        match self {
+impl From<ConnectReturnCode> for u8 {
+    fn from(value: ConnectReturnCode) -> Self {
+        match value {
             ConnectReturnCode::ConnectionAccepted => CONNECTION_ACCEPTED,
             ConnectReturnCode::UnacceptableProtocolVersion => UNACCEPTABLE_PROTOCOL_VERSION,
             ConnectReturnCode::IdentifierRejected => IDENTIFIER_REJECTED,
@@ -39,9 +38,17 @@ impl ConnectReturnCode {
             ConnectReturnCode::Reserved(r) => r,
         }
     }
+}
 
+impl From<&ConnectReturnCode> for u8 {
+    fn from(value: &ConnectReturnCode) -> Self {
+        (*value).into()
+    }
+}
+
+impl From<u8> for ConnectReturnCode {
     /// Create `ConnectReturnCode` from code
-    pub fn from_u8(code: u8) -> ConnectReturnCode {
+    fn from(code: u8) -> Self {
         match code {
             CONNECTION_ACCEPTED => ConnectReturnCode::ConnectionAccepted,
             UNACCEPTABLE_PROTOCOL_VERSION => ConnectReturnCode::UnacceptableProtocolVersion,
@@ -56,7 +63,7 @@ impl ConnectReturnCode {
 
 impl Encodable for ConnectReturnCode {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        writer.write_u8(self.to_u8())
+        writer.write_u8(self.into())
     }
 
     fn encoded_length(&self) -> u32 {
@@ -74,7 +81,7 @@ impl Decodable for ConnectReturnCode {
     ) -> Result<ConnectReturnCode, VariableHeaderError> {
         reader
             .read_u8()
-            .map(ConnectReturnCode::from_u8)
+            .map(ConnectReturnCode::from)
             .map_err(From::from)
     }
 }

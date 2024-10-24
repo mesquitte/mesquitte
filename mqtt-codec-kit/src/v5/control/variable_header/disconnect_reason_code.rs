@@ -72,10 +72,9 @@ pub enum DisconnectReasonCode {
     WildcardSubscriptionsNotSupported,
 }
 
-impl DisconnectReasonCode {
-    /// Get the value
-    pub fn to_u8(self) -> u8 {
-        match self {
+impl From<DisconnectReasonCode> for u8 {
+    fn from(value: DisconnectReasonCode) -> Self {
+        match value {
             DisconnectReasonCode::NormalDisconnection => NORMAL_DISCONNECTION,
             DisconnectReasonCode::DisconnectWithWillMessage => DISCONNECT_WITH_WILL_MESSAGE,
             DisconnectReasonCode::UnspecifiedError => UNSPECIFIED_ERROR,
@@ -112,6 +111,12 @@ impl DisconnectReasonCode {
                 WILDCARD_SUBSCRIPTIONS_NOT_SUPPORTED
             }
         }
+    }
+}
+
+impl From<&DisconnectReasonCode> for u8 {
+    fn from(value: &DisconnectReasonCode) -> Self {
+        (*value).into()
     }
 }
 
@@ -157,7 +162,7 @@ impl TryFrom<u8> for DisconnectReasonCode {
 
 impl Encodable for DisconnectReasonCode {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        writer.write_u8(self.to_u8())
+        writer.write_u8(self.into())
     }
 
     fn encoded_length(&self) -> u32 {
