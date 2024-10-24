@@ -81,7 +81,7 @@ properties : {:?}"#,
 
         // TODO: config: retain available?
         let send_retain = !filter.is_shared()
-            && match subscribe_opts.retain_handling {
+            && match subscribe_opts.retain_handling() {
                 RetainHandling::SendAtSubscribe => true,
                 RetainHandling::SendAtSubscribeIfNotExist => exist,
                 RetainHandling::DoNotSend => false,
@@ -90,7 +90,7 @@ properties : {:?}"#,
         if send_retain {
             let retain_messages = RetainMessageStore::search(&storage.inner, filter).await?;
             for msg in retain_messages {
-                if subscribe_opts.no_local && msg.client_id().eq(session.client_id()) {
+                if subscribe_opts.no_local() && msg.client_id().eq(session.client_id()) {
                     continue;
                 }
 

@@ -321,21 +321,21 @@ where
                     }
                 },
                 _ = tick.tick() => {
-                    let ret =  self.storage.inner.retrieve_pending_messages(&self.client_id).await;
-                    match ret {
-                        Ok(messages) => {
-                            for (server_packet_id, msg) in messages {
+                    match self.storage.inner.retrieve_pending_messages(&self.client_id).await {
+                        Ok(None) => continue,
+                        Ok(Some(messages)) => {
+                            for msg in messages {
                                 match msg.pubrec_at() {
                                     Some(_) => {
-                                        if let Err(err) = self.writer.send(PubcompPacket::new(server_packet_id).into()).await {
+                                        if let Err(err) = self.writer.send(PubcompPacket::new(msg.server_packet_id()).into()).await {
                                             log::warn!("client#{} write pubcomp packet failed: {}", self.client_id, err);
                                             break;
                                         }
                                     }
                                     None => {
                                         let qos = match msg.final_qos() {
-                                            QualityOfService::Level1 => QoSWithPacketIdentifier::Level1(server_packet_id),
-                                            QualityOfService::Level2 => QoSWithPacketIdentifier::Level2(server_packet_id),
+                                            QualityOfService::Level1 => QoSWithPacketIdentifier::Level1(msg.server_packet_id()),
+                                            QualityOfService::Level2 => QoSWithPacketIdentifier::Level2(msg.server_packet_id()),
                                             QualityOfService::Level0 => unreachable!(),
                                         };
                                         let topic_name = msg.message().topic_name().to_owned();

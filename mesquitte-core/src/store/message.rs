@@ -165,6 +165,7 @@ impl From<V5LastWill> for ReceivedPublishMessage {
 
 #[derive(Clone, Debug)]
 pub struct PendingPublishMessage {
+    server_packet_id: u16,
     subscribe_qos: QualityOfService,
     message: ReceivedPublishMessage,
     receive_at: u64,
@@ -172,13 +173,22 @@ pub struct PendingPublishMessage {
 }
 
 impl PendingPublishMessage {
-    pub fn new(subscribe_qos: QualityOfService, message: ReceivedPublishMessage) -> Self {
+    pub fn new(
+        server_packet_id: u16,
+        subscribe_qos: QualityOfService,
+        message: ReceivedPublishMessage,
+    ) -> Self {
         Self {
+            server_packet_id,
             receive_at: get_unix_ts(),
             pubrec_at: None,
             subscribe_qos,
             message,
         }
+    }
+
+    pub fn server_packet_id(&self) -> u16 {
+        self.server_packet_id
     }
 
     pub fn receive_at(&self) -> u64 {
@@ -217,14 +227,13 @@ pub trait MessageStore: Send + Sync {
     fn save_pending_message(
         &self,
         client_id: &str,
-        server_packet_id: u16,
         message: PendingPublishMessage,
     ) -> impl Future<Output = Result<bool, io::Error>> + Send;
 
     fn retrieve_pending_messages(
         &self,
         client_id: &str,
-    ) -> impl Future<Output = Result<Vec<(u16, PendingPublishMessage)>, io::Error>> + Send;
+    ) -> impl Future<Output = Result<Option<Vec<PendingPublishMessage>>, io::Error>> + Send;
 
     fn pubrel(
         &self,
@@ -249,16 +258,6 @@ pub trait MessageStore: Send + Sync {
         client_id: &str,
         server_packet_id: u16,
     ) -> impl Future<Output = Result<bool, io::Error>> + Send;
-
-    fn clean_received_messages(
-        &self,
-        client_id: &str,
-    ) -> impl Future<Output = Result<(), io::Error>> + Send;
-
-    fn clean_pending_messages(
-        &self,
-        client_id: &str,
-    ) -> impl Future<Output = Result<(), io::Error>> + Send;
 
     fn is_full(&self, client_id: &str) -> impl Future<Output = Result<bool, io::Error>> + Send;
 
