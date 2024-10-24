@@ -36,10 +36,9 @@ pub enum ConnectReasonCode {
     ConnectionRateExceeded,
 }
 
-impl ConnectReasonCode {
-    /// Get the value
-    pub fn to_u8(self) -> u8 {
-        match self {
+impl From<ConnectReasonCode> for u8 {
+    fn from(value: ConnectReasonCode) -> Self {
+        match value {
             ConnectReasonCode::Success => SUCCESS,
             ConnectReasonCode::UnspecifiedError => UNSPECIFIED_ERROR,
             ConnectReasonCode::MalformedPacket => MALFORMED_PACKET,
@@ -63,6 +62,12 @@ impl ConnectReasonCode {
             ConnectReasonCode::ServerMoved => SERVER_MOVED,
             ConnectReasonCode::ConnectionRateExceeded => CONNECTION_RATE_EXCEEDED,
         }
+    }
+}
+
+impl From<&ConnectReasonCode> for u8 {
+    fn from(value: &ConnectReasonCode) -> Self {
+        (*value).into()
     }
 }
 
@@ -101,7 +106,7 @@ impl TryFrom<u8> for ConnectReasonCode {
 
 impl Encodable for ConnectReasonCode {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        writer.write_u8(self.to_u8())
+        writer.write_u8(self.into())
     }
 
     fn encoded_length(&self) -> u32 {

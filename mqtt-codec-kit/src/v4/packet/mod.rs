@@ -407,7 +407,7 @@ mod codec {
             cur
         };
 
-        let packet_type = match PacketType::from_u8(type_val) {
+        let packet_type = match PacketType::try_from(type_val) {
             Ok(ty) => DecodePacketType::Standard(ty),
             Err(PacketTypeError::ReservedType(ty, _)) => DecodePacketType::Reserved(ty),
             Err(err) => return Some(Err(err.into())),

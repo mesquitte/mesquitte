@@ -150,10 +150,9 @@ pub enum UnsubscribeReasonCode {
     PacketIdentifierInUse,
 }
 
-impl UnsubscribeReasonCode {
-    /// Get the value
-    fn to_u8(self) -> u8 {
-        match self {
+impl From<UnsubscribeReasonCode> for u8 {
+    fn from(value: UnsubscribeReasonCode) -> Self {
+        match value {
             UnsubscribeReasonCode::Success => SUCCESS,
             UnsubscribeReasonCode::NoSubscriptionExisted => NO_SUBSCRIPTION_EXISTED,
             UnsubscribeReasonCode::UnspecifiedError => UNSPECIFIED_ERROR,
@@ -165,6 +164,12 @@ impl UnsubscribeReasonCode {
     }
 }
 
+impl From<&UnsubscribeReasonCode> for u8 {
+    fn from(value: &UnsubscribeReasonCode) -> Self {
+        (*value).into()
+    }
+}
+
 /// Create `UnsubackReasonCode` from value
 impl TryFrom<u8> for UnsubscribeReasonCode {
     type Error = UnsubackPacketError;
@@ -172,7 +177,7 @@ impl TryFrom<u8> for UnsubscribeReasonCode {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             SUCCESS => Ok(Self::Success),
-            NO_MATCHING_SUBSCRIBERS => Ok(Self::NoSubscriptionExisted),
+            NO_SUBSCRIPTION_EXISTED => Ok(Self::NoSubscriptionExisted),
             UNSPECIFIED_ERROR => Ok(Self::UnspecifiedError),
             IMPLEMENTATION_SPECIFIC_ERROR => Ok(Self::ImplementationSpecificError),
             NOT_AUTHORIZED => Ok(Self::NotAuthorized),
@@ -185,7 +190,7 @@ impl TryFrom<u8> for UnsubscribeReasonCode {
 
 impl Encodable for UnsubscribeReasonCode {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        writer.write_u8(self.to_u8())
+        writer.write_u8(self.into())
     }
 
     fn encoded_length(&self) -> u32 {

@@ -137,7 +137,7 @@ impl Decodable for SubscribePayload {
 }
 
 /// SubscribePayload options of subscribe packet
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct SubscribeOptions {
     qos: QualityOfService,
     no_local: bool,
@@ -170,17 +170,25 @@ impl SubscribeOptions {
     pub fn set_retain_handling(&mut self, retain_handling: RetainHandling) {
         self.retain_handling = retain_handling;
     }
+}
 
-    fn to_u8(&self) -> u8 {
-        let mut byte = self.qos as u8;
-        if self.no_local {
+impl From<SubscribeOptions> for u8 {
+    fn from(value: SubscribeOptions) -> Self {
+        let mut byte = value.qos as u8;
+        if value.no_local {
             byte |= 0b100;
         }
-        if self.retain_as_published {
+        if value.retain_as_published {
             byte |= 0b1000;
         }
-        byte |= (self.retain_handling as u8) << 4;
+        byte |= (value.retain_handling as u8) << 4;
         byte
+    }
+}
+
+impl From<&SubscribeOptions> for u8 {
+    fn from(value: &SubscribeOptions) -> Self {
+        (*value).into()
     }
 }
 
@@ -197,7 +205,7 @@ impl Default for SubscribeOptions {
 
 impl Encodable for SubscribeOptions {
     fn encode<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_u8(self.to_u8())?;
+        writer.write_u8(self.into())?;
         Ok(())
     }
 

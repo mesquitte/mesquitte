@@ -16,13 +16,18 @@ pub enum PubrelReasonCode {
     PacketIdentifierNotFound,
 }
 
-impl PubrelReasonCode {
-    /// Get the value
-    pub fn to_u8(self) -> u8 {
-        match self {
+impl From<PubrelReasonCode> for u8 {
+    fn from(value: PubrelReasonCode) -> Self {
+        match value {
             PubrelReasonCode::Success => SUCCESS,
             PubrelReasonCode::PacketIdentifierNotFound => PACKET_IDENTIFIER_NOT_FOUND,
         }
+    }
+}
+
+impl From<&PubrelReasonCode> for u8 {
+    fn from(value: &PubrelReasonCode) -> Self {
+        (*value).into()
     }
 }
 
@@ -41,7 +46,7 @@ impl TryFrom<u8> for PubrelReasonCode {
 
 impl Encodable for PubrelReasonCode {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        writer.write_u8(self.to_u8())
+        writer.write_u8(self.into())
     }
 
     fn encoded_length(&self) -> u32 {

@@ -67,7 +67,7 @@ impl FixedHeader {
             }
         }
 
-        match PacketType::from_u8(type_val) {
+        match PacketType::try_from(type_val) {
             Ok(packet_type) => Ok(FixedHeader::new(packet_type, remaining_len)),
             Err(PacketTypeError::ReservedType(ty, _)) => {
                 Err(FixedHeaderError::ReservedType(ty, remaining_len))
@@ -79,7 +79,7 @@ impl FixedHeader {
 
 impl Encodable for FixedHeader {
     fn encode<W: Write>(&self, wr: &mut W) -> Result<(), io::Error> {
-        wr.write_u8(self.packet_type.to_u8())?;
+        wr.write_u8(self.packet_type.into())?;
 
         let mut cur_len = self.remaining_length;
         loop {
@@ -138,7 +138,7 @@ impl Decodable for FixedHeader {
             cur
         };
 
-        match PacketType::from_u8(type_val) {
+        match PacketType::try_from(type_val) {
             Ok(packet_type) => Ok(FixedHeader::new(packet_type, remaining_len)),
             Err(PacketTypeError::ReservedType(ty, _)) => {
                 Err(FixedHeaderError::ReservedType(ty, remaining_len))

@@ -15,7 +15,7 @@ impl<P: AsRef<Path>> ServerConfig<P> {
         Self {
             addr,
             tls,
-            version: ProtocolLevel::from_u8(v).unwrap(),
+            version: ProtocolLevel::try_from(v).unwrap(),
         }
     }
 }

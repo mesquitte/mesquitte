@@ -23,10 +23,9 @@ pub enum PubrecReasonCode {
     PayloadFormatInvalid,
 }
 
-impl PubrecReasonCode {
-    /// Get the value
-    pub fn to_u8(self) -> u8 {
-        match self {
+impl From<PubrecReasonCode> for u8 {
+    fn from(value: PubrecReasonCode) -> Self {
+        match value {
             PubrecReasonCode::Success => SUCCESS,
             PubrecReasonCode::NoMatchingSubscribers => NO_MATCHING_SUBSCRIBERS,
             PubrecReasonCode::UnspecifiedError => UNSPECIFIED_ERROR,
@@ -37,6 +36,12 @@ impl PubrecReasonCode {
             PubrecReasonCode::QuotaExceeded => QUOTA_EXCEEDED,
             PubrecReasonCode::PayloadFormatInvalid => PAYLOAD_FORMAT_INVALID,
         }
+    }
+}
+
+impl From<&PubrecReasonCode> for u8 {
+    fn from(value: &PubrecReasonCode) -> Self {
+        (*value).into()
     }
 }
 
@@ -62,7 +67,7 @@ impl TryFrom<u8> for PubrecReasonCode {
 
 impl Encodable for PubrecReasonCode {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        writer.write_u8(self.to_u8())
+        writer.write_u8(self.into())
     }
 
     fn encoded_length(&self) -> u32 {

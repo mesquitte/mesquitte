@@ -115,22 +115,6 @@ impl PacketType {
         self.0 = (self.0 & !0x0F) | (flags & 0x0F)
     }
 
-    /// To code
-    #[inline]
-    pub fn to_u8(self) -> u8 {
-        self.0
-    }
-
-    /// From code
-    pub fn from_u8(val: u8) -> Result<PacketType, PacketTypeError> {
-        let type_val = val >> 4;
-        let flags = val & 0x0F;
-
-        let control_type =
-            get_control_type(type_val).ok_or(PacketTypeError::ReservedType(type_val, flags))?;
-        Ok(PacketType::new(control_type, flags)?)
-    }
-
     #[inline]
     pub fn control_type(self) -> ControlType {
         get_control_type(self.0 >> 4).unwrap_or_else(|| {
@@ -142,6 +126,31 @@ impl PacketType {
     #[inline]
     pub fn flags(self) -> u8 {
         self.0 & 0x0F
+    }
+}
+
+impl From<PacketType> for u8 {
+    fn from(value: PacketType) -> Self {
+        value.0
+    }
+}
+
+impl From<&PacketType> for u8 {
+    fn from(value: &PacketType) -> Self {
+        value.0
+    }
+}
+
+impl TryFrom<u8> for PacketType {
+    type Error = PacketTypeError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        let type_val = value >> 4;
+        let flags = value & 0x0F;
+
+        let control_type =
+            get_control_type(type_val).ok_or(PacketTypeError::ReservedType(type_val, flags))?;
+        Ok(PacketType::new(control_type, flags)?)
     }
 }
 
