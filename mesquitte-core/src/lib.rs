@@ -1,3 +1,14 @@
+#[cfg(not(any(feature = "v4", feature = "v5")))]
+compile_error!("v4 or v5 must be enabled");
+#[cfg(not(any(
+    feature = "mqtt",
+    feature = "mqtts",
+    feature = "ws",
+    feature = "wss",
+    feature = "quic"
+)))]
+compile_error!("mqtt or mqtts or ws or wss or quic must be enabled");
+
 mod protocols;
 
 #[cfg(all(
