@@ -2,7 +2,12 @@ use std::{io, time::Duration};
 
 use connect::handle_connect;
 use futures::{SinkExt as _, StreamExt as _};
-use mqtt_codec_kit::v4::packet::{MqttDecoder, MqttEncoder, VariablePacket, VariablePacketError};
+use mqtt_codec_kit::{
+    common::{qos::QoSWithPacketIdentifier, QualityOfService},
+    v4::packet::{
+        MqttDecoder, MqttEncoder, PubcompPacket, PublishPacket, VariablePacket, VariablePacketError,
+    },
+};
 use publish::retrieve_pending_messages;
 use read_write_loop::{handle_clean_session, handle_deliver_packet, handle_read_packet};
 use session::Session;
@@ -112,7 +117,7 @@ assigned_client_id : {}"#,
         let (write_tx, write_rx) = mpsc::channel(8);
         let client_id = session.client_id().to_owned();
         let mut write_task = tokio::spawn(async move {
-            WriteLoop::new(frame_writer, client_id, write_rx)
+            WriteLoop::new(frame_writer, client_id, write_rx, self.storage)
                 .write_to_client()
                 .await
         });
@@ -266,26 +271,30 @@ where
     }
 }
 
-pub struct WriteLoop<T, E> {
+pub struct WriteLoop<T, E, S: 'static> {
     writer: FramedWrite<T, E>,
     client_id: String,
     write_rx: mpsc::Receiver<VariablePacket>,
+    storage: &'static Storage<S>,
 }
 
-impl<T, E> WriteLoop<T, E>
+impl<T, E, S> WriteLoop<T, E, S>
 where
     T: AsyncWrite + Unpin,
     E: Encoder<VariablePacket, Error = io::Error>,
+    S: MessageStore + RetainMessageStore + TopicStore + 'static,
 {
     pub fn new(
         writer: FramedWrite<T, E>,
         client_id: String,
         write_rx: mpsc::Receiver<VariablePacket>,
+        storage: &'static Storage<S>,
     ) -> Self {
         Self {
             writer,
             write_rx,
             client_id,
+            storage,
         }
     }
 
@@ -294,19 +303,59 @@ where
         T: AsyncWrite + Unpin,
         E: Encoder<VariablePacket, Error = io::Error>,
     {
+        // TODO: config: resend interval
+        let interval = Duration::from_millis(500);
+        let mut tick = interval_at(Instant::now() + interval, interval);
         loop {
-            // TODO: ticker resend pending QoS1/2 message
-            match self.write_rx.recv().await {
-                Some(packet) => {
-                    if let Err(err) = self.writer.send(packet).await {
-                        log::warn!("client#{} write failed: {}", self.client_id, err);
+            tokio::select! {
+                ret = self.write_rx.recv() => match ret {
+                    Some(packet) => {
+                        if let Err(err) = self.writer.send(packet).await {
+                            log::warn!("client#{} write failed: {}", self.client_id, err);
+                            break;
+                        }
+                    }
+                    None => {
+                        log::info!("client#{} write task closed", self.client_id);
                         break;
                     }
-                }
-                None => {
-                    log::info!("client#{} write task closed", self.client_id);
-                    break;
-                }
+                },
+                _ = tick.tick() => {
+                    let ret =  self.storage.inner.retrieve_pending_messages(&self.client_id).await;
+                    match ret {
+                        Ok(messages) => {
+                            for (server_packet_id, msg) in messages {
+                                match msg.pubrec_at() {
+                                    Some(_) => {
+                                        if let Err(err) = self.writer.send(PubcompPacket::new(server_packet_id).into()).await {
+                                            log::warn!("client#{} write pubcomp packet failed: {}", self.client_id, err);
+                                            break;
+                                        }
+                                    }
+                                    None => {
+                                        let qos = match msg.final_qos() {
+                                            QualityOfService::Level1 => QoSWithPacketIdentifier::Level1(server_packet_id),
+                                            QualityOfService::Level2 => QoSWithPacketIdentifier::Level2(server_packet_id),
+                                            QualityOfService::Level0 => unreachable!(),
+                                        };
+                                        let topic_name = msg.message().topic_name().to_owned();
+                                        let mut packet = PublishPacket::new(topic_name, qos, msg.message().payload());
+                                        packet.set_dup(true);
+
+                                        if let Err(err) = self.writer.send(packet.into()).await {
+                                            log::warn!("client#{} write publish packet failed: {}", self.client_id, err);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        Err(err) => {
+                            log::error!("retrieve pending messages: {err}");
+                            break;
+                        },
+                    }
+                },
             }
         }
     }
