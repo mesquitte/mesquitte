@@ -7,7 +7,7 @@ use retain::RetainMessageMemoryStore;
 use topic::TopicMemoryStore;
 
 use super::{
-    message::{IncomingPublishMessage, MessageStore, OutgoingPublishMessage},
+    message::{MessageStore, PendingPublishMessage, ReceivedPublishMessage},
     retain::{RetainContent, RetainMessageStore},
     topic::{RouteContent, RouteOption, TopicStore},
 };
@@ -37,45 +37,42 @@ impl MemoryStore {
 }
 
 impl MessageStore for MemoryStore {
-    async fn enqueue_incoming(
+    async fn save_received_message(
         &self,
         client_id: &str,
         packet_id: u16,
-        message: IncomingPublishMessage,
+        message: ReceivedPublishMessage,
     ) -> Result<bool, std::io::Error> {
         self.message_store
-            .enqueue_incoming(client_id, packet_id, message)
+            .save_received_message(client_id, packet_id, message)
             .await
     }
 
-    async fn enqueue_outgoing(
+    async fn save_pending_message(
         &self,
         client_id: &str,
-        message: OutgoingPublishMessage,
+        server_packet_id: u16,
+        message: PendingPublishMessage,
     ) -> Result<bool, std::io::Error> {
         self.message_store
-            .enqueue_outgoing(client_id, message)
+            .save_pending_message(client_id, server_packet_id, message)
             .await
     }
 
-    async fn fetch_pending_outgoing(
+    async fn retrieve_pending_messages(
         &self,
         client_id: &str,
-    ) -> Result<Vec<OutgoingPublishMessage>, std::io::Error> {
-        self.message_store.fetch_pending_outgoing(client_id).await
-    }
-
-    async fn fetch_ready_incoming(
-        &self,
-        client_id: &str,
-        max_inflight: usize,
-    ) -> Result<Option<Vec<IncomingPublishMessage>>, std::io::Error> {
+    ) -> Result<Vec<(u16, PendingPublishMessage)>, std::io::Error> {
         self.message_store
-            .fetch_ready_incoming(client_id, max_inflight)
+            .retrieve_pending_messages(client_id)
             .await
     }
 
-    async fn pubrel(&self, client_id: &str, packet_id: u16) -> Result<bool, std::io::Error> {
+    async fn pubrel(
+        &self,
+        client_id: &str,
+        packet_id: u16,
+    ) -> Result<Option<ReceivedPublishMessage>, std::io::Error> {
         self.message_store.pubrel(client_id, packet_id).await
     }
 
@@ -97,34 +94,24 @@ impl MessageStore for MemoryStore {
             .await
     }
 
-    async fn purge_completed_incoming_messages(
-        &self,
-        client_id: &str,
-    ) -> Result<(), std::io::Error> {
-        self.message_store
-            .purge_completed_incoming_messages(client_id)
-            .await
+    async fn clean_received_messages(&self, client_id: &str) -> Result<(), std::io::Error> {
+        self.message_store.clean_received_messages(client_id).await
     }
 
-    async fn purge_completed_outgoing_messages(
-        &self,
-        client_id: &str,
-    ) -> Result<(), std::io::Error> {
-        self.message_store
-            .purge_completed_outgoing_messages(client_id)
-            .await
+    async fn clean_pending_messages(&self, client_id: &str) -> Result<(), std::io::Error> {
+        self.message_store.clean_pending_messages(client_id).await
     }
 
     async fn is_full(&self, client_id: &str) -> Result<bool, std::io::Error> {
         self.message_store.is_full(client_id).await
     }
 
-    async fn len(&self, client_id: &str) -> Result<usize, std::io::Error> {
-        self.message_store.len(client_id).await
+    async fn get_message_count(&self, client_id: &str) -> Result<usize, std::io::Error> {
+        self.message_store.get_message_count(client_id).await
     }
 
-    async fn remove_all(&self, client_id: &str) -> Result<(), std::io::Error> {
-        self.message_store.remove_all(client_id).await
+    async fn clear_all_messages(&self, client_id: &str) -> Result<(), std::io::Error> {
+        self.message_store.clear_all_messages(client_id).await
     }
 }
 

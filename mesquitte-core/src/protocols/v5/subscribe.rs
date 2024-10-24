@@ -21,7 +21,7 @@ use crate::{
     },
 };
 
-use super::{publish::receive_outgoing_publish, session::Session};
+use super::{publish::handle_deliver_publish, session::Session};
 
 pub(super) enum SubscribeAck {
     Success(Vec<VariablePacket>),
@@ -95,7 +95,7 @@ properties : {:?}"#,
                 }
 
                 let mut packet =
-                    receive_outgoing_publish(session, granted_qos, msg.into(), storage.clone())
+                    handle_deliver_publish(session, granted_qos, &msg.into(), storage.clone())
                         .await?;
                 packet.set_retain(true);
 

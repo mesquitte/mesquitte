@@ -12,7 +12,7 @@ use crate::store::{
     Storage,
 };
 
-use super::{publish::receive_outgoing_publish, session::Session};
+use super::{publish::handle_deliver_publish, session::Session};
 
 pub(super) async fn handle_subscribe<S>(
     session: &mut Session,
@@ -50,7 +50,7 @@ packet id : {}
         let retain_messages = RetainMessageStore::search(&storage.inner, filter).await?;
         for msg in retain_messages {
             let mut packet =
-                receive_outgoing_publish(session, &granted_qos, &msg.into(), storage).await?;
+                handle_deliver_publish(session, &granted_qos, &msg.into(), storage).await?;
             packet.set_retain(true);
             retain_packets.push(packet.into());
         }
