@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  MSRV: '1.82'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.MSRV }}
+          components: clippy, rustfmt
+      - name: Install required tools
+        run: sudo apt-get install liburing-dev
+      - name: rustfmt
+        run: cargo fmt --all --check
+      - name: Build
+        run: cargo build
+    # - name: Run tests
+    #   run: cargo test

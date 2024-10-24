@@ -7,7 +7,7 @@ use crate::{
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
 #[cfg(feature = "mqtts")]
-use {crate::server::config::TlsConfig, crate::server::rustls::rustls_acceptor, std::path::Path};
+use {crate::server::config::TlsConfig, crate::server::rustls::rustls_acceptor};
 
 use super::Error;
 
