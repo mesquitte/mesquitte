@@ -31,9 +31,9 @@ async fn main() -> io::Result<()> {
     static GLOBAL: OnceLock<GlobalState> = OnceLock::new();
     static STORAGE: OnceLock<Storage<MemoryStore>> = OnceLock::new();
 
-    let config = ServerConfig::<String>::new("0.0.0.0:8883".to_string(), None, "4");
+    let config = ServerConfig::<String>::new("0.0.0.0:8883".parse().unwrap(), None, "4").unwrap();
     let broker = WsServer::bind(
-        "0.0.0.0:8883",
+        &config.addr,
         config.clone(),
         GLOBAL.get_or_init(|| global),
         STORAGE.get_or_init(|| storage),

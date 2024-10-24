@@ -31,9 +31,9 @@ async fn main() {
     static GLOBAL: OnceLock<GlobalState> = OnceLock::new();
     static STORAGE: OnceLock<Storage<MemoryStore>> = OnceLock::new();
 
-    let config = ServerConfig::<String>::new("0.0.0.0:1883".to_string(), None, "4");
+    let config = ServerConfig::<String>::new("0.0.0.0:1883".parse().unwrap(), None, "4").unwrap();
     let broker = QuicServer::bind(
-        "0.0.0.0:1883",
+        config.addr,
         (
             Path::new("mesquitte-core/examples/certs/cert.pem"),
             Path::new("mesquitte-core/examples/certs/key.pem"),
