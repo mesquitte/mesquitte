@@ -51,18 +51,17 @@ impl MessageStore for MemoryStore {
     async fn save_pending_message(
         &self,
         client_id: &str,
-        server_packet_id: u16,
         message: PendingPublishMessage,
     ) -> Result<bool, std::io::Error> {
         self.message_store
-            .save_pending_message(client_id, server_packet_id, message)
+            .save_pending_message(client_id, message)
             .await
     }
 
     async fn retrieve_pending_messages(
         &self,
         client_id: &str,
-    ) -> Result<Vec<(u16, PendingPublishMessage)>, std::io::Error> {
+    ) -> Result<Option<Vec<PendingPublishMessage>>, std::io::Error> {
         self.message_store
             .retrieve_pending_messages(client_id)
             .await
@@ -92,14 +91,6 @@ impl MessageStore for MemoryStore {
         self.message_store
             .pubcomp(client_id, server_packet_id)
             .await
-    }
-
-    async fn clean_received_messages(&self, client_id: &str) -> Result<(), std::io::Error> {
-        self.message_store.clean_received_messages(client_id).await
-    }
-
-    async fn clean_pending_messages(&self, client_id: &str) -> Result<(), std::io::Error> {
-        self.message_store.clean_pending_messages(client_id).await
     }
 
     async fn is_full(&self, client_id: &str) -> Result<bool, std::io::Error> {

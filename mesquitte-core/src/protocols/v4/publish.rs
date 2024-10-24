@@ -171,13 +171,7 @@ where
         packet_id
     );
 
-    storage
-        .inner
-        .clean_received_messages(session.client_id())
-        .await?;
-
-    let ret = storage.inner.pubrel(session.client_id(), packet_id).await?;
-    if let Some(msg) = ret {
+    if let Some(msg) = storage.inner.pubrel(session.client_id(), packet_id).await? {
         dispatch_publish(session, &msg, global, storage).await?;
     }
 
@@ -228,8 +222,7 @@ topic name : {:?}
             .inner
             .save_pending_message(
                 session.client_id(),
-                packet_id,
-                PendingPublishMessage::new(*subscribe_qos, message.clone()),
+                PendingPublishMessage::new(packet_id, *subscribe_qos, message.clone()),
             )
             .await?;
     }
@@ -330,26 +323,32 @@ where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
     let mut packets = Vec::new();
-    let messages = storage
+    let ret = storage
         .inner
         .retrieve_pending_messages(session.client_id())
         .await?;
-    for (server_packet_id, msg) in messages {
-        match msg.pubrec_at() {
-            Some(_) => {
-                packets.push(PubcompPacket::new(server_packet_id).into());
-            }
-            None => {
-                let qos = match msg.final_qos() {
-                    QualityOfService::Level1 => QoSWithPacketIdentifier::Level1(server_packet_id),
-                    QualityOfService::Level2 => QoSWithPacketIdentifier::Level2(server_packet_id),
-                    QualityOfService::Level0 => unreachable!(),
-                };
-                let topic_name = msg.message().topic_name().to_owned();
-                let mut packet = PublishPacket::new(topic_name, qos, msg.message().payload());
-                packet.set_dup(msg.message().dup());
+    if let Some(messages) = ret {
+        for msg in messages {
+            match msg.pubrec_at() {
+                Some(_) => {
+                    packets.push(PubcompPacket::new(msg.server_packet_id()).into());
+                }
+                None => {
+                    let qos = match msg.final_qos() {
+                        QualityOfService::Level1 => {
+                            QoSWithPacketIdentifier::Level1(msg.server_packet_id())
+                        }
+                        QualityOfService::Level2 => {
+                            QoSWithPacketIdentifier::Level2(msg.server_packet_id())
+                        }
+                        QualityOfService::Level0 => unreachable!(),
+                    };
+                    let topic_name = msg.message().topic_name().to_owned();
+                    let mut packet = PublishPacket::new(topic_name, qos, msg.message().payload());
+                    packet.set_dup(msg.message().dup());
 
-                packets.push(packet.into());
+                    packets.push(packet.into());
+                }
             }
         }
     }

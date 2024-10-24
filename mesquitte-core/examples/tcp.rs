@@ -23,7 +23,7 @@ async fn main() -> io::Result<()> {
     let global = GlobalState::default();
 
     let topic_store = TopicMemoryStore::default();
-    let message_store = MessageMemoryStore::new(102400, 30);
+    let message_store = MessageMemoryStore::new(102400, 30, 3);
     let retain_message_store = RetainMessageMemoryStore::default();
 
     let mem_store = MemoryStore::new(message_store, retain_message_store, topic_store);
