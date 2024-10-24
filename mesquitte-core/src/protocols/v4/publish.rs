@@ -11,9 +11,9 @@ use mqtt_codec_kit::{
 };
 
 use crate::{
-    server::state::{DispatchMessage, GlobalState},
+    server::state::{DeliverMessage, GlobalState},
     store::{
-        message::{IncomingPublishMessage, MessageStore, OutgoingPublishMessage},
+        message::{MessageStore, PendingPublishMessage, ReceivedPublishMessage},
         retain::RetainMessageStore,
         topic::{RouteOption, TopicStore},
         Storage,
@@ -84,7 +84,7 @@ topic name : {:?}
             if !packet.dup() {
                 storage
                     .inner
-                    .enqueue_incoming(session.client_id(), packet_id, packet.into())
+                    .save_received_message(session.client_id(), packet_id, packet.into())
                     .await?;
             }
             Ok((false, Some(PubrecPacket::new(packet_id).into())))
@@ -95,7 +95,7 @@ topic name : {:?}
 // Dispatch a publish message from client or will to matched clients
 pub(super) async fn dispatch_publish<S>(
     session: &mut Session,
-    packet: &IncomingPublishMessage,
+    packet: &ReceivedPublishMessage,
     global: &'static GlobalState,
     storage: &'static Storage<S>,
 ) -> io::Result<()>
@@ -139,19 +139,16 @@ topic name : {:?}
     }
 
     for (receiver_client_id, qos) in senders {
-        if let Some(sender) = global.get_outgoing_sender(&receiver_client_id) {
+        if let Some(sender) = global.get_deliver(&receiver_client_id) {
             if sender.is_closed() {
-                log::warn!(
-                    "client#{:?} outgoing sender channel is closed",
-                    receiver_client_id,
-                );
+                log::warn!("client#{:?} deliver channel is closed", receiver_client_id,);
                 continue;
             }
             if let Err(err) = sender
-                .send(DispatchMessage::Publish(qos, Box::new(packet.clone())))
+                .send(DeliverMessage::Publish(qos, Box::new(packet.clone())))
                 .await
             {
-                log::error!("{} send publish message: {}", receiver_client_id, err,)
+                log::error!("{} send publish: {}", receiver_client_id, err,)
             }
         }
     }
@@ -162,6 +159,7 @@ topic name : {:?}
 pub(super) async fn handle_pubrel<S>(
     session: &mut Session,
     packet_id: u16,
+    global: &'static GlobalState,
     storage: &'static Storage<S>,
 ) -> io::Result<PubcompPacket>
 where
@@ -173,22 +171,30 @@ where
         packet_id
     );
 
-    storage.inner.pubrel(session.client_id(), packet_id).await?;
+    storage
+        .inner
+        .clean_received_messages(session.client_id())
+        .await?;
+
+    let ret = storage.inner.pubrel(session.client_id(), packet_id).await?;
+    if let Some(msg) = ret {
+        dispatch_publish(session, &msg, global, storage).await?;
+    }
 
     Ok(PubcompPacket::new(packet_id))
 }
 
-pub(super) async fn receive_outgoing_publish<S>(
+pub(super) async fn handle_deliver_publish<S>(
     session: &mut Session,
     subscribe_qos: &QualityOfService,
-    message: &IncomingPublishMessage,
+    message: &ReceivedPublishMessage,
     storage: &'static Storage<S>,
 ) -> io::Result<PublishPacket>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
     log::debug!(
-        r#"client#{} receive outgoing publish message:
+        r#"client#{} receive deliver publish message:
 topic name : {:?}
    payload : {:?}
      flags : publish qos={:?}, subscribe_qos={:?}, retain={}, dup={}"#,
@@ -218,10 +224,13 @@ topic name : {:?}
     packet.set_dup(message.dup());
 
     if let Some(packet_id) = packet_id {
-        let m = OutgoingPublishMessage::new(packet_id, *subscribe_qos, message.clone());
         storage
             .inner
-            .enqueue_outgoing(session.client_id(), m)
+            .save_pending_message(
+                session.client_id(),
+                packet_id,
+                PendingPublishMessage::new(*subscribe_qos, message.clone()),
+            )
             .await?;
     }
 
@@ -309,34 +318,40 @@ server side disconnected : {}
 
     if let Some(last_will) = session.take_last_will() {
         dispatch_publish(session, &last_will.into(), global, storage).await?;
-        session.clear_last_will();
     }
     Ok(())
 }
 
-pub(crate) async fn fetch_pending_outgoing_messages<S>(
+pub(crate) async fn retrieve_pending_messages<S>(
     session: &mut Session,
     storage: &'static Storage<S>,
-) -> io::Result<Vec<PublishPacket>>
+) -> io::Result<Vec<VariablePacket>>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
     let mut packets = Vec::new();
     let messages = storage
         .inner
-        .fetch_pending_outgoing(session.client_id())
+        .retrieve_pending_messages(session.client_id())
         .await?;
-    for msg in messages {
-        let qos = match msg.final_qos() {
-            QualityOfService::Level0 => QoSWithPacketIdentifier::Level0,
-            QualityOfService::Level1 => QoSWithPacketIdentifier::Level1(msg.server_packet_id()),
-            QualityOfService::Level2 => QoSWithPacketIdentifier::Level2(msg.server_packet_id()),
-        };
-        let topic_name = msg.message().topic_name().to_owned();
-        let mut packet = PublishPacket::new(topic_name, qos, msg.message().payload());
-        packet.set_dup(msg.message().dup());
+    for (server_packet_id, msg) in messages {
+        match msg.pubrec_at() {
+            Some(_) => {
+                packets.push(PubcompPacket::new(server_packet_id).into());
+            }
+            None => {
+                let qos = match msg.final_qos() {
+                    QualityOfService::Level1 => QoSWithPacketIdentifier::Level1(server_packet_id),
+                    QualityOfService::Level2 => QoSWithPacketIdentifier::Level2(server_packet_id),
+                    QualityOfService::Level0 => unreachable!(),
+                };
+                let topic_name = msg.message().topic_name().to_owned();
+                let mut packet = PublishPacket::new(topic_name, qos, msg.message().payload());
+                packet.set_dup(msg.message().dup());
 
-        packets.push(packet);
+                packets.push(packet.into());
+            }
+        }
     }
 
     Ok(packets)

@@ -3,7 +3,7 @@ use std::{future::Future, io, sync::Arc};
 use mqtt_codec_kit::common::{QualityOfService, TopicFilter, TopicName};
 use mqtt_codec_kit::v5::control::PublishProperties;
 
-use super::message::IncomingPublishMessage;
+use super::message::ReceivedPublishMessage;
 
 #[derive(Clone)]
 pub struct RetainContent {
@@ -38,11 +38,11 @@ impl RetainContent {
     }
 }
 
-impl<T> From<(T, &IncomingPublishMessage)> for RetainContent
+impl<T> From<(T, &ReceivedPublishMessage)> for RetainContent
 where
     T: Into<String>,
 {
-    fn from((client_id, packet): (T, &IncomingPublishMessage)) -> Self {
+    fn from((client_id, packet): (T, &ReceivedPublishMessage)) -> Self {
         Self {
             client_id: client_id.into(),
             topic_name: packet.topic_name().clone(),

@@ -15,9 +15,9 @@ use mqtt_codec_kit::{
 
 use crate::{
     protocols::v5::common::build_error_disconnect,
-    server::state::{DispatchMessage, GlobalState},
+    server::state::{DeliverMessage, GlobalState},
     store::{
-        message::{IncomingPublishMessage, MessageStore, OutgoingPublishMessage},
+        message::{MessageStore, PendingPublishMessage, ReceivedPublishMessage},
         retain::RetainMessageStore,
         topic::{RouteOption, TopicStore},
         Storage,
@@ -28,7 +28,7 @@ use super::session::Session;
 
 pub(super) async fn handle_publish<S>(
     session: &mut Session,
-    packet: PublishPacket,
+    packet: &PublishPacket,
     global: Arc<GlobalState>,
     storage: Arc<Storage<S>>,
 ) -> io::Result<(bool, Option<VariablePacket>)>
@@ -48,8 +48,8 @@ topic name : {:?}
         packet.dup(),
     );
 
-    let message_queue_size = storage.inner.len(session.client_id()).await?;
-    if message_queue_size >= session.receive_maximum().into() {
+    let message_count = storage.inner.get_message_count(session.client_id()).await?;
+    if message_count >= session.receive_maximum().into() {
         let err_pkt = build_error_disconnect(
             session,
             DisconnectReasonCode::ReceiveMaximumExceeded,
@@ -105,7 +105,7 @@ topic name : {:?}
             if !packet.dup() {
                 storage
                     .inner
-                    .enqueue_incoming(session.client_id(), packet_id, packet.into())
+                    .save_received_message(session.client_id(), packet_id, packet.into())
                     .await?;
             }
             Ok((
@@ -119,7 +119,7 @@ topic name : {:?}
 // Dispatch a publish message from client or will to matched clients
 pub(super) async fn dispatch_publish<S>(
     session: &mut Session,
-    packet: IncomingPublishMessage,
+    packet: ReceivedPublishMessage,
     global: Arc<GlobalState>,
     storage: Arc<Storage<S>>,
 ) -> io::Result<()>
@@ -183,19 +183,16 @@ properties : {:?}
     }
 
     for (receiver_client_id, qos) in senders {
-        if let Some(sender) = global.get_outgoing_sender(&receiver_client_id) {
+        if let Some(sender) = global.get_deliver(&receiver_client_id) {
             if sender.is_closed() {
-                log::warn!(
-                    "client#{:?} outgoing sender channel is closed",
-                    receiver_client_id,
-                );
+                log::warn!("client#{:?} deliver channel is closed", receiver_client_id,);
                 continue;
             }
             if let Err(err) = sender
-                .send(DispatchMessage::Publish(qos, Box::new(packet.clone())))
+                .send(DeliverMessage::Publish(qos, Box::new(packet.clone())))
                 .await
             {
-                log::error!("{} send publish message: {}", receiver_client_id, err,)
+                log::error!("{} send publish: {}", receiver_client_id, err,)
             }
         }
     }
@@ -222,18 +219,18 @@ where
     Ok(PubcompPacket::new(packet_id, PubcompReasonCode::Success))
 }
 
-pub(super) async fn receive_outgoing_publish<S>(
+pub(super) async fn handle_deliver_publish<S>(
     session: &mut Session,
     subscribe_qos: QualityOfService,
     // retain_as_published: bool,
-    message: IncomingPublishMessage,
+    message: &ReceivedPublishMessage,
     storage: Arc<Storage<S>>,
 ) -> io::Result<PublishPacket>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
     log::debug!(
-        r#"client#{} receive outgoing publish message:
+        r#"client#{} receive deliver publish message:
 topic name : {:?}
    payload : {:?}
 properties : {:?}
@@ -280,10 +277,13 @@ properties : {:?}
     packet.set_properties(properties);
 
     if let Some(packet_id) = packet_id {
-        let m = OutgoingPublishMessage::new(packet_id, subscribe_qos, message);
         storage
             .inner
-            .enqueue_outgoing(session.client_id(), m)
+            .save_pending_message(
+                session.client_id(),
+                packet_id,
+                PendingPublishMessage::new(subscribe_qos, message.clone()),
+            )
             .await?;
     }
 
@@ -383,32 +383,37 @@ server side disconnected : {}
     Ok(())
 }
 
-pub(crate) async fn fetch_pending_outgoing_messages<S>(
+pub(crate) async fn retrieve_pending_messages<S>(
     session: &mut Session,
     storage: Arc<Storage<S>>,
-) -> io::Result<Vec<PublishPacket>>
+) -> io::Result<Vec<VariablePacket>>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
     let mut packets = Vec::new();
     let messages = storage
         .inner
-        .fetch_pending_outgoing(session.client_id())
+        .retrieve_pending_messages(session.client_id())
         .await?;
-    for msg in messages {
-        let qos = match msg.final_qos() {
-            QualityOfService::Level0 => QoSWithPacketIdentifier::Level0,
-            QualityOfService::Level1 => QoSWithPacketIdentifier::Level1(msg.server_packet_id()),
-            QualityOfService::Level2 => QoSWithPacketIdentifier::Level2(msg.server_packet_id()),
-        };
-        let topic_name = msg.message().topic_name().to_owned();
-        let mut packet = PublishPacket::new(topic_name, qos, msg.message().payload());
-        packet.set_dup(msg.message().dup());
-        if let Some(properties) = msg.message().properties() {
-            packet.set_properties(properties.clone());
-        }
+    for (server_packet_id, msg) in messages {
+        match msg.pubrec_at() {
+            Some(_) => {
+                packets
+                    .push(PubcompPacket::new(server_packet_id, PubcompReasonCode::Success).into());
+            }
+            None => {
+                let qos = match msg.final_qos() {
+                    QualityOfService::Level1 => QoSWithPacketIdentifier::Level1(server_packet_id),
+                    QualityOfService::Level2 => QoSWithPacketIdentifier::Level2(server_packet_id),
+                    QualityOfService::Level0 => unreachable!(),
+                };
+                let topic_name = msg.message().topic_name().to_owned();
+                let mut packet = PublishPacket::new(topic_name, qos, msg.message().payload());
+                packet.set_dup(msg.message().dup());
 
-        packets.push(packet);
+                packets.push(packet.into());
+            }
+        }
     }
 
     Ok(packets)

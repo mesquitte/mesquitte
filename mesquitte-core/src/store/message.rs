@@ -1,4 +1,4 @@
-use std::{cmp, fmt::Debug, future::Future, io, sync::Arc};
+use std::{cmp, fmt::Debug, future::Future, io, sync::Arc, time::SystemTime};
 
 use mqtt_codec_kit::common::{QualityOfService, TopicName};
 // #[cfg(feature = "v4")]
@@ -13,17 +13,25 @@ use mqtt_codec_kit::v5::{
 
 use super::retain::RetainContent;
 
+pub fn get_unix_ts() -> u64 {
+    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(n) => n.as_secs(),
+        Err(_) => panic!("SystemTime before UNIX EPOCH!"),
+    }
+}
+
 #[derive(Clone, Debug)]
-pub struct IncomingPublishMessage {
+pub struct ReceivedPublishMessage {
     topic_name: TopicName,
     payload: Vec<u8>,
     qos: QualityOfService,
     retain: bool,
     dup: bool,
     properties: Option<PublishProperties>,
+    receive_at: u64,
 }
 
-impl IncomingPublishMessage {
+impl ReceivedPublishMessage {
     pub fn topic_name(&self) -> &TopicName {
         &self.topic_name
     }
@@ -51,25 +59,13 @@ impl IncomingPublishMessage {
     pub fn properties(&self) -> Option<&PublishProperties> {
         self.properties.as_ref()
     }
-}
 
-impl From<V4PublishPacket> for IncomingPublishMessage {
-    fn from(packet: V4PublishPacket) -> Self {
-        let mut payload = vec![0u8; packet.payload().len()];
-        payload.copy_from_slice(packet.payload());
-
-        Self {
-            topic_name: packet.topic_name().to_owned(),
-            payload,
-            qos: packet.qos().into(),
-            retain: packet.retain(),
-            dup: packet.dup(),
-            properties: None,
-        }
+    pub fn receive_at(&self) -> u64 {
+        self.receive_at
     }
 }
 
-impl From<&V4PublishPacket> for IncomingPublishMessage {
+impl From<&V4PublishPacket> for ReceivedPublishMessage {
     fn from(packet: &V4PublishPacket) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
@@ -81,12 +77,13 @@ impl From<&V4PublishPacket> for IncomingPublishMessage {
             retain: packet.retain(),
             dup: packet.dup(),
             properties: None,
+            receive_at: get_unix_ts(),
         }
     }
 }
 
-impl From<V5PublishPacket> for IncomingPublishMessage {
-    fn from(packet: V5PublishPacket) -> Self {
+impl From<&V5PublishPacket> for ReceivedPublishMessage {
+    fn from(packet: &V5PublishPacket) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
 
@@ -97,11 +94,12 @@ impl From<V5PublishPacket> for IncomingPublishMessage {
             retain: packet.retain(),
             dup: packet.dup(),
             properties: Some(packet.properties().to_owned()),
+            receive_at: get_unix_ts(),
         }
     }
 }
 
-impl From<Arc<RetainContent>> for IncomingPublishMessage {
+impl From<Arc<RetainContent>> for ReceivedPublishMessage {
     fn from(packet: Arc<RetainContent>) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
@@ -113,12 +111,13 @@ impl From<Arc<RetainContent>> for IncomingPublishMessage {
             retain: false,
             dup: false,
             properties: packet.properties().cloned(),
+            receive_at: get_unix_ts(),
         }
     }
 }
 
 // #[cfg(feature = "v4")]
-impl From<V4LastWill> for IncomingPublishMessage {
+impl From<V4LastWill> for ReceivedPublishMessage {
     fn from(value: V4LastWill) -> Self {
         let mut payload = vec![0u8; value.message().0.len()];
         payload.copy_from_slice(&value.message().0);
@@ -130,12 +129,13 @@ impl From<V4LastWill> for IncomingPublishMessage {
             retain: value.retain(),
             properties: None,
             dup: false,
+            receive_at: get_unix_ts(),
         }
     }
 }
 
 // #[cfg(feature = "v5")]
-impl From<V5LastWill> for IncomingPublishMessage {
+impl From<V5LastWill> for ReceivedPublishMessage {
     fn from(value: V5LastWill) -> Self {
         let mut payload = vec![0u8; value.message().0.len()];
         payload.copy_from_slice(&value.message().0);
@@ -158,35 +158,42 @@ impl From<V5LastWill> for IncomingPublishMessage {
             retain: value.retain(),
             dup: false,
             properties: Some(publish_properties),
+            receive_at: get_unix_ts(),
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct OutgoingPublishMessage {
-    server_packet_id: u16,
+pub struct PendingPublishMessage {
     subscribe_qos: QualityOfService,
-    message: IncomingPublishMessage,
+    message: ReceivedPublishMessage,
+    receive_at: u64,
+    pubrec_at: Option<u64>,
 }
 
-impl OutgoingPublishMessage {
-    pub fn new(
-        server_packet_id: u16,
-        subscribe_qos: QualityOfService,
-        message: IncomingPublishMessage,
-    ) -> Self {
+impl PendingPublishMessage {
+    pub fn new(subscribe_qos: QualityOfService, message: ReceivedPublishMessage) -> Self {
         Self {
-            server_packet_id,
+            receive_at: get_unix_ts(),
+            pubrec_at: None,
             subscribe_qos,
             message,
         }
     }
 
-    pub fn server_packet_id(&self) -> u16 {
-        self.server_packet_id
+    pub fn receive_at(&self) -> u64 {
+        self.receive_at
     }
 
-    pub fn message(&self) -> &IncomingPublishMessage {
+    pub fn pubrec_at(&self) -> Option<u64> {
+        self.pubrec_at
+    }
+
+    pub fn renew_pubrec_at(&mut self) {
+        self.pubrec_at = Some(get_unix_ts())
+    }
+
+    pub fn message(&self) -> &ReceivedPublishMessage {
         &self.message
     }
 
@@ -200,35 +207,30 @@ impl OutgoingPublishMessage {
 }
 
 pub trait MessageStore: Send + Sync {
-    fn enqueue_incoming(
+    fn save_received_message(
         &self,
         client_id: &str,
         packet_id: u16,
-        message: IncomingPublishMessage,
+        message: ReceivedPublishMessage,
     ) -> impl Future<Output = Result<bool, io::Error>> + Send;
 
-    fn enqueue_outgoing(
+    fn save_pending_message(
         &self,
         client_id: &str,
-        message: OutgoingPublishMessage,
+        server_packet_id: u16,
+        message: PendingPublishMessage,
     ) -> impl Future<Output = Result<bool, io::Error>> + Send;
 
-    fn fetch_pending_outgoing(
+    fn retrieve_pending_messages(
         &self,
         client_id: &str,
-    ) -> impl Future<Output = Result<Vec<OutgoingPublishMessage>, io::Error>> + Send;
-
-    fn fetch_ready_incoming(
-        &self,
-        client_id: &str,
-        max_inflight: usize,
-    ) -> impl Future<Output = Result<Option<Vec<IncomingPublishMessage>>, io::Error>> + Send;
+    ) -> impl Future<Output = Result<Vec<(u16, PendingPublishMessage)>, io::Error>> + Send;
 
     fn pubrel(
         &self,
         client_id: &str,
         packet_id: u16,
-    ) -> impl Future<Output = Result<bool, io::Error>> + Send;
+    ) -> impl Future<Output = Result<Option<ReceivedPublishMessage>, io::Error>> + Send;
 
     fn puback(
         &self,
@@ -248,19 +250,25 @@ pub trait MessageStore: Send + Sync {
         server_packet_id: u16,
     ) -> impl Future<Output = Result<bool, io::Error>> + Send;
 
-    fn purge_completed_incoming_messages(
+    fn clean_received_messages(
         &self,
         client_id: &str,
     ) -> impl Future<Output = Result<(), io::Error>> + Send;
 
-    fn purge_completed_outgoing_messages(
+    fn clean_pending_messages(
         &self,
         client_id: &str,
     ) -> impl Future<Output = Result<(), io::Error>> + Send;
 
     fn is_full(&self, client_id: &str) -> impl Future<Output = Result<bool, io::Error>> + Send;
 
-    fn len(&self, client_id: &str) -> impl Future<Output = Result<usize, io::Error>> + Send;
+    fn get_message_count(
+        &self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<usize, io::Error>> + Send;
 
-    fn remove_all(&self, client_id: &str) -> impl Future<Output = Result<(), io::Error>> + Send;
+    fn clear_all_messages(
+        &self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<(), io::Error>> + Send;
 }

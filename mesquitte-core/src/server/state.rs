@@ -7,7 +7,7 @@ use tokio::{
     time,
 };
 
-use crate::store::message::IncomingPublishMessage;
+use crate::store::message::ReceivedPublishMessage;
 
 pub enum AddClientReceipt {
     Present(u16),
@@ -28,8 +28,8 @@ impl Display for KickReason {
 }
 
 #[derive(Debug)]
-pub enum DispatchMessage {
-    Publish(QualityOfService, Box<IncomingPublishMessage>),
+pub enum DeliverMessage {
+    Publish(QualityOfService, Box<ReceivedPublishMessage>),
     Online(mpsc::Sender<u16>),
     Kick(KickReason),
 }
@@ -41,7 +41,7 @@ pub struct GlobalState {
     // max qos
     // max connection ?
     // read channel size
-    // outgoing channel size
+    // deliver channel size
     // max packet size-> v3?
     // max inflight size
     // max inflight message size
@@ -54,20 +54,20 @@ pub struct GlobalState {
     // max keep alive
     // min keep alive
     // config: Arc<Config>,
-    clients: DashMap<String, mpsc::Sender<DispatchMessage>, foldhash::fast::RandomState>,
+    clients: DashMap<String, mpsc::Sender<DeliverMessage>, foldhash::fast::RandomState>,
 }
 
 impl GlobalState {
     pub async fn add_client(
         &self,
         client_id: &str,
-        new_sender: mpsc::Sender<DispatchMessage>,
+        new_sender: mpsc::Sender<DeliverMessage>,
     ) -> AddClientReceipt {
-        if let Some(old_sender) = self.get_outgoing_sender(client_id) {
+        if let Some(old_sender) = self.get_deliver(client_id) {
             if !old_sender.is_closed() {
                 let (control_sender, mut control_receiver) = channel(1);
                 match old_sender
-                    .send(DispatchMessage::Online(control_sender))
+                    .send(DeliverMessage::Online(control_sender))
                     .await
                 {
                     Ok(()) => {
@@ -100,7 +100,7 @@ impl GlobalState {
         self.clients.remove(client_id);
     }
 
-    pub fn get_outgoing_sender(&self, client_id: &str) -> Option<mpsc::Sender<DispatchMessage>> {
+    pub fn get_deliver(&self, client_id: &str) -> Option<mpsc::Sender<DeliverMessage>> {
         self.clients.get(client_id).map(|s| s.value().clone())
     }
 }

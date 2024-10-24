@@ -3,8 +3,8 @@ use std::{io, time::Duration};
 use connect::handle_connect;
 use futures::{SinkExt as _, StreamExt as _};
 use mqtt_codec_kit::v4::packet::{MqttDecoder, MqttEncoder, VariablePacket, VariablePacketError};
-use publish::fetch_pending_outgoing_messages;
-use read_write_loop::{handle_clean_session, handle_incoming, handle_outgoing};
+use publish::retrieve_pending_messages;
+use read_write_loop::{handle_clean_session, handle_deliver_packet, handle_read_packet};
 use session::Session;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -14,7 +14,7 @@ use tokio::{
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
 use crate::{
-    server::state::{DispatchMessage, GlobalState},
+    server::state::{DeliverMessage, GlobalState},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
 
@@ -64,13 +64,13 @@ where
             }
         };
 
-        let (mut session, outgoing_rx) = match handle_connect(&packet, self.global).await {
-            Ok((pkt, session, outgoing_rx)) => {
+        let (mut session, deliver_rx) = match handle_connect(&packet, self.global).await {
+            Ok((pkt, session, deliver_rx)) => {
                 if let Err(err) = frame_writer.send(pkt).await {
                     log::error!("handle connect write connect ack: {err}");
                     return;
                 }
-                (session, outgoing_rx)
+                (session, deliver_rx)
             }
             Err(pkt) => {
                 let _ = frame_writer
@@ -81,7 +81,20 @@ where
             }
         };
 
-        match fetch_pending_outgoing_messages(&mut session, self.storage).await {
+        log::debug!(
+            r#"client#{} session:
+        connect at : {:?}
+     clean session : {}
+        keep alive : {}
+assigned_client_id : {}"#,
+            session.client_id(),
+            session.connected_at(),
+            session.clean_session(),
+            session.keep_alive(),
+            session.assigned_client_id(),
+        );
+
+        match retrieve_pending_messages(&mut session, self.storage).await {
             Ok(packets) => {
                 for pkt in packets {
                     if let Err(err) = frame_writer.send(pkt).await {
@@ -91,143 +104,108 @@ where
                 }
             }
             Err(err) => {
-                log::error!("get outgoing packets: {err}");
+                log::error!("retrieve pending messages: {err}");
                 return;
             }
         }
 
-        let (msg_tx, msg_rx) = mpsc::channel(8);
-        let mut read_task = tokio::spawn(async move {
-            ReadLoop::new(frame_reader, msg_tx).read_from_client().await;
+        let (write_tx, write_rx) = mpsc::channel(8);
+        let client_id = session.client_id().to_owned();
+        let mut write_task = tokio::spawn(async move {
+            WriteLoop::new(frame_writer, client_id, write_rx)
+                .write_to_client()
+                .await
         });
 
-        let mut write_task = tokio::spawn(async move {
-            WriteLoop::new(
-                frame_writer,
+        let mut read_task = tokio::spawn(
+            ReadLoop::new(
+                frame_reader,
                 session,
-                msg_rx,
-                outgoing_rx,
+                deliver_rx,
+                write_tx,
                 self.global,
                 self.storage,
             )
-            .write_to_client()
-            .await
-        });
+            .read_from_client(),
+        );
 
         if tokio::try_join!(&mut read_task, &mut write_task).is_err() {
             log::warn!("read_task/write_task terminated");
-            read_task.abort();
             write_task.abort();
         };
     }
 }
 
-struct ReadLoop<T, D> {
+struct ReadLoop<T, D, S: 'static> {
     reader: FramedRead<T, D>,
-    sender: mpsc::Sender<VariablePacket>,
-}
-
-impl<T, D> ReadLoop<T, D>
-where
-    T: AsyncRead + Unpin,
-    D: Decoder<Item = VariablePacket, Error = VariablePacketError>,
-{
-    pub fn new(reader: FramedRead<T, D>, sender: mpsc::Sender<VariablePacket>) -> Self {
-        Self { reader, sender }
-    }
-
-    async fn read_from_client(&mut self) {
-        loop {
-            match self.reader.next().await {
-                None => {
-                    log::info!("client closed");
-                    break;
-                }
-                Some(Err(e)) => {
-                    log::warn!("read from client: {}", e);
-                    break;
-                }
-                Some(Ok(packet)) => {
-                    if let Err(err) = self.sender.send(packet).await {
-                        log::warn!("receiver closed: {}", err);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-}
-
-pub struct WriteLoop<T, E, S: 'static> {
-    writer: FramedWrite<T, E>,
+    write_tx: mpsc::Sender<VariablePacket>,
+    deliver_rx: mpsc::Receiver<DeliverMessage>,
     session: Session,
-    incoming_rx: mpsc::Receiver<VariablePacket>,
-    outgoing_rx: mpsc::Receiver<DispatchMessage>,
     global: &'static GlobalState,
     storage: &'static Storage<S>,
 }
 
-impl<T, E, S: 'static> WriteLoop<T, E, S>
+impl<T, D, S: 'static> ReadLoop<T, D, S>
 where
-    T: AsyncWrite + Unpin,
-    E: Encoder<VariablePacket, Error = io::Error>,
+    T: AsyncRead + Unpin,
+    D: Decoder<Item = VariablePacket, Error = VariablePacketError>,
     S: MessageStore + RetainMessageStore + TopicStore + 'static,
 {
     pub fn new(
-        writer: FramedWrite<T, E>,
+        reader: FramedRead<T, D>,
         session: Session,
-        incoming_rx: mpsc::Receiver<VariablePacket>,
-        outgoing_rx: mpsc::Receiver<DispatchMessage>,
+        deliver_rx: mpsc::Receiver<DeliverMessage>,
+        write_tx: mpsc::Sender<VariablePacket>,
         global: &'static GlobalState,
         storage: &'static Storage<S>,
     ) -> Self {
         Self {
-            writer,
+            reader,
             session,
-            incoming_rx,
-            outgoing_rx,
+            deliver_rx,
+            write_tx,
             global,
             storage,
         }
     }
 
-    async fn write_to_client(mut self)
-    where
-        T: AsyncWrite + Unpin,
-        E: Encoder<VariablePacket, Error = io::Error>,
-    {
+    async fn read_from_client(mut self) {
         if self.session.keep_alive() > 0 {
             let half_interval = Duration::from_millis(self.session.keep_alive() as u64 * 500);
             let mut keep_alive_tick = interval_at(Instant::now() + half_interval, half_interval);
             let keep_alive_timeout = half_interval * 3;
             loop {
                 tokio::select! {
-                    packet = self.incoming_rx.recv() => match packet {
-                        Some(p) => match handle_incoming(&mut self.writer, &mut self.session, p, self.global, self.storage).await {
+                    packet = self.reader.next() => match packet {
+                        Some(Ok(p)) => match handle_read_packet(&self.write_tx, &mut self.session, p, self.global, self.storage).await {
                             Ok(true) => break,
                             Ok(false) => continue,
                             Err(err) => {
-                                log::error!("handle incoming failed: {err}");
+                                log::warn!("read form client handle message failed: {}", err);
                                 break;
                             },
+                        }
+                        Some(Err(err)) => {
+                            log::warn!("read form client failed: {}", err);
+                            break;
                         }
                         None => {
                             log::warn!("incoming receive channel closed");
                             break;
                         }
                     },
-                    packet = self.outgoing_rx.recv() => match packet {
-                        Some(p) => match handle_outgoing(&mut self.writer, &mut self.session, p, self.global, self.storage).await {
+                    packet = self.deliver_rx.recv() => match packet {
+                        Some(p) => match handle_deliver_packet(&self.write_tx, &mut self.session, p, self.global, self.storage).await {
                             Ok(should_stop) => if should_stop {
                                 break;
                             },
                             Err(err) => {
-                                log::error!("handle outgoing failed: {}", err);
+                                log::error!("handle deliver failed: {}", err);
                                 break;
                             },
                         }
                         None => {
-                            log::warn!("outgoing receive channel closed");
+                            log::warn!("deliver channel closed");
                             break;
                         }
                     },
@@ -241,32 +219,36 @@ where
         } else {
             loop {
                 tokio::select! {
-                    packet = self.incoming_rx.recv() => match packet {
-                        Some(p) => match handle_incoming(&mut self.writer, &mut self.session, p, self.global, self.storage).await {
+                    packet = self.reader.next() => match packet {
+                        Some(Ok(p)) => match handle_read_packet(&self.write_tx, &mut self.session, p, self.global, self.storage).await {
                             Ok(true) => break,
                             Ok(false) => continue,
                             Err(err) => {
-                                log::error!("handle incoming failed: {err}");
+                                log::warn!("read form client handle message failed: {}", err);
                                 break;
                             },
+                        }
+                        Some(Err(err)) => {
+                            log::warn!("read form client failed: {}", err);
+                            break;
                         }
                         None => {
                             log::warn!("incoming receive channel closed");
                             break;
                         }
                     },
-                    packet = self.outgoing_rx.recv() => match packet {
-                        Some(p) => match handle_outgoing(&mut self.writer, &mut self.session, p, self.global, self.storage).await {
+                    packet = self.deliver_rx.recv() => match packet {
+                        Some(p) => match handle_deliver_packet(&self.write_tx, &mut self.session, p, self.global, self.storage).await {
                             Ok(should_stop) => if should_stop {
                                 break;
                             },
                             Err(err) => {
-                                log::error!("handle outgoing failed: {}", err);
+                                log::error!("handle deliver failed: {}", err);
                                 break;
                             },
                         }
                         None => {
-                            log::warn!("outgoing receive channel closed");
+                            log::warn!("deliver receive channel closed");
                             break;
                         }
                     },
@@ -276,11 +258,56 @@ where
 
         tokio::spawn(async move {
             if let Err(err) =
-                handle_clean_session(self.session, self.outgoing_rx, self.global, self.storage)
-                    .await
+                handle_clean_session(self.session, self.deliver_rx, self.global, self.storage).await
             {
                 log::error!("handle clean session: {}", err);
             }
         });
+    }
+}
+
+pub struct WriteLoop<T, E> {
+    writer: FramedWrite<T, E>,
+    client_id: String,
+    write_rx: mpsc::Receiver<VariablePacket>,
+}
+
+impl<T, E> WriteLoop<T, E>
+where
+    T: AsyncWrite + Unpin,
+    E: Encoder<VariablePacket, Error = io::Error>,
+{
+    pub fn new(
+        writer: FramedWrite<T, E>,
+        client_id: String,
+        write_rx: mpsc::Receiver<VariablePacket>,
+    ) -> Self {
+        Self {
+            writer,
+            write_rx,
+            client_id,
+        }
+    }
+
+    async fn write_to_client(&mut self)
+    where
+        T: AsyncWrite + Unpin,
+        E: Encoder<VariablePacket, Error = io::Error>,
+    {
+        loop {
+            // TODO: ticker resend pending QoS1/2 message
+            match self.write_rx.recv().await {
+                Some(packet) => {
+                    if let Err(err) = self.writer.send(packet).await {
+                        log::warn!("client#{} write failed: {}", self.client_id, err);
+                        break;
+                    }
+                }
+                None => {
+                    log::info!("client#{} write task closed", self.client_id);
+                    break;
+                }
+            }
+        }
     }
 }

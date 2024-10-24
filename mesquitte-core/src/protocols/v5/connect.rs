@@ -12,14 +12,14 @@ use mqtt_codec_kit::{
 use nanoid::nanoid;
 use tokio::sync::mpsc;
 
-use crate::server::state::{AddClientReceipt, DispatchMessage, GlobalState};
+use crate::server::state::{AddClientReceipt, DeliverMessage, GlobalState};
 
 use super::{common::build_error_connack, session::Session};
 
 pub(super) async fn handle_connect(
     packet: ConnectPacket,
     global: Arc<GlobalState>,
-) -> Result<(ConnackPacket, Session, mpsc::Receiver<DispatchMessage>), ConnackPacket> {
+) -> Result<(ConnackPacket, Session, mpsc::Receiver<DeliverMessage>), ConnackPacket> {
     log::debug!(
         r#"client#{} received a connect packet:
 protocol level : {:?}
@@ -200,11 +200,11 @@ protocol level : {:?}
     }
     // TODO: v5 auth
 
-    // FIXME: to many clients cause memory leak
+    // FIXME: too many clients cause memory leak
 
-    // TODO: outgoing channel size
-    let (outgoing_tx, outgoing_rx) = mpsc::channel(8);
-    let receipt = global.add_client(session.client_id(), outgoing_tx).await;
+    // TODO: deliver channel size
+    let (deliver_tx, deliver_rx) = mpsc::channel(8);
+    let receipt = global.add_client(session.client_id(), deliver_tx).await;
 
     let session_present = match receipt {
         AddClientReceipt::Present(server_packet_id) => {
@@ -257,7 +257,7 @@ protocol level : {:?}
     let mut connack_packet = ConnackPacket::new(session_present, ConnectReasonCode::Success);
     connack_packet.set_properties(connack_properties);
 
-    Ok((connack_packet, session, outgoing_rx))
+    Ok((connack_packet, session, deliver_rx))
 }
 
 pub(super) async fn handle_disconnect(
