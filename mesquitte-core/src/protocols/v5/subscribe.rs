@@ -1,12 +1,15 @@
 use std::{collections::VecDeque, io, sync::Arc};
 
-use mqtt_codec_kit::{common::QualityOfService, v5::{
-    control::DisconnectReasonCode,
-    packet::{
-        suback::SubscribeReasonCode, subscribe::RetainHandling, DisconnectPacket, SubackPacket,
-        SubscribePacket, UnsubackPacket, UnsubscribePacket, VariablePacket,
+use mqtt_codec_kit::{
+    common::QualityOfService,
+    v5::{
+        control::DisconnectReasonCode,
+        packet::{
+            suback::SubscribeReasonCode, subscribe::RetainHandling, DisconnectPacket, SubackPacket,
+            SubscribePacket, UnsubackPacket, UnsubscribePacket, VariablePacket,
+        },
     },
-}};
+};
 
 use crate::{
     protocols::v5::common::build_error_disconnect,
