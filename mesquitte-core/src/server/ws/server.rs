@@ -6,13 +6,13 @@ use tokio::net::{TcpListener, ToSocketAddrs};
 use tungstenite::{handshake::server::ErrorResponse, http};
 
 use crate::{
-    server::{config::ServerConfig, process_client, state::GlobalState},
+    server::{config::ServerConfig, process_client, state::GlobalState, Error},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
 #[cfg(feature = "wss")]
 use {crate::server::config::TlsConfig, crate::server::rustls::rustls_acceptor, std::path::Path};
 
-use super::{ws_stream::WsByteStream, Error};
+use super::ws_stream::WsByteStream;
 
 pub struct WsServer<P, S>
 where
@@ -48,19 +48,11 @@ where
     #[cfg(feature = "ws")]
     pub async fn accept(self) -> Result<(), Error> {
         while let Ok((stream, _addr)) = self.inner.accept().await {
-            let v = self.config.version.clone();
             let ws_stream =
                 WsByteStream::new(accept_hdr_async(TokioAdapter::new(stream), ws_callback).await?);
             tokio::spawn(async move {
-                cfg_if::cfg_if! {
-                    if #[cfg(feature = "v4")] {
-                        assert_eq!(v, "v4");
-                        process_client(ws_stream, "v4", self.global, self.storage).await;
-                    } else if #[cfg(feature = "v5")] {
-                        assert_eq!(v, "v5");
-                        process_client(ws_stream, "v5", self.global, self.storage).await;
-                    }
-                }
+                process_client(ws_stream, self.config.version, self.global, self.storage).await?;
+                Ok::<(), Error>(())
             });
         }
         Ok(())

@@ -3,13 +3,11 @@ use std::path::Path;
 use tokio::net::{TcpListener, ToSocketAddrs};
 
 use crate::{
-    server::{config::ServerConfig, process_client, state::GlobalState},
+    server::{config::ServerConfig, process_client, state::GlobalState, Error},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
 #[cfg(feature = "mqtts")]
 use {crate::server::config::TlsConfig, crate::server::rustls::rustls_acceptor};
-
-use super::Error;
 
 pub struct TcpServer<P, S>
 where
@@ -45,17 +43,9 @@ where
     #[cfg(feature = "mqtt")]
     pub async fn accept(self) -> Result<(), Error> {
         while let Ok((stream, _addr)) = self.inner.accept().await {
-            let v = self.config.version.clone();
             tokio::spawn(async move {
-                cfg_if::cfg_if! {
-                    if #[cfg(feature = "v4")] {
-                        assert_eq!(v, "v4");
-                        process_client(stream, "v4", self.global, self.storage).await;
-                    } else if #[cfg(feature = "v5")] {
-                        assert_eq!(v, "v5");
-                        process_client(stream, "v5", self.global, self.storage).await;
-                    }
-                }
+                process_client(stream, self.config.version, self.global, self.storage).await?;
+                Ok::<(), Error>(())
             });
         }
         Ok(())

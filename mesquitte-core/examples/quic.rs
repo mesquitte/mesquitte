@@ -31,7 +31,7 @@ async fn main() {
     static GLOBAL: OnceLock<GlobalState> = OnceLock::new();
     static STORAGE: OnceLock<Storage<MemoryStore>> = OnceLock::new();
 
-    let config = ServerConfig::<String>::new("0.0.0.0:1883".to_string(), None, "v4");
+    let config = ServerConfig::<String>::new("0.0.0.0:1883".to_string(), None, "4");
     let broker = QuicServer::bind(
         "0.0.0.0:1883",
         (

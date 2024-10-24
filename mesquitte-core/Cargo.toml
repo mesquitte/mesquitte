@@ -34,8 +34,8 @@ required-features = ["cluster", "heed-storage"]
 [features]
 default = ["v4", "mqtt", "ws", "quic"]
 
-v4 = []
-v5 = []
+v4 = ["mqtt-codec-kit/v4"]
+v5 = ["mqtt-codec-kit/v5"]
 mqtt = []
 mqtts = ["rustls"]
 ws = ["async-tungstenite", "futures", "tungstenite"]
@@ -63,7 +63,6 @@ axum = { workspace = true, features = [
 backon = { workspace = true, features = ["tokio-sleep"], optional = true }
 bincode = { workspace = true, optional = true }
 byteorder.workspace = true
-cfg-if.workspace = true
 dashmap.workspace = true
 flume = { workspace = true, features = ["async"] }
 foldhash.workspace = true
@@ -77,7 +76,9 @@ heed = { workspace = true, features = [
     "posix-sem",
 ], optional = true }
 log.workspace = true
-mqtt-codec-kit = { workspace = true, features = ["v4", "v5", "tokio-codec"] }
+mqtt-codec-kit = { workspace = true, features = [
+    "tokio-codec",
+], optional = true }
 mobc = { workspace = true, optional = true }
 nanoid.workspace = true
 parking_lot.workspace = true
