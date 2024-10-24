@@ -14,6 +14,7 @@ use mqtt_codec_kit::{
 };
 
 use crate::{
+    debug, error,
     protocols::v5::common::build_error_disconnect,
     server::state::{DeliverMessage, GlobalState},
     store::{
@@ -22,6 +23,7 @@ use crate::{
         topic::{RouteOption, TopicStore},
         Storage,
     },
+    warn,
 };
 
 use super::session::Session;
@@ -35,7 +37,7 @@ pub(super) async fn handle_publish<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} received a publish packet:
 topic name : {:?}
    payload : {:?}
@@ -126,7 +128,7 @@ pub(super) async fn dispatch_publish<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} dispatch publish message:
 topic name : {:?}
    payload : {:?}
@@ -185,14 +187,14 @@ properties : {:?}
     for (receiver_client_id, qos) in senders {
         if let Some(sender) = global.get_deliver(&receiver_client_id) {
             if sender.is_closed() {
-                log::warn!("client#{:?} deliver channel is closed", receiver_client_id,);
+                warn!("client#{:?} deliver channel is closed", receiver_client_id,);
                 continue;
             }
             if let Err(err) = sender
                 .send(DeliverMessage::Publish(qos, Box::new(packet.clone())))
                 .await
             {
-                log::error!("{} send publish: {}", receiver_client_id, err,)
+                error!("{} send publish: {}", receiver_client_id, err,)
             }
         }
     }
@@ -208,7 +210,7 @@ pub(super) async fn handle_pubrel<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         "client#{} received a pubrel packet, id : {}",
         session.client_id(),
         packet_id
@@ -229,7 +231,7 @@ pub(super) async fn handle_deliver_publish<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} receive deliver publish message:
 topic name : {:?}
    payload : {:?}
@@ -297,7 +299,7 @@ pub(super) async fn handle_puback<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         "client#{} received a puback packet, id : {}",
         session.client_id(),
         packet_id
@@ -316,7 +318,7 @@ pub(super) async fn handle_pubrec<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         "client#{} received a pubrec packet, id : {}",
         session.client_id(),
         packet_id
@@ -342,7 +344,7 @@ pub(super) async fn handle_pubcomp<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         "client#{} received a pubcomp packet, id : {}",
         session.client_id(),
         packet_id
@@ -364,7 +366,7 @@ pub(super) async fn handle_will<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} handle last will:
 client side disconnected : {}
 server side disconnected : {}

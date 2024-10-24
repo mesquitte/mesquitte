@@ -16,8 +16,10 @@ use tokio::{
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
 use crate::{
+    debug, error, info,
     server::state::{DeliverMessage, GlobalState},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
+    warn,
 };
 
 use super::{
@@ -38,16 +40,16 @@ where
     loop {
         match reader.next().await {
             None => {
-                log::info!("client closed");
+                info!("client closed");
                 break;
             }
             Some(Err(e)) => {
-                log::warn!("read from client: {}", e);
+                warn!("read from client: {}", e);
                 break;
             }
             Some(Ok(packet)) => {
                 if let Err(err) = sender.send(packet).await {
-                    log::warn!("receiver closed: {}", err);
+                    warn!("receiver closed: {err}");
                     break;
                 }
             }
@@ -90,7 +92,7 @@ where
     E: Encoder<VariablePacket, Error = io::Error>,
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} receive mqtt client incoming message: {:?}"#,
         session.client_id(),
         packet,
@@ -100,21 +102,21 @@ where
     match packet {
         VariablePacket::PingreqPacket(_packet) => {
             let pkt = PingrespPacket::new();
-            log::debug!("write pingresp packet: {:?}", pkt);
+            debug!("write pingresp packet: {:?}", pkt);
             writer.send(pkt.into()).await?;
         }
         VariablePacket::PublishPacket(packet) => {
             let (stop, ack) =
                 handle_publish(session, &packet, global.clone(), storage.clone()).await?;
             if let Some(pkt) = ack {
-                log::debug!("write puback packet: {:?}", pkt);
+                debug!("write puback packet: {:?}", pkt);
                 writer.send(pkt).await?;
             }
             should_stop = stop;
         }
         VariablePacket::PubrelPacket(packet) => {
             let pkt = handle_pubrel(session, packet.packet_identifier(), storage.clone()).await?;
-            log::debug!("write pubcomp packet: {:?}", pkt);
+            debug!("write pubcomp packet: {:?}", pkt);
             writer.send(pkt.into()).await?;
         }
         VariablePacket::PubackPacket(packet) => {
@@ -122,20 +124,20 @@ where
         }
         VariablePacket::PubrecPacket(packet) => {
             let pkt = handle_pubrec(session, packet.packet_identifier(), storage.clone()).await?;
-            log::debug!("write pubrel packet: {:?}", pkt);
+            debug!("write pubrel packet: {:?}", pkt);
             writer.send(pkt.into()).await?;
         }
         VariablePacket::SubscribePacket(packet) => {
             let ret = handle_subscribe(session, packet, storage.clone()).await?;
             match ret {
                 SubscribeAck::Success(packets) => {
-                    log::debug!("write suback packets: {:?}", packets);
+                    debug!("write suback packets: {:?}", packets);
                     for pkt in packets {
                         writer.send(pkt).await?;
                     }
                 }
                 SubscribeAck::Disconnect(pkt) => {
-                    log::debug!("write disconnect packet: {:?}", pkt);
+                    debug!("write disconnect packet: {:?}", pkt);
                     writer.send(pkt.into()).await?;
                     should_stop = true;
                 }
@@ -146,12 +148,12 @@ where
         }
         VariablePacket::UnsubscribePacket(packet) => {
             let pkt = handle_unsubscribe(session, storage.clone(), &packet).await?;
-            log::debug!("write unsuback packet: {:?}", pkt);
+            debug!("write unsuback packet: {:?}", pkt);
             writer.send(pkt.into()).await?;
         }
         VariablePacket::DisconnectPacket(packet) => {
             if let Some(pkt) = handle_disconnect(session, packet).await {
-                log::debug!("write disconnect packet: {:?}", pkt);
+                debug!("write disconnect packet: {:?}", pkt);
                 writer.send(pkt.into()).await?;
             }
             should_stop = true;
@@ -160,7 +162,7 @@ where
             unimplemented!()
         }
         _ => {
-            log::debug!("unsupported packet: {:?}", packet);
+            debug!("unsupported packet: {:?}", packet);
             should_stop = true;
         }
     };
@@ -188,13 +190,13 @@ where
             }
         }
         DeliverMessage::Online(sender) => {
-            log::debug!(
+            debug!(
                 "handle deliver client#{} receive new client online",
                 session.client_id(),
             );
 
             if let Err(err) = sender.send(session.server_packet_id()).await {
-                log::error!(
+                error!(
                     "handle deliver client#{} send session state: {err}",
                     session.client_id(),
                 );
@@ -211,7 +213,7 @@ where
             }
         }
         DeliverMessage::Kick(reason) => {
-            log::debug!(
+            debug!(
                 "handle deliver client#{} receive kick message: {}",
                 session.client_id(),
                 reason,
@@ -245,9 +247,9 @@ where
 {
     let (should_stop, resp) = receive_deliver_message(session, packet, global, storage).await?;
     if let Some(packet) = resp {
-        log::debug!("write packet: {:?}", packet);
+        debug!("write packet: {:?}", packet);
         if let Err(err) = writer.send(packet).await {
-            log::error!("write packet failed: {err}");
+            error!("write packet failed: {err}");
             return Ok(true);
         }
     }
@@ -264,7 +266,7 @@ pub(super) async fn handle_clean_session<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} handle offline:
  clean session : {}
     keep alive : {}
@@ -300,7 +302,7 @@ session expiry : {}"#,
                     }
                 }
                 _ = tick.tick() => {
-                    log::debug!("handle clean session client#{} session expired", session.client_id());
+                    debug!("handle clean session client#{} session expired", session.client_id());
                     break;
                 }
             }
@@ -345,12 +347,12 @@ async fn write_to_client<T, E, S>(
                         Ok(true) => break,
                         Ok(false) => continue,
                         Err(err) => {
-                            log::error!("handle incoming failed: {err}");
+                            error!("handle incoming failed: {err}");
                             break;
                         },
                     }
                     None => {
-                        log::warn!("incoming receive channel closed");
+                        warn!("incoming receive channel closed");
                         break;
                     }
                 },
@@ -360,12 +362,12 @@ async fn write_to_client<T, E, S>(
                             break;
                         },
                         Err(err) => {
-                            log::error!("handle deliver failed: {}", err);
+                            error!("handle deliver failed: {err}");
                             break;
                         },
                     }
                     None => {
-                        log::warn!("deliver channel closed");
+                        warn!("deliver channel closed");
                         break;
                     }
                 },
@@ -384,12 +386,12 @@ async fn write_to_client<T, E, S>(
                         Ok(true) => break,
                         Ok(false) => continue,
                         Err(err) => {
-                            log::error!("handle incoming failed: {err}");
+                            error!("handle incoming failed: {err}");
                             break;
                         },
                     }
                     None => {
-                        log::warn!("incoming receive channel closed");
+                        warn!("incoming receive channel closed");
                         break;
                     }
                 },
@@ -399,12 +401,12 @@ async fn write_to_client<T, E, S>(
                             break;
                         },
                         Err(err) => {
-                            log::error!("handle deliver failed: {}", err);
+                            error!("handle deliver failed: {err}");
                             break;
                         },
                     }
                     None => {
-                        log::warn!("deliver receive channel closed");
+                        warn!("deliver receive channel closed");
                         break;
                     }
                 },
@@ -416,7 +418,7 @@ async fn write_to_client<T, E, S>(
         if let Err(err) =
             handle_clean_session(session, deliver_rx, global.clone(), storage.clone()).await
         {
-            log::error!("handle clean session: {}", err);
+            error!("handle clean session: {err}");
         }
     });
 }
@@ -437,7 +439,7 @@ pub async fn read_write_loop<R, W, S>(
     let packet = match frame_reader.next().await {
         Some(Ok(VariablePacket::ConnectPacket(packet))) => packet,
         _ => {
-            log::error!("first packet is not CONNECT packet");
+            error!("first packet is not CONNECT packet");
             return;
         }
     };
@@ -445,16 +447,15 @@ pub async fn read_write_loop<R, W, S>(
     let (mut session, deliver_rx) = match handle_connect(packet, global.clone()).await {
         Ok((pkt, session, deliver_rx)) => {
             if let Err(err) = frame_writer.send(pkt).await {
-                log::error!("handle connect write connect ack: {err}");
+                error!("handle connect write connect ack: {err}");
                 return;
             }
             (session, deliver_rx)
         }
         Err(pkt) => {
-            let _ = frame_writer
-                .send(pkt)
-                .await
-                .map_err(|e| log::error!("handle connect write connect ack: {e}"));
+            if let Err(err) = frame_writer.send(pkt).await {
+                error!("handle connect write connect ack: {err}");
+            }
             return;
         }
     };
@@ -463,13 +464,13 @@ pub async fn read_write_loop<R, W, S>(
         Ok(packets) => {
             for pkt in packets {
                 if let Err(err) = frame_writer.send(pkt).await {
-                    log::error!("write pending packet failed: {err}");
+                    error!("write pending packet failed: {err}");
                     return;
                 }
             }
         }
         Err(err) => {
-            log::error!("retrieve pending messages: {err}");
+            error!("retrieve pending messages: {err}");
             return;
         }
     }
@@ -492,7 +493,7 @@ pub async fn read_write_loop<R, W, S>(
     });
 
     if tokio::try_join!(&mut read_task, &mut write_task).is_err() {
-        log::warn!("read_task/write_task terminated");
+        warn!("read_task/write_task terminated");
         read_task.abort();
         write_task.abort();
     };

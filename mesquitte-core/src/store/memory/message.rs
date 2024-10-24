@@ -3,8 +3,9 @@ use std::io;
 use foldhash::HashMap;
 use parking_lot::RwLock;
 
-use crate::store::message::{
-    get_unix_ts, MessageStore, PendingPublishMessage, ReceivedPublishMessage,
+use crate::{
+    error,
+    store::message::{get_unix_ts, MessageStore, PendingPublishMessage, ReceivedPublishMessage},
 };
 
 pub struct PendingMessage {
@@ -50,7 +51,7 @@ impl MessageStore for MessageMemoryStore {
     ) -> Result<bool, io::Error> {
         if let Some(queue) = self.received_publish_message.read().get(client_id) {
             if queue.len() > self.max_packets {
-                log::error!(
+                error!(
                     "drop received publish packet {:?}, queue is full: {}",
                     message,
                     queue.len()
@@ -72,7 +73,7 @@ impl MessageStore for MessageMemoryStore {
     ) -> Result<bool, io::Error> {
         if let Some(queue) = self.pending_publish_message.read().get(client_id) {
             if queue.len() > self.max_packets {
-                log::error!(
+                error!(
                     "drop pending publish packet {:?}, queue is full: {}",
                     message,
                     queue.len()

@@ -7,7 +7,7 @@ use tokio::{
     time,
 };
 
-use crate::store::message::ReceivedPublishMessage;
+use crate::{store::message::ReceivedPublishMessage, warn};
 
 pub enum AddClientReceipt {
     Present(u16),
@@ -81,12 +81,12 @@ impl GlobalState {
                                 }
                             }
                             Err(_) => {
-                                log::warn!("receive old session state timeout");
+                                warn!("receive old session state timeout");
                             }
                         }
                     }
                     Err(err) => {
-                        log::warn!("send online message to old session: {err}")
+                        warn!("send online message to old session: {err}")
                     }
                 }
             }

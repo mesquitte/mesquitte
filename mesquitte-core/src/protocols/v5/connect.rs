@@ -12,7 +12,10 @@ use mqtt_codec_kit::{
 use nanoid::nanoid;
 use tokio::sync::mpsc;
 
-use crate::server::state::{AddClientReceipt, DeliverMessage, GlobalState};
+use crate::{
+    debug, info,
+    server::state::{AddClientReceipt, DeliverMessage, GlobalState},
+};
 
 use super::{common::build_error_connack, session::Session};
 
@@ -20,7 +23,7 @@ pub(super) async fn handle_connect(
     packet: ConnectPacket,
     global: Arc<GlobalState>,
 ) -> Result<(ConnackPacket, Session, mpsc::Receiver<DeliverMessage>), ConnackPacket> {
-    log::debug!(
+    debug!(
         r#"client#{} received a connect packet:
 protocol level : {:?}
  protocol name : {:?}
@@ -43,7 +46,7 @@ protocol level : {:?}
 
     let level = packet.protocol_level();
     if ProtocolLevel::Version50.ne(&level) {
-        log::info!("unsupported protocol level: {:?}", level);
+        info!("unsupported protocol level: {:?}", level);
 
         return Err(ConnackPacket::new(
             false,
@@ -52,7 +55,7 @@ protocol level : {:?}
     }
 
     if packet.protocol_name().ne("MQTT") {
-        log::info!("unsupported protocol name: {:?}", packet.protocol_name());
+        info!("unsupported protocol name: {:?}", packet.protocol_name());
 
         return Err(ConnackPacket::new(
             false,
@@ -85,7 +88,7 @@ protocol level : {:?}
         session.set_max_packet_size(max_packet_size);
     }
     if properties.receive_maximum() == Some(0) {
-        log::debug!("connect properties ReceiveMaximum is 0");
+        debug!("connect properties ReceiveMaximum is 0");
 
         return Err(build_error_connack(
             &mut session,
@@ -96,7 +99,7 @@ protocol level : {:?}
     }
 
     if session.max_packet_size() == 0 {
-        log::debug!("connect properties MaximumPacketSize is 0");
+        debug!("connect properties MaximumPacketSize is 0");
 
         return Err(build_error_connack(
             &mut session,
@@ -107,7 +110,7 @@ protocol level : {:?}
     }
 
     if properties.authentication_data().is_some() && properties.authentication_method().is_none() {
-        log::debug!("connect properties AuthenticationMethod is missing");
+        debug!("connect properties AuthenticationMethod is missing");
 
         return Err(build_error_connack(
             &mut session,
@@ -139,7 +142,7 @@ protocol level : {:?}
     if let Some(last_will) = packet.will() {
         let topic_name = last_will.topic();
         if topic_name.is_empty() {
-            log::debug!("last will topic is empty");
+            debug!("last will topic is empty");
 
             return Err(build_error_connack(
                 &mut session,
@@ -150,7 +153,7 @@ protocol level : {:?}
         }
 
         if topic_name.contains(MATCH_ALL_STR) || topic_name.contains(MATCH_ONE_STR) {
-            log::debug!("last will topic contains illegal characters '+' or '#'");
+            debug!("last will topic contains illegal characters '+' or '#'");
 
             return Err(build_error_connack(
                 &mut session,
@@ -161,7 +164,7 @@ protocol level : {:?}
         }
 
         if topic_name.starts_with(SHARED_PREFIX) || topic_name.starts_with(SYS_PREFIX) {
-            log::debug!("last will topic start with '$SYS/' or '$share/'");
+            debug!("last will topic start with '$SYS/' or '$share/'");
 
             return Err(build_error_connack(
                 &mut session,
@@ -212,7 +215,7 @@ protocol level : {:?}
                 session.set_server_packet_id(server_packet_id);
                 true
             } else {
-                log::info!(
+                info!(
                     "{} session removed due to reconnect with clean session",
                     packet.client_identifier(),
                 );
@@ -264,7 +267,7 @@ pub(super) async fn handle_disconnect(
     session: &mut Session,
     packet: DisconnectPacket,
 ) -> Option<DisconnectPacket> {
-    log::debug!(
+    debug!(
         "client#{} received a disconnect packet",
         session.client_id()
     );

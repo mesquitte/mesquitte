@@ -11,6 +11,7 @@ use mqtt_codec_kit::{
 };
 
 use crate::{
+    debug, error,
     server::state::{DeliverMessage, GlobalState},
     store::{
         message::{MessageStore, PendingPublishMessage, ReceivedPublishMessage},
@@ -18,6 +19,7 @@ use crate::{
         topic::{RouteOption, TopicStore},
         Storage,
     },
+    warn,
 };
 
 use super::session::Session;
@@ -31,7 +33,7 @@ pub(super) async fn handle_publish<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} received a publish packet:
 topic name : {:?}
    payload : {:?}
@@ -46,7 +48,7 @@ topic name : {:?}
 
     let topic_name = packet.topic_name();
     if topic_name.is_empty() {
-        log::debug!("Publish topic name cannot be empty");
+        debug!("Publish topic name cannot be empty");
         return Ok((true, Some(DisconnectPacket::new().into())));
     }
 
@@ -54,7 +56,7 @@ topic name : {:?}
         || topic_name.contains(MATCH_ALL_STR)
         || topic_name.contains(MATCH_ONE_STR)
     {
-        log::debug!(
+        debug!(
             "client#{} invalid topic name: {:?}",
             session.client_id(),
             topic_name
@@ -62,7 +64,7 @@ topic name : {:?}
         return Ok((true, Some(DisconnectPacket::new().into())));
     }
     if packet.qos() == QoSWithPacketIdentifier::Level0 && packet.dup() {
-        log::debug!(
+        debug!(
             "client#{} invalid duplicate flag in QoS 0 publish message",
             session.client_id()
         );
@@ -102,7 +104,7 @@ pub(super) async fn dispatch_publish<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} dispatch publish message:
 topic name : {:?}
    payload : {:?}
@@ -141,14 +143,14 @@ topic name : {:?}
     for (receiver_client_id, qos) in senders {
         if let Some(sender) = global.get_deliver(&receiver_client_id) {
             if sender.is_closed() {
-                log::warn!("client#{:?} deliver channel is closed", receiver_client_id,);
+                warn!("client#{:?} deliver channel is closed", receiver_client_id,);
                 continue;
             }
             if let Err(err) = sender
                 .send(DeliverMessage::Publish(qos, Box::new(packet.clone())))
                 .await
             {
-                log::error!("{} send publish: {}", receiver_client_id, err,)
+                error!("{} send publish: {}", receiver_client_id, err,)
             }
         }
     }
@@ -165,7 +167,7 @@ pub(super) async fn handle_pubrel<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         "client#{} received a pubrel packet, id : {}",
         session.client_id(),
         packet_id
@@ -187,7 +189,7 @@ pub(super) async fn handle_deliver_publish<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} receive deliver publish message:
 topic name : {:?}
    payload : {:?}
@@ -238,7 +240,7 @@ pub(super) async fn handle_puback<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         "client#{} received a puback packet, id : {}",
         session.client_id(),
         packet_id
@@ -257,7 +259,7 @@ pub(super) async fn handle_pubrec<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         "client#{} received a pubrec packet, id : {}",
         session.client_id(),
         packet_id
@@ -276,7 +278,7 @@ pub(super) async fn handle_pubcomp<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         "client#{} received a pubcomp packet, id : {}",
         session.client_id(),
         packet_id
@@ -298,7 +300,7 @@ pub(super) async fn handle_will<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} handle last will:
 client side disconnected : {}
 server side disconnected : {}

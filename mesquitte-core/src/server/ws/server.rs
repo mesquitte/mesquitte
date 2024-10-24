@@ -71,7 +71,7 @@ where
                     tokio::spawn(async move { process_client(ws_stream, global).await });
                 }
                 Err(err) => {
-                    log::error!("accept WebSocket tls stream failed: {err}");
+                    error!("accept WebSocket tls stream failed: {err}");
                     continue;
                 }
             }
@@ -86,10 +86,12 @@ pub fn ws_callback(
     req: &http::Request<()>,
     mut resp: http::Response<()>,
 ) -> Result<http::Response<()>, ErrorResponse> {
+    use crate::info;
+
     if let Some(protocol) = req.headers().get("Sec-WebSocket-Protocol") {
         // see: [MQTT-6.0.0-3]
         if protocol != "mqtt" && protocol != "mqttv3.1" {
-            log::info!("invalid WebSocket subprotocol name: {:?}", protocol);
+            info!("invalid WebSocket subprotocol name: {:?}", protocol);
             return Err(http::Response::new(Some(
                 "invalid WebSocket subprotocol name".to_string(),
             )));

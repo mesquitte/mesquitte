@@ -12,6 +12,7 @@ use mqtt_codec_kit::{
 };
 
 use crate::{
+    debug,
     protocols::v5::common::build_error_disconnect,
     store::{
         message::MessageStore,
@@ -36,7 +37,7 @@ pub(super) async fn handle_subscribe<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"{} received a subscribe packet:
  packet id : {}
     topics : {:?}
@@ -127,7 +128,7 @@ pub(super) async fn handle_unsubscribe<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} received a unsubscribe packet:
 packet id : {}
    topics : {:?}"#,
