@@ -1,4 +1,6 @@
-use mqtt_codec_kit::common::ProtocolLevel;
+use std::{io, num::ParseIntError};
+
+use mqtt_codec_kit::common::{protocol_level::ProtocolLevelError, ProtocolLevel};
 use state::GlobalState;
 use tokio::io::{split, AsyncRead, AsyncWrite};
 
@@ -25,7 +27,11 @@ pub mod ws;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Io Error : {0}")]
-    Io(#[from] std::io::Error),
+    Io(#[from] io::Error),
+    #[error("Parse protocol level error : {0}")]
+    WrongConfig(#[from] ParseIntError),
+    #[error("Wrong protocol level set : {0}")]
+    ProtocolLevel(#[from] ProtocolLevelError),
     #[cfg(any(feature = "ws", feature = "wss"))]
     #[error("tungstenite Error : {0}")]
     Accept(#[from] tungstenite::Error),

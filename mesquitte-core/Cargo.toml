@@ -32,7 +32,7 @@ path = "tests/raft_test.rs"
 required-features = ["cluster", "heed-storage"]
 
 [features]
-default = ["v4", "mqtt", "log"]
+default = ["v4", "mqtt", "ws", "quic", "log"]
 
 v4 = ["mqtt-codec-kit/v4"]
 v5 = ["mqtt-codec-kit/v5"]
