@@ -4,6 +4,7 @@ use mqtt_codec_kit::v4::packet::{DisconnectPacket, PingrespPacket, VariablePacke
 use tokio::sync::mpsc;
 
 use crate::{
+    debug, error,
     protocols::v4::publish::handle_will,
     server::state::{DeliverMessage, GlobalState},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
@@ -52,7 +53,7 @@ pub(super) async fn handle_read_packet<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} receive mqtt client incoming message: {:?}"#,
         session.client_id(),
         packet,
@@ -66,16 +67,16 @@ where
                 .send(PingrespPacket::new().into())
                 .await
                 .map_err(|err| {
-                    log::error!("send ping response: {err}");
+                    error!("send ping response: {err}");
                     ErrorKind::InvalidData
                 })?;
         }
         VariablePacket::PublishPacket(packet) => {
             let (stop, ack) = handle_publish(session, &packet, global, storage).await?;
             if let Some(pkt) = ack {
-                log::debug!("write puback packet: {:?}", pkt);
+                debug!("write puback packet: {:?}", pkt);
                 write_tx.send(pkt).await.map_err(|err| {
-                    log::error!("send publish response: {err}");
+                    error!("send publish response: {err}");
                     ErrorKind::InvalidData
                 })?;
             }
@@ -83,9 +84,9 @@ where
         }
         VariablePacket::PubrelPacket(packet) => {
             let pkt = handle_pubrel(session, packet.packet_identifier(), global, storage).await?;
-            log::debug!("write pubcomp packet: {:?}", pkt);
+            debug!("write pubcomp packet: {:?}", pkt);
             write_tx.send(pkt.into()).await.map_err(|err| {
-                log::error!("send pubcomp response: {err}");
+                error!("send pubcomp response: {err}");
                 ErrorKind::InvalidData
             })?;
         }
@@ -94,18 +95,18 @@ where
         }
         VariablePacket::PubrecPacket(packet) => {
             let pkt = handle_pubrec(session, packet.packet_identifier(), storage).await?;
-            log::debug!("write pubrel packet: {:?}", pkt);
+            debug!("write pubrel packet: {:?}", pkt);
             write_tx.send(pkt.into()).await.map_err(|err| {
-                log::error!("send pubrel response: {err}");
+                error!("send pubrel response: {err}");
                 ErrorKind::InvalidData
             })?;
         }
         VariablePacket::SubscribePacket(packet) => {
             let packets = handle_subscribe(session, &packet, storage).await?;
-            log::debug!("write suback packets: {:?}", packets);
+            debug!("write suback packets: {:?}", packets);
             for pkt in packets {
                 write_tx.send(pkt).await.map_err(|err| {
-                    log::error!("send subscribe response: {err}");
+                    error!("send subscribe response: {err}");
                     ErrorKind::InvalidData
                 })?;
             }
@@ -115,9 +116,9 @@ where
         }
         VariablePacket::UnsubscribePacket(packet) => {
             let pkt = handle_unsubscribe(session, storage, &packet).await?;
-            log::debug!("write unsuback packet: {:?}", pkt);
+            debug!("write unsuback packet: {:?}", pkt);
             write_tx.send(pkt.into()).await.map_err(|err| {
-                log::error!("send unsuback response: {err}");
+                error!("send unsuback response: {err}");
                 ErrorKind::InvalidData
             })?;
         }
@@ -126,7 +127,7 @@ where
             should_stop = true;
         }
         _ => {
-            log::debug!("unsupported packet: {:?}", packet);
+            debug!("unsupported packet: {:?}", packet);
             should_stop = true;
         }
     };
@@ -154,13 +155,13 @@ where
             }
         }
         DeliverMessage::Online(s) => {
-            log::debug!(
+            debug!(
                 "handle deliver client#{} receive new client online",
                 session.client_id(),
             );
 
             if let Err(err) = s.send(session.server_packet_id()).await {
-                log::error!(
+                error!(
                     "handle deliver client#{} send session state: {err}",
                     session.client_id(),
                 );
@@ -177,7 +178,7 @@ where
             }
         }
         DeliverMessage::Kick(reason) => {
-            log::debug!(
+            debug!(
                 "handle deliver client#{} receive kick message: {}",
                 session.client_id(),
                 reason,
@@ -209,9 +210,9 @@ where
 {
     let (should_stop, resp) = receive_deliver_message(session, packet, global, storage).await?;
     if let Some(packet) = resp {
-        log::debug!("write packet: {:?}", packet);
+        debug!("write packet: {:?}", packet);
         if let Err(err) = sender.send(packet).await {
-            log::error!("write packet failed: {err}");
+            error!("write packet failed: {err}");
             return Ok(true);
         }
     }
@@ -228,7 +229,7 @@ pub(super) async fn handle_clean_session<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} handle offline:
  clean session : {}
     keep alive : {}"#,

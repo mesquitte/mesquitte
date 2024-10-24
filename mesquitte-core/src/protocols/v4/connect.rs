@@ -8,7 +8,10 @@ use mqtt_codec_kit::{
 use nanoid::nanoid;
 use tokio::sync::mpsc;
 
-use crate::server::state::{AddClientReceipt, DeliverMessage, GlobalState};
+use crate::{
+    debug, info,
+    server::state::{AddClientReceipt, DeliverMessage, GlobalState},
+};
 
 use super::session::Session;
 
@@ -16,7 +19,7 @@ pub(super) async fn handle_connect(
     packet: &ConnectPacket,
     global: &'static GlobalState,
 ) -> Result<(ConnackPacket, Session, mpsc::Receiver<DeliverMessage>), ConnackPacket> {
-    log::debug!(
+    debug!(
         r#"client#{} received a connect packet:
 protocol level : {:?}
  protocol name : {:?}
@@ -37,7 +40,7 @@ protocol level : {:?}
 
     let level = packet.protocol_level();
     if ProtocolLevel::Version311.ne(&level) && ProtocolLevel::Version310.ne(&level) {
-        log::debug!("handle connect unsupported protocol level: {:?}", level);
+        debug!("handle connect unsupported protocol level: {:?}", level);
 
         return Err(ConnackPacket::new(
             false,
@@ -46,7 +49,7 @@ protocol level : {:?}
     }
 
     if packet.protocol_name().ne("MQTT") {
-        log::debug!(
+        debug!(
             "handle connect unsupported protocol name: {:?}",
             packet.protocol_name()
         );
@@ -80,7 +83,7 @@ protocol level : {:?}
     if let Some(last_will) = packet.will() {
         let topic_name = last_will.topic();
         if topic_name.is_empty() {
-            log::debug!("handle connect last will topic is empty");
+            debug!("handle connect last will topic is empty");
 
             return Err(ConnackPacket::new(
                 false,
@@ -89,7 +92,7 @@ protocol level : {:?}
         }
 
         if topic_name.contains(MATCH_ALL_STR) || topic_name.contains(MATCH_ONE_STR) {
-            log::debug!("handle connect last will topic contains illegal characters '+' or '#'");
+            debug!("handle connect last will topic contains illegal characters '+' or '#'");
 
             return Err(ConnackPacket::new(
                 false,
@@ -98,7 +101,7 @@ protocol level : {:?}
         }
 
         if topic_name.starts_with(SHARED_PREFIX) || topic_name.starts_with(SYS_PREFIX) {
-            log::debug!("handle connect last will topic start with '$SYS/' or '$share/'");
+            debug!("handle connect last will topic start with '$SYS/' or '$share/'");
 
             return Err(ConnackPacket::new(
                 false,
@@ -121,7 +124,7 @@ protocol level : {:?}
                 session.set_server_packet_id(server_packet_id);
                 true
             } else {
-                log::info!(
+                info!(
                     "{} session removed due to reconnect with clean session",
                     packet.client_identifier(),
                 );
@@ -139,7 +142,7 @@ protocol level : {:?}
 }
 
 pub(super) async fn handle_disconnect(session: &mut Session) {
-    log::debug!(
+    debug!(
         "client#{} received a disconnect packet",
         session.client_id()
     );

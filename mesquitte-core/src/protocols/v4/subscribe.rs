@@ -5,11 +5,15 @@ use mqtt_codec_kit::v4::packet::{
     VariablePacket,
 };
 
-use crate::store::{
-    message::MessageStore,
-    retain::RetainMessageStore,
-    topic::{RouteOption, TopicStore},
-    Storage,
+use crate::{
+    debug,
+    store::{
+        message::MessageStore,
+        retain::RetainMessageStore,
+        topic::{RouteOption, TopicStore},
+        Storage,
+    },
+    warn,
 };
 
 use super::{publish::handle_deliver_publish, session::Session};
@@ -22,7 +26,7 @@ pub(super) async fn handle_subscribe<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} received a subscribe packet:
 packet id : {}
    topics : {:?}"#,
@@ -34,7 +38,7 @@ packet id : {}
     let mut retain_packets: Vec<VariablePacket> = Vec::new();
     for (filter, subscribe_qos) in packet.subscribes() {
         if filter.is_shared() {
-            log::warn!("mqtt v3.x don't support shared subscription");
+            warn!("mqtt v3.x don't support shared subscription");
             return_codes.push(SubscribeReturnCode::Failure);
             continue;
         }
@@ -71,7 +75,7 @@ pub(super) async fn handle_unsubscribe<S>(
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    log::debug!(
+    debug!(
         r#"client#{} received a unsubscribe packet:
 packet id : {}
    topics : {:?}"#,

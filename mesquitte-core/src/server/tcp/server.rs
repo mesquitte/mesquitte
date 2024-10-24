@@ -61,7 +61,7 @@ where
                     tokio::spawn(async move { process_client(stream, global).await });
                 }
                 Err(err) => {
-                    log::warn!("accept tls stream failed: {err}");
+                    warn!("accept tls stream failed: {err}");
                     continue;
                 }
             }

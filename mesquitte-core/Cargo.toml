@@ -32,7 +32,7 @@ path = "tests/raft_test.rs"
 required-features = ["cluster", "heed-storage"]
 
 [features]
-default = ["v4", "mqtt", "ws", "quic"]
+default = ["v4", "mqtt", "ws", "quic", "log"]
 
 v4 = ["mqtt-codec-kit/v4"]
 v5 = ["mqtt-codec-kit/v5"]
@@ -50,6 +50,7 @@ rustls = [
 cluster = ["axum", "backon", "bincode", "mobc", "openraft", "tarpc"]
 rocksdb-storage = ["rust-rocksdb"]
 heed-storage = ["heed", "tokio/fs"]
+log = ["dep:log"]
 
 [dependencies]
 async-tungstenite = { workspace = true, optional = true, features = [
@@ -75,7 +76,7 @@ heed = { workspace = true, features = [
     "read-txn-no-tls",
     "posix-sem",
 ], optional = true }
-log.workspace = true
+log = { workspace = true, optional = true }
 mqtt-codec-kit = { workspace = true, features = [
     "tokio-codec",
 ], optional = true }

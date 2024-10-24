@@ -1,4 +1,3 @@
-use log::warn;
 use mqtt_codec_kit::common::ProtocolLevel;
 use state::GlobalState;
 use tokio::io::{split, AsyncRead, AsyncWrite};
@@ -7,7 +6,10 @@ use tokio::io::{split, AsyncRead, AsyncWrite};
 use crate::protocols::v4;
 #[cfg(feature = "v5")]
 use crate::protocols::v5;
-use crate::store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage};
+use crate::{
+    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
+    warn,
+};
 
 pub mod config;
 #[cfg(feature = "quic")]
@@ -67,7 +69,7 @@ where
     match level {
         ProtocolLevel::Version310 | ProtocolLevel::Version311 => {
             if cfg!(feature = "v5") && !cfg!(feature = "v4") {
-                warn!("tcp broken do not support v4");
+                warn!("this broker do not support v4");
                 return Err(Error::UnsupportProtocol("v4".to_string()));
             }
             #[cfg(feature = "v4")]
@@ -75,7 +77,7 @@ where
         }
         ProtocolLevel::Version50 => {
             if cfg!(feature = "v4") && !cfg!(feature = "v5") {
-                warn!("tcp broken do not support v5");
+                warn!("this broker do not support v5");
                 return Err(Error::UnsupportProtocol("v5".to_string()));
             }
             #[cfg(feature = "v5")]

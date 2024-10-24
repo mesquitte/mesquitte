@@ -19,8 +19,10 @@ use tokio::{
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
 use crate::{
+    debug, error, info,
     server::state::{DeliverMessage, GlobalState},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
+    warn,
 };
 
 mod connect;
@@ -64,7 +66,7 @@ where
         let packet = match frame_reader.next().await {
             Some(Ok(VariablePacket::ConnectPacket(packet))) => packet,
             _ => {
-                log::error!("first packet is not CONNECT packet");
+                error!("first packet is not CONNECT packet");
                 return;
             }
         };
@@ -72,21 +74,20 @@ where
         let (mut session, deliver_rx) = match handle_connect(&packet, self.global).await {
             Ok((pkt, session, deliver_rx)) => {
                 if let Err(err) = frame_writer.send(pkt).await {
-                    log::error!("handle connect write connect ack: {err}");
+                    error!("handle connect write connect ack: {err}");
                     return;
                 }
                 (session, deliver_rx)
             }
             Err(pkt) => {
-                let _ = frame_writer
-                    .send(pkt)
-                    .await
-                    .map_err(|e| log::error!("handle connect write connect ack: {e}"));
+                if let Err(err) = frame_writer.send(pkt).await {
+                    error!("handle connect write connect ack: {err}");
+                }
                 return;
             }
         };
 
-        log::debug!(
+        debug!(
             r#"client#{} session:
         connect at : {:?}
      clean session : {}
@@ -103,13 +104,13 @@ assigned_client_id : {}"#,
             Ok(packets) => {
                 for pkt in packets {
                     if let Err(err) = frame_writer.send(pkt).await {
-                        log::error!("write pending packet failed: {err}");
+                        error!("write pending packet failed: {err}");
                         return;
                     }
                 }
             }
             Err(err) => {
-                log::error!("retrieve pending messages: {err}");
+                error!("retrieve pending messages: {err}");
                 return;
             }
         }
@@ -135,7 +136,7 @@ assigned_client_id : {}"#,
         );
 
         if tokio::try_join!(&mut read_task, &mut write_task).is_err() {
-            log::warn!("read_task/write_task terminated");
+            warn!("read_task/write_task terminated");
             write_task.abort();
         };
     }
@@ -186,16 +187,16 @@ where
                             Ok(true) => break,
                             Ok(false) => continue,
                             Err(err) => {
-                                log::warn!("read form client handle message failed: {}", err);
+                                warn!("read form client handle message failed: {err}");
                                 break;
                             },
                         }
                         Some(Err(err)) => {
-                            log::warn!("read form client failed: {}", err);
+                            warn!("read form client failed: {err}");
                             break;
                         }
                         None => {
-                            log::warn!("incoming receive channel closed");
+                            warn!("incoming receive channel closed");
                             break;
                         }
                     },
@@ -205,12 +206,12 @@ where
                                 break;
                             },
                             Err(err) => {
-                                log::error!("handle deliver failed: {}", err);
+                                error!("handle deliver failed: {err}");
                                 break;
                             },
                         }
                         None => {
-                            log::warn!("deliver channel closed");
+                            warn!("deliver channel closed");
                             break;
                         }
                     },
@@ -229,16 +230,16 @@ where
                             Ok(true) => break,
                             Ok(false) => continue,
                             Err(err) => {
-                                log::warn!("read form client handle message failed: {}", err);
+                                warn!("read form client handle message failed: {err}");
                                 break;
                             },
                         }
                         Some(Err(err)) => {
-                            log::warn!("read form client failed: {}", err);
+                            warn!("read form client failed: {err}");
                             break;
                         }
                         None => {
-                            log::warn!("incoming receive channel closed");
+                            warn!("incoming receive channel closed");
                             break;
                         }
                     },
@@ -248,12 +249,12 @@ where
                                 break;
                             },
                             Err(err) => {
-                                log::error!("handle deliver failed: {}", err);
+                                error!("handle deliver failed: {err}");
                                 break;
                             },
                         }
                         None => {
-                            log::warn!("deliver receive channel closed");
+                            warn!("deliver receive channel closed");
                             break;
                         }
                     },
@@ -265,7 +266,7 @@ where
             if let Err(err) =
                 handle_clean_session(self.session, self.deliver_rx, self.global, self.storage).await
             {
-                log::error!("handle clean session: {}", err);
+                error!("handle clean session: {err}");
             }
         });
     }
@@ -311,12 +312,12 @@ where
                 ret = self.write_rx.recv() => match ret {
                     Some(packet) => {
                         if let Err(err) = self.writer.send(packet).await {
-                            log::warn!("client#{} write failed: {}", self.client_id, err);
+                            warn!("client#{} write failed: {}", self.client_id, err);
                             break;
                         }
                     }
                     None => {
-                        log::info!("client#{} write task closed", self.client_id);
+                        info!("client#{} write task closed", self.client_id);
                         break;
                     }
                 },
@@ -328,7 +329,7 @@ where
                                 match msg.pubrec_at() {
                                     Some(_) => {
                                         if let Err(err) = self.writer.send(PubcompPacket::new(msg.server_packet_id()).into()).await {
-                                            log::warn!("client#{} write pubcomp packet failed: {}", self.client_id, err);
+                                            warn!("client#{} write pubcomp packet failed: {}", self.client_id, err);
                                             break;
                                         }
                                     }
@@ -343,7 +344,7 @@ where
                                         packet.set_dup(true);
 
                                         if let Err(err) = self.writer.send(packet.into()).await {
-                                            log::warn!("client#{} write publish packet failed: {}", self.client_id, err);
+                                            warn!("client#{} write publish packet failed: {}", self.client_id, err);
                                             break;
                                         }
                                     }
@@ -351,7 +352,7 @@ where
                             }
                         },
                         Err(err) => {
-                            log::error!("retrieve pending messages: {err}");
+                            error!("retrieve pending messages: {err}");
                             break;
                         },
                     }
