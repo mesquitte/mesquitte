@@ -2,12 +2,12 @@ use std::path::Path;
 
 use tokio::net::{TcpListener, ToSocketAddrs};
 
+#[cfg(feature = "mqtts")]
+use crate::{server::config::TlsConfig, server::rustls::rustls_acceptor, warn};
 use crate::{
     server::{config::ServerConfig, process_client, state::GlobalState, Error},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
-#[cfg(feature = "mqtts")]
-use {crate::server::config::TlsConfig, crate::server::rustls::rustls_acceptor};
 
 pub struct TcpServer<P, S>
 where
@@ -52,13 +52,16 @@ where
     }
 
     #[cfg(feature = "mqtts")]
-    pub async fn accept_tls<P: AsRef<Path>>(&self, tls: &TlsConfig<P>) -> Result<(), Error> {
+    pub async fn accept_tls(self, tls: &TlsConfig<P>) -> Result<(), Error> {
         let acceptor = rustls_acceptor(tls)?;
         while let Ok((stream, _addr)) = self.inner.accept().await {
             match acceptor.accept(stream).await {
                 Ok(stream) => {
-                    let global = self.global.clone();
-                    tokio::spawn(async move { process_client(stream, global).await });
+                    tokio::spawn(async move {
+                        process_client(stream, self.config.version, self.global, self.storage)
+                            .await?;
+                        Ok::<(), Error>(())
+                    });
                 }
                 Err(err) => {
                     warn!("accept tls stream failed: {err}");

@@ -32,14 +32,14 @@ path = "tests/raft_test.rs"
 required-features = ["cluster", "heed-storage"]
 
 [features]
-default = ["v4", "mqtt", "ws", "quic", "log"]
+default = ["v4", "mqtt", "log"]
 
 v4 = ["mqtt-codec-kit/v4"]
 v5 = ["mqtt-codec-kit/v5"]
 mqtt = []
 mqtts = ["rustls"]
-ws = ["async-tungstenite", "futures", "tungstenite"]
-wss = ["async-tungstenite", "futures", "tungstenite", "rustls"]
+ws = ["async-tungstenite", "tungstenite"]
+wss = ["async-tungstenite", "tungstenite", "rustls"]
 quic = ["s2n-quic"]
 rustls = [
     "async-tungstenite?/tokio-rustls-webpki-roots",
@@ -47,7 +47,7 @@ rustls = [
     "rustls-pemfile",
     "tokio-rustls/aws-lc-rs",
 ]
-cluster = ["axum", "backon", "bincode", "mobc", "openraft", "tarpc"]
+cluster = ["axum", "backon", "bincode", "mobc", "openraft", "serde", "tarpc"]
 rocksdb-storage = ["rust-rocksdb"]
 heed-storage = ["heed", "tokio/fs"]
 log = ["dep:log"]
@@ -67,7 +67,7 @@ byteorder.workspace = true
 dashmap.workspace = true
 flume = { workspace = true, features = ["async"] }
 foldhash.workspace = true
-futures = { workspace = true, optional = true }
+futures.workspace = true
 futures-sink.workspace = true
 futures-util.workspace = true
 heed = { workspace = true, features = [
@@ -97,7 +97,7 @@ rust-rocksdb = { workspace = true, features = [
 rustls = { workspace = true, default-features = false, optional = true }
 rustls-pemfile = { workspace = true, optional = true }
 s2n-quic = { workspace = true, optional = true }
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive"], optional = true }
 tarpc = { workspace = true, features = [
     "tokio1",
     "serde-transport",
@@ -110,6 +110,7 @@ tokio = { workspace = true, features = [
     "rt-multi-thread",
     "io-util",
     "time",
+    "net",
 ] }
 tokio-rustls = { workspace = true, default-features = false, optional = true }
 tokio-util = { workspace = true, features = ["codec"] }

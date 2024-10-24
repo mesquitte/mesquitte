@@ -5,12 +5,12 @@ use tokio::net::{TcpListener, ToSocketAddrs};
 #[cfg(any(feature = "ws", feature = "wss"))]
 use tungstenite::{handshake::server::ErrorResponse, http};
 
+#[cfg(feature = "wss")]
+use crate::{server::config::TlsConfig, server::rustls::rustls_acceptor, warn};
 use crate::{
     server::{config::ServerConfig, process_client, state::GlobalState, Error},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
-#[cfg(feature = "wss")]
-use {crate::server::config::TlsConfig, crate::server::rustls::rustls_acceptor, std::path::Path};
 
 use super::ws_stream::WsByteStream;
 
@@ -59,19 +59,22 @@ where
     }
 
     #[cfg(feature = "wss")]
-    pub async fn accept_tls<P: AsRef<Path>>(&self, tls: &TlsConfig<P>) -> Result<(), Error> {
+    pub async fn accept_tls(self, tls: &TlsConfig<P>) -> Result<(), Error> {
         let acceptor = rustls_acceptor(tls)?;
         while let Ok((stream, _addr)) = self.inner.accept().await {
-            let global = self.global.clone();
             match acceptor.accept(stream).await {
                 Ok(stream) => {
                     let ws_stream = WsByteStream::new(
                         accept_hdr_async(TokioAdapter::new(stream), ws_callback).await?,
                     );
-                    tokio::spawn(async move { process_client(ws_stream, global).await });
+                    tokio::spawn(async move {
+                        process_client(ws_stream, self.config.version, self.global, self.storage)
+                            .await?;
+                        Ok::<(), Error>(())
+                    });
                 }
                 Err(err) => {
-                    error!("accept WebSocket tls stream failed: {err}");
+                    warn!("accept WebSocket tls stream failed: {err}");
                     continue;
                 }
             }

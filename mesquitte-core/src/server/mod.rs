@@ -26,6 +26,7 @@ pub mod ws;
 pub enum Error {
     #[error("Io Error : {0}")]
     Io(#[from] std::io::Error),
+    #[cfg(any(feature = "ws", feature = "wss"))]
     #[error("tungstenite Error : {0}")]
     Accept(#[from] tungstenite::Error),
     #[error("Missing tls config")]
@@ -69,7 +70,7 @@ where
     match level {
         ProtocolLevel::Version310 | ProtocolLevel::Version311 => {
             if cfg!(feature = "v5") && !cfg!(feature = "v4") {
-                warn!("this broker do not support v4");
+                warn!("this broker does not support v4");
                 return Err(Error::UnsupportProtocol("v4".to_string()));
             }
             #[cfg(feature = "v4")]
@@ -77,7 +78,7 @@ where
         }
         ProtocolLevel::Version50 => {
             if cfg!(feature = "v4") && !cfg!(feature = "v5") {
-                warn!("this broker do not support v5");
+                warn!("this broker does not support v5");
                 return Err(Error::UnsupportProtocol("v5".to_string()));
             }
             #[cfg(feature = "v5")]
