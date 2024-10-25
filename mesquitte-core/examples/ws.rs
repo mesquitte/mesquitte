@@ -32,14 +32,13 @@ async fn main() -> io::Result<()> {
     static STORAGE: OnceLock<Storage<MemoryStore>> = OnceLock::new();
 
     let config = ServerConfig::<String>::new("0.0.0.0:8883".parse().unwrap(), None, "4").unwrap();
-    let broker = WsServer::bind(
-        &config.addr,
-        config.clone(),
+    let broker = WsServer::new(
+        config,
         GLOBAL.get_or_init(|| global),
         STORAGE.get_or_init(|| storage),
     )
     .await
     .unwrap();
-    broker.accept().await.unwrap();
+    broker.run().await.unwrap();
     Ok(())
 }

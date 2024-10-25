@@ -1,7 +1,11 @@
-use std::{env, path::Path, sync::OnceLock};
+use std::{env, sync::OnceLock};
 
 use mesquitte_core::{
-    server::{config::ServerConfig, quic::server::QuicServer, state::GlobalState},
+    server::{
+        config::{ServerConfig, TlsConfig},
+        quic::server::QuicServer,
+        state::GlobalState,
+    },
     store::{
         memory::{
             message::MessageMemoryStore, retain::RetainMessageMemoryStore, topic::TopicMemoryStore,
@@ -31,17 +35,18 @@ async fn main() {
     static GLOBAL: OnceLock<GlobalState> = OnceLock::new();
     static STORAGE: OnceLock<Storage<MemoryStore>> = OnceLock::new();
 
-    let config = ServerConfig::<String>::new("0.0.0.0:1883".parse().unwrap(), None, "4").unwrap();
-    let broker = QuicServer::bind(
-        config.addr,
-        (
-            Path::new("mesquitte-core/examples/certs/cert.pem"),
-            Path::new("mesquitte-core/examples/certs/key.pem"),
-        ),
-        config.clone(),
+    let tls = TlsConfig::new(
+        None,
+        "mesquitte-core/examples/certs/cert.pem",
+        "mesquitte-core/examples/certs/key.pem",
+        false,
+    );
+    let config = ServerConfig::new("0.0.0.0:1883".parse().unwrap(), Some(tls), "4").unwrap();
+    let broker = QuicServer::new(
+        config,
         GLOBAL.get_or_init(|| global),
         STORAGE.get_or_init(|| storage),
     )
     .unwrap();
-    broker.accept().await.unwrap();
+    broker.run().await.unwrap();
 }
