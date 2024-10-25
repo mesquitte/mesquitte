@@ -34,15 +34,14 @@ async fn main() -> io::Result<()> {
 
     let config = ServerConfig::<String>::new("0.0.0.0:1883".parse().unwrap(), None, "4").unwrap();
     info!("server config: {:?}", config);
-    let broker = TcpServer::bind(
-        &config.addr,
-        config.clone(),
+    let broker = TcpServer::new(
+        config,
         GLOBAL.get_or_init(|| global),
         STORAGE.get_or_init(|| storage),
     )
     .await
     .unwrap();
-    broker.accept().await.unwrap();
+    broker.run().await.unwrap();
 
     Ok(())
 }

@@ -28,3 +28,14 @@ pub struct TlsConfig<P: AsRef<Path>> {
     pub key_file: P,
     pub fail_if_no_peer_cert: bool,
 }
+
+impl<P: AsRef<Path>> TlsConfig<P> {
+    pub fn new(ca_file: Option<P>, cert_file: P, key_file: P, fail_if_no_peer_cert: bool) -> Self {
+        Self {
+            ca_file,
+            cert_file,
+            key_file,
+            fail_if_no_peer_cert,
+        }
+    }
+}
