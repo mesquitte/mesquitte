@@ -20,10 +20,10 @@ use super::{
     subscribe::{handle_subscribe, handle_unsubscribe},
 };
 
-async fn remove_client<S>(
+async fn remove_client<'a, S>(
     session: &Session,
-    global: &'static GlobalState,
-    storage: &'static Storage<S>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -43,12 +43,12 @@ where
     Ok(())
 }
 
-pub(super) async fn handle_read_packet<S>(
+pub(super) async fn handle_read_packet<'a, S>(
     write_tx: &mpsc::Sender<VariablePacket>,
     session: &mut Session,
     packet: VariablePacket,
-    global: &'static GlobalState,
-    storage: &'static Storage<S>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<bool>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -135,11 +135,11 @@ where
     Ok(should_stop)
 }
 
-pub(super) async fn receive_deliver_message<S>(
+pub(super) async fn receive_deliver_message<'a, S>(
     session: &mut Session,
     packet: DeliverMessage,
-    global: &'static GlobalState,
-    storage: &'static Storage<S>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<(bool, Option<VariablePacket>)>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -198,12 +198,12 @@ where
     Ok((should_stop, resp))
 }
 
-pub(super) async fn handle_deliver_packet<S>(
+pub(super) async fn handle_deliver_packet<'a, S>(
     sender: &mpsc::Sender<VariablePacket>,
     session: &mut Session,
     packet: DeliverMessage,
-    global: &'static GlobalState,
-    storage: &'static Storage<S>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<bool>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -220,11 +220,11 @@ where
     Ok(should_stop)
 }
 
-pub(super) async fn handle_clean_session<S>(
+pub(super) async fn handle_clean_session<'a, S>(
     mut session: Session,
     mut deliver_rx: mpsc::Receiver<DeliverMessage>,
-    global: &'static GlobalState,
-    storage: &'static Storage<S>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,

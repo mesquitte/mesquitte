@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, path::Path};
+use std::num::NonZeroUsize;
 
 use s2n_quic::Server;
 
@@ -8,23 +8,18 @@ use crate::{
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
 
-pub struct QuicServer<P, S>
-where
-    P: AsRef<Path>,
-    S: MessageStore + RetainMessageStore + TopicStore + 'static,
-{
-    config: ServerConfig<P>,
+pub struct QuicServer<S: 'static> {
+    config: ServerConfig,
     global: &'static GlobalState,
     storage: &'static Storage<S>,
 }
 
-impl<P, S> QuicServer<P, S>
+impl<S> QuicServer<S>
 where
-    P: AsRef<Path>,
-    S: MessageStore + RetainMessageStore + TopicStore + 'static,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     pub fn new(
-        config: ServerConfig<P>,
+        config: ServerConfig,
         global: &'static GlobalState,
         storage: &'static Storage<S>,
     ) -> Result<Self, Error> {
@@ -35,21 +30,29 @@ where
         })
     }
 
-    pub async fn run(self) -> Result<(), Error> {
+    pub async fn serve(self) -> Result<(), Error> {
+        #[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
         let worker = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
+        #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+        let worker = 1;
         let mut tasks = Vec::with_capacity(worker);
         for i in 0..worker {
-            info!("quic woker {} initial", i);
+            info!("quic worker {} staring...", i);
             let tls = match &self.config.tls {
-                Some(tls) => (tls.cert_file.as_ref(), tls.key_file.as_ref()),
+                Some(tls) => (tls.cert_file.as_path(), tls.key_file.as_path()),
                 None => return Err(Error::MissingTlsConfig),
             };
             let tls = s2n_quic::provider::tls::default::Server::builder()
                 .with_certificate(tls.0, tls.1)?
                 .build()?;
+            #[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
             let io = s2n_quic::provider::io::Default::builder()
                 .with_receive_address(self.config.addr)?
                 .with_reuse_port()?
+                .build()?;
+            #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+            let io = s2n_quic::provider::io::Default::builder()
+                .with_receive_address(self.config.addr)?
                 .build()?;
             let mut server = Server::builder().with_tls(tls)?.with_io(io)?.start()?;
             let task = tokio::spawn(async move {

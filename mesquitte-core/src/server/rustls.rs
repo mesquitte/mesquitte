@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufReader, path::Path, sync::Arc};
+use std::{fs::File, io::BufReader, sync::Arc};
 
 use rustls::{server::WebPkiClientVerifier, RootCertStore};
 use tokio_rustls::{
@@ -21,9 +21,9 @@ pub enum Error {
     InvalidServerKey(String),
 }
 
-pub fn rustls_server_config<P: AsRef<Path>>(cfg: &TlsConfig<P>) -> Result<ServerConfig, Error> {
-    let cert_file = &mut BufReader::new(File::open(cfg.cert_file.as_ref())?);
-    let key_file = &mut BufReader::new(File::open(cfg.key_file.as_ref())?);
+pub fn rustls_server_config(cfg: &TlsConfig) -> Result<ServerConfig, Error> {
+    let cert_file = &mut BufReader::new(File::open(&cfg.cert_file)?);
+    let key_file = &mut BufReader::new(File::open(&cfg.key_file)?);
 
     let cert_chain = rustls_pemfile::certs(cert_file).collect::<Result<Vec<_>, _>>()?;
     let key = rustls_pemfile::private_key(key_file)?
@@ -56,6 +56,6 @@ pub fn rustls_server_config<P: AsRef<Path>>(cfg: &TlsConfig<P>) -> Result<Server
         .map_err(|e| Error::InvalidCACert(e.to_string()))
 }
 
-pub fn rustls_acceptor<P: AsRef<Path>>(cfg: &TlsConfig<P>) -> Result<TlsAcceptor, Error> {
+pub fn rustls_acceptor(cfg: &TlsConfig) -> Result<TlsAcceptor, Error> {
     Ok(TlsAcceptor::from(Arc::new(rustls_server_config(cfg)?)))
 }

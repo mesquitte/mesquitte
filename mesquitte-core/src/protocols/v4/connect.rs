@@ -15,9 +15,9 @@ use crate::{
 
 use super::session::Session;
 
-pub(super) async fn handle_connect(
+pub(super) async fn handle_connect<'a>(
     packet: &ConnectPacket,
-    global: &'static GlobalState,
+    global: &'a GlobalState,
 ) -> Result<(ConnackPacket, Session, mpsc::Receiver<DeliverMessage>), ConnackPacket> {
     debug!(
         r#"client#{} received a connect packet:

@@ -1,10 +1,13 @@
 use std::{env, sync::OnceLock};
 
 use mesquitte_core::{
+    broker::Broker,
     server::{
         config::{ServerConfig, TlsConfig},
         quic::server::QuicServer,
         state::GlobalState,
+        tcp::server::TcpServer,
+        ws::server::WsServer,
     },
     store::{
         memory::{
@@ -14,10 +17,11 @@ use mesquitte_core::{
         Storage,
     },
 };
+use tokio::signal;
 
 #[tokio::main]
 async fn main() {
-    env::set_var("RUST_LOG", "quic=trace,mesquitte_core=trace");
+    env::set_var("RUST_LOG", "broker=trace,mesquitte_core=trace");
     env_logger::init();
 
     let global = GlobalState::default();
@@ -31,19 +35,29 @@ async fn main() {
 
     static GLOBAL: OnceLock<GlobalState> = OnceLock::new();
     static STORAGE: OnceLock<Storage<MemoryStore>> = OnceLock::new();
+    let _ = GLOBAL.set(global);
+    let _ = STORAGE.set(storage);
 
+    let config = ServerConfig::new("0.0.0.0:1883".parse().unwrap(), None, "4").unwrap();
+    let mqtt = TcpServer::new(config, GLOBAL.get().unwrap(), STORAGE.get().unwrap())
+        .await
+        .unwrap();
+    let config = ServerConfig::new("0.0.0.0:8883".parse().unwrap(), None, "4").unwrap();
+    let ws = WsServer::new(config, GLOBAL.get().unwrap(), STORAGE.get().unwrap())
+        .await
+        .unwrap();
     let tls = TlsConfig::new(
         None,
         "mesquitte-core/examples/certs/cert.pem".parse().unwrap(),
         "mesquitte-core/examples/certs/key.pem".parse().unwrap(),
         false,
     );
-    let config = ServerConfig::new("0.0.0.0:1883".parse().unwrap(), Some(tls), "4").unwrap();
-    let broker = QuicServer::new(
-        config,
-        GLOBAL.get_or_init(|| global),
-        STORAGE.get_or_init(|| storage),
-    )
-    .unwrap();
+    let config = ServerConfig::new("0.0.0.0:6883".parse().unwrap(), Some(tls), "4").unwrap();
+    let quic = QuicServer::new(config, GLOBAL.get().unwrap(), STORAGE.get().unwrap()).unwrap();
+    let broker = Broker::<MemoryStore>::default()
+        .with_mqtt(mqtt)
+        .with_ws(ws)
+        .with_quic(quic);
     broker.serve().await.unwrap();
+    signal::ctrl_c().await.expect("failed to listen for event");
 }

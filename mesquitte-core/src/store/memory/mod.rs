@@ -16,6 +16,7 @@ pub mod message;
 pub mod retain;
 pub mod topic;
 
+#[derive(Default)]
 pub struct MemoryStore {
     message_store: MessageMemoryStore,
     retain_message_store: RetainMessageMemoryStore,
