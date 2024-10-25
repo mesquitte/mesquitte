@@ -54,6 +54,11 @@ impl SubackPacket {
     pub fn set_packet_identifier(&mut self, pkid: u16) {
         self.packet_identifier.0 = pkid;
     }
+
+    pub fn set_properties(&mut self, properties: SubackProperties) {
+        self.properties = properties;
+        self.fix_header_remaining_len();
+    }
 }
 
 impl DecodablePacket for SubackPacket {
