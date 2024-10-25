@@ -1,18 +1,18 @@
-use std::{net::SocketAddr, path::Path};
+use std::{net::SocketAddr, path::PathBuf};
 
 use mqtt_codec_kit::common::ProtocolLevel;
 
 use super::Error;
 
 #[derive(Clone, Debug)]
-pub struct ServerConfig<P: AsRef<Path>> {
+pub struct ServerConfig {
     pub addr: SocketAddr,
-    pub tls: Option<TlsConfig<P>>,
+    pub tls: Option<TlsConfig>,
     pub version: ProtocolLevel,
 }
 
-impl<P: AsRef<Path>> ServerConfig<P> {
-    pub fn new(addr: SocketAddr, tls: Option<TlsConfig<P>>, version: &str) -> Result<Self, Error> {
+impl ServerConfig {
+    pub fn new(addr: SocketAddr, tls: Option<TlsConfig>, version: &str) -> Result<Self, Error> {
         Ok(Self {
             addr,
             tls,
@@ -22,15 +22,20 @@ impl<P: AsRef<Path>> ServerConfig<P> {
 }
 
 #[derive(Clone, Debug)]
-pub struct TlsConfig<P: AsRef<Path>> {
-    pub ca_file: Option<P>,
-    pub cert_file: P,
-    pub key_file: P,
+pub struct TlsConfig {
+    pub ca_file: Option<PathBuf>,
+    pub cert_file: PathBuf,
+    pub key_file: PathBuf,
     pub fail_if_no_peer_cert: bool,
 }
 
-impl<P: AsRef<Path>> TlsConfig<P> {
-    pub fn new(ca_file: Option<P>, cert_file: P, key_file: P, fail_if_no_peer_cert: bool) -> Self {
+impl TlsConfig {
+    pub fn new(
+        ca_file: Option<PathBuf>,
+        cert_file: PathBuf,
+        key_file: PathBuf,
+        fail_if_no_peer_cert: bool,
+    ) -> Self {
         Self {
             ca_file,
             cert_file,

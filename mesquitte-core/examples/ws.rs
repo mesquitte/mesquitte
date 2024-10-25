@@ -13,10 +13,7 @@ use mesquitte_core::{
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    env::set_var(
-        "RUST_LOG",
-        "ws=trace,mesquitte_core=trace,mqtt_codec_kit=info",
-    );
+    env::set_var("RUST_LOG", "ws=trace,mesquitte_core=trace");
     env_logger::init();
 
     let global = GlobalState::default();
@@ -31,7 +28,7 @@ async fn main() -> io::Result<()> {
     static GLOBAL: OnceLock<GlobalState> = OnceLock::new();
     static STORAGE: OnceLock<Storage<MemoryStore>> = OnceLock::new();
 
-    let config = ServerConfig::<String>::new("0.0.0.0:8883".parse().unwrap(), None, "4").unwrap();
+    let config = ServerConfig::new("0.0.0.0:8883".parse().unwrap(), None, "4").unwrap();
     let broker = WsServer::new(
         config,
         GLOBAL.get_or_init(|| global),
@@ -39,6 +36,6 @@ async fn main() -> io::Result<()> {
     )
     .await
     .unwrap();
-    broker.run().await.unwrap();
+    broker.serve().await.unwrap();
     Ok(())
 }

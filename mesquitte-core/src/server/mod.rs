@@ -73,7 +73,7 @@ async fn process_client<S, T>(
 ) -> Result<(), Error>
 where
     S: AsyncRead + AsyncWrite + Send + 'static,
-    T: MessageStore + RetainMessageStore + TopicStore + 'static,
+    T: MessageStore + RetainMessageStore + TopicStore,
 {
     let (rd, wr) = split(stream);
     match level {

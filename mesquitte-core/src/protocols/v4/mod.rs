@@ -43,7 +43,7 @@ impl<R, W, S> EventLoop<R, W, S>
 where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
-    S: MessageStore + RetainMessageStore + TopicStore + 'static,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     pub fn new(
         reader: R,
@@ -151,11 +151,11 @@ struct ReadLoop<T, D, S: 'static> {
     storage: &'static Storage<S>,
 }
 
-impl<T, D, S: 'static> ReadLoop<T, D, S>
+impl<T, D, S> ReadLoop<T, D, S>
 where
     T: AsyncRead + Unpin,
     D: Decoder<Item = VariablePacket, Error = VariablePacketError>,
-    S: MessageStore + RetainMessageStore + TopicStore + 'static,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     pub fn new(
         reader: FramedRead<T, D>,
@@ -272,24 +272,24 @@ where
     }
 }
 
-pub struct WriteLoop<T, E, S: 'static> {
+pub struct WriteLoop<'a, T, E, S> {
     writer: FramedWrite<T, E>,
     client_id: String,
     write_rx: mpsc::Receiver<VariablePacket>,
-    storage: &'static Storage<S>,
+    storage: &'a Storage<S>,
 }
 
-impl<T, E, S> WriteLoop<T, E, S>
+impl<'a, T, E, S> WriteLoop<'a, T, E, S>
 where
     T: AsyncWrite + Unpin,
     E: Encoder<VariablePacket, Error = io::Error>,
-    S: MessageStore + RetainMessageStore + TopicStore + 'static,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     pub fn new(
         writer: FramedWrite<T, E>,
         client_id: String,
         write_rx: mpsc::Receiver<VariablePacket>,
-        storage: &'static Storage<S>,
+        storage: &'a Storage<S>,
     ) -> Self {
         Self {
             writer,

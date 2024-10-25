@@ -32,7 +32,7 @@ path = "tests/raft_test.rs"
 required-features = ["cluster", "heed-storage"]
 
 [features]
-default = ["v4", "mqtt", "ws", "quic", "log"]
+default = ["v4", "mqtt", "mqtts", "ws", "wss", "quic", "log"]
 
 v4 = ["mqtt-codec-kit/v4"]
 v5 = ["mqtt-codec-kit/v5"]
@@ -121,5 +121,5 @@ tungstenite = { workspace = true, optional = true }
 [dev-dependencies]
 env_logger.workspace = true
 maplit.workspace = true
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "signal", "rt-multi-thread"] }
 tempfile.workspace = true

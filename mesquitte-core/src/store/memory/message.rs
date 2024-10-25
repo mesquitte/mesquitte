@@ -13,6 +13,7 @@ pub struct PendingMessage {
     retrieve_attempts: usize,
 }
 
+#[derive(Default)]
 pub struct MessageMemoryStore {
     max_packets: usize,
     max_attempts: usize,
