@@ -1,6 +1,5 @@
 use std::{io, time::Duration};
 
-use connect::handle_connect;
 use futures::{SinkExt as _, StreamExt as _};
 use mqtt_codec_kit::{
     common::{qos::QoSWithPacketIdentifier, QualityOfService},
@@ -71,7 +70,7 @@ where
             }
         };
 
-        let (mut session, deliver_rx) = match handle_connect(&packet, self.global).await {
+        let (mut session, deliver_rx) = match Self::handle_connect(&packet, self.global).await {
             Ok((pkt, session, deliver_rx)) => {
                 if let Err(err) = frame_writer.send(pkt).await {
                     error!("handle connect write connect ack: {err}");
@@ -87,18 +86,7 @@ where
             }
         };
 
-        debug!(
-            r#"client#{} session:
-        connect at : {:?}
-     clean session : {}
-        keep alive : {}
-assigned_client_id : {}"#,
-            session.client_id(),
-            session.connected_at(),
-            session.clean_session(),
-            session.keep_alive(),
-            session.assigned_client_id(),
-        );
+        debug!("{session}");
 
         match retrieve_pending_messages(&mut session, self.storage).await {
             Ok(packets) => {
@@ -136,7 +124,8 @@ assigned_client_id : {}"#,
         );
 
         if tokio::try_join!(&mut read_task, &mut write_task).is_err() {
-            warn!("read_task/write_task terminated");
+            error!("read_task/write_task terminated");
+            read_task.abort();
             write_task.abort();
         };
     }
@@ -322,7 +311,7 @@ where
                     }
                 },
                 _ = tick.tick() => {
-                    match self.storage.inner.retrieve_pending_messages(&self.client_id).await {
+                    match self.storage.retrieve_pending_messages(&self.client_id).await {
                         Ok(None) => continue,
                         Ok(Some(messages)) => {
                             for msg in messages {

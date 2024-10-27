@@ -85,7 +85,6 @@ topic name : {:?}
         QoSWithPacketIdentifier::Level2(packet_id) => {
             if !packet.dup() {
                 storage
-                    .inner
                     .save_received_message(session.client_id(), packet_id, packet.into())
                     .await?;
             }
@@ -119,15 +118,12 @@ topic name : {:?}
 
     if packet.retain() {
         if packet.payload().is_empty() {
-            storage.inner.remove(packet.topic_name()).await?;
+            storage.remove(packet.topic_name()).await?;
         } else {
-            storage
-                .inner
-                .insert((session.client_id(), packet).into())
-                .await?;
+            storage.insert((session.client_id(), packet).into()).await?;
         }
     }
-    let matches = TopicStore::search(&storage.inner, packet.topic_name()).await?;
+    let matches = TopicStore::search(storage.as_ref(), packet.topic_name()).await?;
     let mut senders = Vec::with_capacity(matches.normal_clients.len());
     for (client_id, opt) in matches.normal_clients {
         match opt {
@@ -173,7 +169,7 @@ where
         packet_id
     );
 
-    if let Some(msg) = storage.inner.pubrel(session.client_id(), packet_id).await? {
+    if let Some(msg) = storage.pubrel(session.client_id(), packet_id).await? {
         dispatch_publish(session, &msg, global, storage).await?;
     }
 
@@ -221,7 +217,6 @@ topic name : {:?}
 
     if let Some(packet_id) = packet_id {
         storage
-            .inner
             .save_pending_message(
                 session.client_id(),
                 PendingPublishMessage::new(packet_id, *subscribe_qos, message.clone()),
@@ -246,7 +241,7 @@ where
         packet_id
     );
 
-    storage.inner.puback(session.client_id(), packet_id).await?;
+    storage.puback(session.client_id(), packet_id).await?;
 
     Ok(())
 }
@@ -265,7 +260,7 @@ where
         packet_id
     );
 
-    storage.inner.pubrec(session.client_id(), packet_id).await?;
+    storage.pubrec(session.client_id(), packet_id).await?;
 
     Ok(PubrelPacket::new(packet_id))
 }
@@ -284,10 +279,7 @@ where
         packet_id
     );
 
-    storage
-        .inner
-        .pubcomp(session.client_id(), packet_id)
-        .await?;
+    storage.pubcomp(session.client_id(), packet_id).await?;
 
     Ok(())
 }
@@ -326,7 +318,6 @@ where
 {
     let mut packets = Vec::new();
     let ret = storage
-        .inner
         .retrieve_pending_messages(session.client_id())
         .await?;
     if let Some(messages) = ret {
