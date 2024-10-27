@@ -9,6 +9,7 @@ compile_error!("v4 or v5 must be enabled");
 )))]
 compile_error!("mqtt or mqtts or ws or wss or quic must be enabled");
 
+pub mod broker;
 #[cfg(all(
     feature = "cluster",
     any(
@@ -16,12 +17,11 @@ compile_error!("mqtt or mqtts or ws or wss or quic must be enabled");
         all(feature = "rocksdb-storage", not(feature = "heed-storage"))
     )
 ))]
-mod cluster;
-mod protocols;
-
-pub mod broker;
+pub mod cluster;
 pub mod server;
 pub mod store;
+
+mod protocols;
 
 #[macro_export]
 macro_rules! trace { ($($x:tt)*) => (

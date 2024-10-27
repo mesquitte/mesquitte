@@ -48,7 +48,7 @@ rustls = { version = "0.23", default-features = false }
 rustls-pemfile = "2.2"
 s2n-quic = "1"
 serde = "1.0"
-tarpc = "0.34"
+tarpc = "0.35"
 tempfile = "3.13"
 thiserror = "1.0"
 tokio = "1.41"

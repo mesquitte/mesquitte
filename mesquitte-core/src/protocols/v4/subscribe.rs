@@ -46,12 +46,10 @@ packet id : {}
         // TODO: granted max qos from config
         let granted_qos = subscribe_qos.to_owned();
         storage
-            .inner
             .subscribe(session.client_id(), filter, RouteOption::V4(granted_qos))
             .await?;
         session.subscribe(filter.clone());
-
-        let retain_messages = RetainMessageStore::search(&storage.inner, filter).await?;
+        let retain_messages = RetainMessageStore::search(storage.as_ref(), filter).await?;
         for msg in retain_messages {
             let mut packet =
                 handle_deliver_publish(session, &granted_qos, &msg.into(), storage).await?;
@@ -85,7 +83,7 @@ packet id : {}
     );
     for filter in packet.topic_filters() {
         session.unsubscribe(filter);
-        store.inner.unsubscribe(session.client_id(), filter).await?;
+        store.unsubscribe(session.client_id(), filter).await?;
     }
 
     Ok(UnsubackPacket::new(packet.packet_identifier()))

@@ -1,7 +1,10 @@
+use std::fmt;
+
 use foldhash::{HashSet, HashSetExt};
 use mqtt_codec_kit::{common::TopicFilter, v4::packet::connect::LastWill};
 use tokio::time::Instant;
 
+#[derive(Clone)]
 pub struct Session {
     connected_at: Instant,
     // last package timestamp
@@ -22,13 +25,13 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(client_id: String, assigned_client_id: bool) -> Self {
+    pub fn new(client_id: &str, assigned_client_id: bool) -> Self {
         Self {
             connected_at: Instant::now(),
             last_packet_at: Instant::now(),
             server_packet_id: 1,
 
-            client_id,
+            client_id: client_id.to_string(),
             assigned_client_id,
             username: None,
             keep_alive: 0,
@@ -153,5 +156,23 @@ impl Session {
 
     pub fn assigned_client_id(&self) -> bool {
         self.assigned_client_id
+    }
+}
+
+impl fmt::Display for Session {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            r#"client# {} session:
+                connect at : {:?}
+             clean session : {}
+                keep alive : {}
+        assigned_client_id : {}"#,
+            self.client_id,
+            self.connected_at,
+            self.clean_session,
+            self.keep_alive,
+            self.assigned_client_id
+        )
     }
 }

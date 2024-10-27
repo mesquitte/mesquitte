@@ -5,13 +5,12 @@ use tokio::sync::mpsc;
 
 use crate::{
     debug, error,
-    protocols::v4::publish::handle_will,
+    protocols::v4::{connect::handle_disconnect, publish::handle_will},
     server::state::{DeliverMessage, GlobalState},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
 
 use super::{
-    connect::handle_disconnect,
     publish::{
         handle_deliver_publish, handle_puback, handle_pubcomp, handle_publish, handle_pubrec,
         handle_pubrel,
@@ -31,13 +30,9 @@ where
     global.remove_client(session.client_id());
     if session.clean_session() {
         storage
-            .inner
             .unsubscribe_topics(session.client_id(), session.subscriptions())
             .await?;
-        storage
-            .inner
-            .clear_all_messages(session.client_id())
-            .await?;
+        storage.clear_all_messages(session.client_id()).await?;
     }
 
     Ok(())
