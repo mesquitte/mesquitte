@@ -172,7 +172,7 @@ where
             loop {
                 tokio::select! {
                     packet = self.reader.next() => match packet {
-                        Some(Ok(p)) => match handle_read_packet(&self.write_tx, &mut self.session, p, self.global, self.storage).await {
+                        Some(Ok(p)) => match handle_read_packet(&self.write_tx, &mut self.session, &p, self.global, self.storage).await {
                             Ok(true) => break,
                             Ok(false) => continue,
                             Err(err) => {
@@ -190,7 +190,7 @@ where
                         }
                     },
                     packet = self.deliver_rx.recv() => match packet {
-                        Some(p) => match handle_deliver_packet(&self.write_tx, &mut self.session, p, self.global, self.storage).await {
+                        Some(p) => match handle_deliver_packet(&self.write_tx, &mut self.session, &p, self.global, self.storage).await {
                             Ok(should_stop) => if should_stop {
                                 break;
                             },
@@ -215,7 +215,7 @@ where
             loop {
                 tokio::select! {
                     packet = self.reader.next() => match packet {
-                        Some(Ok(p)) => match handle_read_packet(&self.write_tx, &mut self.session, p, self.global, self.storage).await {
+                        Some(Ok(p)) => match handle_read_packet(&self.write_tx, &mut self.session, &p, self.global, self.storage).await {
                             Ok(true) => break,
                             Ok(false) => continue,
                             Err(err) => {
@@ -233,7 +233,7 @@ where
                         }
                     },
                     packet = self.deliver_rx.recv() => match packet {
-                        Some(p) => match handle_deliver_packet(&self.write_tx, &mut self.session, p, self.global, self.storage).await {
+                        Some(p) => match handle_deliver_packet(&self.write_tx, &mut self.session, &p, self.global, self.storage).await {
                             Ok(should_stop) => if should_stop {
                                 break;
                             },
@@ -252,8 +252,13 @@ where
         };
 
         tokio::spawn(async move {
-            if let Err(err) =
-                handle_clean_session(self.session, self.deliver_rx, self.global, self.storage).await
+            if let Err(err) = handle_clean_session(
+                &mut self.session,
+                &mut self.deliver_rx,
+                self.global,
+                self.storage,
+            )
+            .await
             {
                 error!("handle clean session: {err}");
             }

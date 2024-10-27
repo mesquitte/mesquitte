@@ -41,7 +41,7 @@ where
 pub(super) async fn handle_read_packet<'a, S>(
     write_tx: &mpsc::Sender<VariablePacket>,
     session: &mut Session,
-    packet: VariablePacket,
+    packet: &VariablePacket,
     global: &'a GlobalState,
     storage: &'a Storage<S>,
 ) -> io::Result<bool>
@@ -67,7 +67,7 @@ where
                 })?;
         }
         VariablePacket::PublishPacket(packet) => {
-            let (stop, ack) = handle_publish(session, &packet, global, storage).await?;
+            let (stop, ack) = handle_publish(session, packet, global, storage).await?;
             if let Some(pkt) = ack {
                 debug!("write puback packet: {:?}", pkt);
                 write_tx.send(pkt).await.map_err(|err| {
@@ -97,7 +97,7 @@ where
             })?;
         }
         VariablePacket::SubscribePacket(packet) => {
-            let packets = handle_subscribe(session, &packet, storage).await?;
+            let packets = handle_subscribe(session, packet, storage).await?;
             debug!("write suback packets: {:?}", packets);
             for pkt in packets {
                 write_tx.send(pkt).await.map_err(|err| {
@@ -110,7 +110,7 @@ where
             handle_pubcomp(session, packet.packet_identifier(), storage).await?;
         }
         VariablePacket::UnsubscribePacket(packet) => {
-            let pkt = handle_unsubscribe(session, storage, &packet).await?;
+            let pkt = handle_unsubscribe(session, storage, packet).await?;
             debug!("write unsuback packet: {:?}", pkt);
             write_tx.send(pkt.into()).await.map_err(|err| {
                 error!("send unsuback response: {err}");
@@ -132,7 +132,7 @@ where
 
 pub(super) async fn receive_deliver_message<'a, S>(
     session: &mut Session,
-    packet: DeliverMessage,
+    packet: &DeliverMessage,
     global: &'a GlobalState,
     storage: &'a Storage<S>,
 ) -> io::Result<(bool, Option<VariablePacket>)>
@@ -142,7 +142,7 @@ where
     let mut should_stop = false;
     let resp = match packet {
         DeliverMessage::Publish(subscribe_qos, packet) => {
-            let resp = handle_deliver_publish(session, &subscribe_qos, &packet, storage).await?;
+            let resp = handle_deliver_publish(session, subscribe_qos, packet, storage).await?;
             if session.disconnected() {
                 None
             } else {
@@ -196,7 +196,7 @@ where
 pub(super) async fn handle_deliver_packet<'a, S>(
     sender: &mpsc::Sender<VariablePacket>,
     session: &mut Session,
-    packet: DeliverMessage,
+    packet: &DeliverMessage,
     global: &'a GlobalState,
     storage: &'a Storage<S>,
 ) -> io::Result<bool>
@@ -216,8 +216,8 @@ where
 }
 
 pub(super) async fn handle_clean_session<'a, S>(
-    mut session: Session,
-    mut deliver_rx: mpsc::Receiver<DeliverMessage>,
+    session: &mut Session,
+    deliver_rx: &mut mpsc::Receiver<DeliverMessage>,
     global: &'a GlobalState,
     storage: &'a Storage<S>,
 ) -> io::Result<()>
@@ -237,16 +237,16 @@ where
     }
 
     if !session.client_disconnected() {
-        handle_will(&mut session, global, storage).await?;
+        handle_will(session, global, storage).await?;
     }
 
     if session.clean_session() {
-        remove_client(&session, global, storage).await?;
+        remove_client(session, global, storage).await?;
         return Ok(());
     }
 
     while let Some(p) = deliver_rx.recv().await {
-        let (stop, _) = receive_deliver_message(&mut session, p, global, storage).await?;
+        let (stop, _) = receive_deliver_message(session, &p, global, storage).await?;
         if stop {
             break;
         }
