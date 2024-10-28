@@ -1,3 +1,4 @@
+use kanal::{bounded_async, AsyncReceiver};
 use mqtt_codec_kit::{
     common::{
         ProtocolLevel, QualityOfService, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX, SYS_PREFIX,
@@ -8,7 +9,6 @@ use mqtt_codec_kit::{
     },
 };
 use nanoid::nanoid;
-use tokio::sync::mpsc;
 
 use crate::{
     debug, info,
@@ -20,7 +20,7 @@ use super::{common::build_error_connack, session::Session};
 pub(super) async fn handle_connect<'a>(
     packet: ConnectPacket,
     global: &'a GlobalState,
-) -> Result<(ConnackPacket, Session, mpsc::Receiver<DeliverMessage>), ConnackPacket> {
+) -> Result<(ConnackPacket, Session, AsyncReceiver<DeliverMessage>), ConnackPacket> {
     debug!(
         r#"client#{} received a connect packet:
 protocol level : {:?}
@@ -204,7 +204,7 @@ protocol level : {:?}
     // FIXME: too many clients cause memory leak
 
     // TODO: deliver channel size
-    let (deliver_tx, deliver_rx) = mpsc::channel(8);
+    let (deliver_tx, deliver_rx) = bounded_async(8);
     let receipt = global.add_client(session.client_id(), deliver_tx).await;
 
     let session_present = match receipt {

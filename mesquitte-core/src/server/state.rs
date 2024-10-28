@@ -1,11 +1,9 @@
 use std::{fmt::Display, time::Duration};
 
 use dashmap::DashMap;
+use kanal::{bounded_async, AsyncSender};
 use mqtt_codec_kit::common::QualityOfService;
-use tokio::{
-    sync::mpsc::{self, channel},
-    time,
-};
+use tokio::time;
 
 use crate::{store::message::ReceivedPublishMessage, warn};
 
@@ -30,7 +28,7 @@ impl Display for KickReason {
 #[derive(Debug)]
 pub enum DeliverMessage {
     Publish(QualityOfService, Box<ReceivedPublishMessage>),
-    Online(mpsc::Sender<u16>),
+    Online(AsyncSender<u16>),
     Kick(KickReason),
 }
 
@@ -54,18 +52,18 @@ pub struct GlobalState {
     // max keep alive
     // min keep alive
     // config: Arc<Config>,
-    clients: DashMap<String, mpsc::Sender<DeliverMessage>, foldhash::fast::RandomState>,
+    clients: DashMap<String, AsyncSender<DeliverMessage>, foldhash::fast::RandomState>,
 }
 
 impl GlobalState {
     pub async fn add_client(
         &self,
         client_id: &str,
-        new_sender: mpsc::Sender<DeliverMessage>,
+        new_sender: AsyncSender<DeliverMessage>,
     ) -> AddClientReceipt {
         if let Some(old_sender) = self.get_deliver(client_id) {
             if !old_sender.is_closed() {
-                let (control_sender, mut control_receiver) = channel(1);
+                let (control_sender, control_receiver) = bounded_async(1);
                 match old_sender
                     .send(DeliverMessage::Online(control_sender))
                     .await
@@ -75,7 +73,7 @@ impl GlobalState {
                         match time::timeout(Duration::from_secs(10), control_receiver.recv()).await
                         {
                             Ok(data) => {
-                                if let Some(state) = data {
+                                if let Ok(state) = data {
                                     self.clients.insert(client_id.to_owned(), new_sender);
                                     return AddClientReceipt::Present(state);
                                 }
@@ -100,7 +98,7 @@ impl GlobalState {
         self.clients.remove(client_id);
     }
 
-    pub fn get_deliver(&self, client_id: &str) -> Option<mpsc::Sender<DeliverMessage>> {
+    pub fn get_deliver(&self, client_id: &str) -> Option<AsyncSender<DeliverMessage>> {
         self.clients.get(client_id).map(|s| s.value().clone())
     }
 }

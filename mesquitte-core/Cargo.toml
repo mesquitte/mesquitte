@@ -65,7 +65,6 @@ backon = { workspace = true, features = ["tokio-sleep"], optional = true }
 bincode = { workspace = true, optional = true }
 byteorder.workspace = true
 dashmap.workspace = true
-flume = { workspace = true, features = ["async"] }
 foldhash.workspace = true
 futures.workspace = true
 futures-sink.workspace = true
@@ -76,6 +75,7 @@ heed = { workspace = true, features = [
     "read-txn-no-tls",
     "posix-sem",
 ], optional = true }
+kanal.workspace = true
 log = { workspace = true, optional = true }
 mqtt-codec-kit = { workspace = true, features = [
     "tokio-codec",
