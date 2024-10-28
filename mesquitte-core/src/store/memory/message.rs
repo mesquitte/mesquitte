@@ -119,6 +119,7 @@ impl MessageStore for MessageMemoryStore {
                         > retrieve_factor * msg.retrieve_attempts as u64 + msg.message.receive_at()
                     {
                         msg.retrieve_attempts += 1;
+                        msg.message.set_dup();
                         Some(msg.message.clone())
                     } else {
                         None

@@ -48,10 +48,6 @@ impl ReceivedPublishMessage {
         self.dup
     }
 
-    pub fn set_dup(&mut self) {
-        self.dup = true
-    }
-
     pub fn retain(&self) -> bool {
         self.retain
     }
@@ -168,6 +164,7 @@ pub struct PendingPublishMessage {
     server_packet_id: u16,
     subscribe_qos: QualityOfService,
     message: ReceivedPublishMessage,
+    dup: bool,
     receive_at: u64,
     pubrec_at: Option<u64>,
 }
@@ -183,6 +180,7 @@ impl PendingPublishMessage {
             receive_at: get_unix_ts(),
             pubrec_at: None,
             subscribe_qos,
+            dup: message.dup,
             message,
         }
     }
@@ -205,6 +203,14 @@ impl PendingPublishMessage {
 
     pub fn message(&self) -> &ReceivedPublishMessage {
         &self.message
+    }
+
+    pub fn dup(&self) -> bool {
+        self.dup
+    }
+
+    pub fn set_dup(&mut self) {
+        self.dup = true;
     }
 
     pub fn subscribe_qos(&self) -> QualityOfService {
