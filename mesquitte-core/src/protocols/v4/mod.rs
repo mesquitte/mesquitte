@@ -70,7 +70,7 @@ where
             }
         };
 
-        let (mut session, deliver_rx) = match Self::handle_connect(&packet, self.global).await {
+        let (session, deliver_rx) = match Self::handle_connect(&packet, self.global).await {
             Ok((pkt, session, deliver_rx)) => {
                 if let Err(err) = frame_writer.send(pkt).await {
                     error!("handle connect write connect ack: {err}");
@@ -88,7 +88,7 @@ where
 
         debug!("{session}");
 
-        match retrieve_pending_messages(&mut session, self.storage).await {
+        match retrieve_pending_messages(session.client_id(), self.storage).await {
             Ok(packets) => {
                 for pkt in packets {
                     if let Err(err) = frame_writer.send(pkt).await {

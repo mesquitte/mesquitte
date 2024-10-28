@@ -44,10 +44,6 @@ impl Session {
         }
     }
 
-    pub fn connected_at(&self) -> &Instant {
-        &self.connected_at
-    }
-
     pub fn last_packet_at(&self) -> &Instant {
         &self.last_packet_at
     }
@@ -153,10 +149,6 @@ impl Session {
     pub fn server_packet_id(&self) -> u16 {
         self.server_packet_id
     }
-
-    pub fn assigned_client_id(&self) -> bool {
-        self.assigned_client_id
-    }
 }
 
 impl fmt::Display for Session {
@@ -167,7 +159,7 @@ impl fmt::Display for Session {
                 connect at : {:?}
              clean session : {}
                 keep alive : {}
-        assigned_client_id : {}"#,
+        assigned client id : {}"#,
             self.client_id,
             self.connected_at,
             self.clean_session,

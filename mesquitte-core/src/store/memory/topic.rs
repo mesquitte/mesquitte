@@ -1,7 +1,9 @@
 use std::{io, sync::Arc};
 
 use foldhash::{HashMap, HashMapExt, HashSet};
-use mqtt_codec_kit::common::{TopicFilter, TopicName, LEVEL_SEP, MATCH_ALL_STR, MATCH_ONE_STR};
+use mqtt_codec_kit::common::{
+    TopicFilter, TopicName, LEVEL_SEP, MATCH_ALL_STR, MATCH_DOLLAR_STR, MATCH_ONE_STR,
+};
 use parking_lot::RwLock;
 
 use crate::store::topic::{RouteContent, RouteOption, TopicStore};
@@ -89,7 +91,9 @@ impl TopicStore for TopicMemoryStore {
             normal_clients: Vec::new(),
             shared_clients: HashMap::new(),
         };
-        Self::match_topic(self.root.clone(), &topic_levels, 0, &mut result);
+        if !topic_name.starts_with(MATCH_DOLLAR_STR) {
+            Self::match_topic(self.root.clone(), &topic_levels, 0, &mut result);
+        }
         Ok(result)
     }
 
