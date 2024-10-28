@@ -1,6 +1,7 @@
 use std::{io, time::Duration};
 
 use futures::{SinkExt as _, StreamExt as _};
+use kanal::{bounded_async, AsyncReceiver, AsyncSender};
 use mqtt_codec_kit::v5::{
     control::DisconnectReasonCode,
     packet::{
@@ -10,7 +11,6 @@ use mqtt_codec_kit::v5::{
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::mpsc,
     time::{interval_at, Instant},
 };
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
@@ -32,7 +32,7 @@ use super::{
     subscribe::{handle_subscribe, handle_unsubscribe, SubscribeAck},
 };
 
-async fn read_from_client<T, D>(mut reader: FramedRead<T, D>, sender: mpsc::Sender<VariablePacket>)
+async fn read_from_client<T, D>(mut reader: FramedRead<T, D>, sender: AsyncSender<VariablePacket>)
 where
     T: AsyncRead + Unpin,
     D: Decoder<Item = VariablePacket, Error = VariablePacketError>,
@@ -253,7 +253,7 @@ where
 
 pub(super) async fn handle_clean_session<'a, S>(
     mut session: Session,
-    mut deliver_rx: mpsc::Receiver<DeliverMessage>,
+    deliver_rx: AsyncReceiver<DeliverMessage>,
     global: &'a GlobalState,
     storage: &'a Storage<S>,
 ) -> io::Result<()>
@@ -286,13 +286,16 @@ session expiry : {}"#,
             tokio::select! {
                 out = deliver_rx.recv() => {
                     match out {
-                        Some(p) => {
+                        Ok(p) => {
                             let (stop, _) = receive_deliver_message(&mut session, p, global, storage).await?;
                             if stop {
                                 break;
                             }
                         },
-                        None => break,
+                        Err(err) => {
+                            error!("handle deliver failed: {err}");
+                            break;
+                        },
                     }
                 }
                 _ = tick.tick() => {
@@ -307,7 +310,7 @@ session expiry : {}"#,
             return Ok(());
         }
 
-        while let Some(p) = deliver_rx.recv().await {
+        while let Ok(p) = deliver_rx.recv().await {
             let (stop, _) = receive_deliver_message(&mut session, p, global, storage).await?;
             if stop {
                 break;
@@ -320,8 +323,8 @@ session expiry : {}"#,
 async fn write_to_client<T, E, S>(
     mut session: Session,
     mut writer: FramedWrite<T, E>,
-    mut incoming_rx: mpsc::Receiver<VariablePacket>,
-    mut deliver_rx: mpsc::Receiver<DeliverMessage>,
+    incoming_rx: AsyncReceiver<VariablePacket>,
+    deliver_rx: AsyncReceiver<DeliverMessage>,
     global: &'static GlobalState,
     storage: &'static Storage<S>,
 ) where
@@ -336,7 +339,7 @@ async fn write_to_client<T, E, S>(
         loop {
             tokio::select! {
                 packet = incoming_rx.recv() => match packet {
-                    Some(p) => match handle_read_packet(&mut writer, &mut session, p, global, storage).await {
+                    Ok(p) => match handle_read_packet(&mut writer, &mut session, p, global, storage).await {
                         Ok(true) => break,
                         Ok(false) => continue,
                         Err(err) => {
@@ -344,13 +347,13 @@ async fn write_to_client<T, E, S>(
                             break;
                         },
                     }
-                    None => {
-                        warn!("incoming receive channel closed");
+                    Err(err) => {
+                        info!("client#{} receive channel: {err}", session.client_id());
                         break;
                     }
                 },
                 packet = deliver_rx.recv() => match packet {
-                    Some(p) => match handle_deliver_packet(&mut writer, &mut session, p, global, storage).await {
+                    Ok(p) => match handle_deliver_packet(&mut writer, &mut session, p, global, storage).await {
                         Ok(should_stop) => if should_stop {
                             break;
                         },
@@ -359,8 +362,8 @@ async fn write_to_client<T, E, S>(
                             break;
                         },
                     }
-                    None => {
-                        warn!("deliver channel closed");
+                    Err(err) => {
+                        info!("client#{} deliver channel: {err}", session.client_id());
                         break;
                     }
                 },
@@ -375,7 +378,7 @@ async fn write_to_client<T, E, S>(
         loop {
             tokio::select! {
                 packet = incoming_rx.recv() => match packet {
-                    Some(p) => match handle_read_packet(&mut writer, &mut session, p, global, storage).await {
+                    Ok(p) => match handle_read_packet(&mut writer, &mut session, p, global, storage).await {
                         Ok(true) => break,
                         Ok(false) => continue,
                         Err(err) => {
@@ -383,13 +386,13 @@ async fn write_to_client<T, E, S>(
                             break;
                         },
                     }
-                    None => {
-                        warn!("incoming receive channel closed");
+                    Err(err) => {
+                        info!("client#{} receive channel: {err}", session.client_id());
                         break;
                     }
                 },
                 packet = deliver_rx.recv() => match packet {
-                    Some(p) => match handle_deliver_packet(&mut writer, &mut session, p, global, storage).await {
+                    Ok(p) => match handle_deliver_packet(&mut writer, &mut session, p, global, storage).await {
                         Ok(should_stop) => if should_stop {
                             break;
                         },
@@ -398,8 +401,8 @@ async fn write_to_client<T, E, S>(
                             break;
                         },
                     }
-                    None => {
-                        warn!("deliver receive channel closed");
+                    Err(err) => {
+                        info!("client#{} deliver channel: {err}", session.client_id());
                         break;
                     }
                 },
@@ -466,7 +469,7 @@ pub async fn read_write_loop<R, W, S>(
         }
     }
 
-    let (msg_tx, msg_rx) = mpsc::channel(8);
+    let (msg_tx, msg_rx) = bounded_async(8);
     let mut read_task = tokio::spawn(async move {
         read_from_client(frame_reader, msg_tx).await;
     });

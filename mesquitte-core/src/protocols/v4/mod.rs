@@ -1,6 +1,7 @@
 use std::{io, time::Duration};
 
 use futures::{SinkExt as _, StreamExt as _};
+use kanal::{bounded_async, AsyncReceiver, AsyncSender};
 use mqtt_codec_kit::{
     common::{qos::QoSWithPacketIdentifier, QualityOfService},
     v4::packet::{
@@ -11,7 +12,6 @@ use read_write_loop::{handle_clean_session, handle_deliver_packet, handle_read_p
 use session::Session;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::mpsc,
     time::{interval_at, Instant},
 };
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
@@ -87,7 +87,7 @@ where
 
         debug!("{session}");
 
-        let (write_tx, write_rx) = mpsc::channel(8);
+        let (write_tx, write_rx) = bounded_async(8);
         let client_id = session.client_id().to_owned();
         let mut write_task = tokio::spawn(async move {
             WriteLoop::new(frame_writer, client_id, write_rx, self.storage)
@@ -117,8 +117,8 @@ where
 
 struct ReadLoop<T, D, S: 'static> {
     reader: FramedRead<T, D>,
-    write_tx: mpsc::Sender<VariablePacket>,
-    deliver_rx: mpsc::Receiver<DeliverMessage>,
+    write_tx: AsyncSender<VariablePacket>,
+    deliver_rx: AsyncReceiver<DeliverMessage>,
     session: Session,
     global: &'static GlobalState,
     storage: &'static Storage<S>,
@@ -133,8 +133,8 @@ where
     pub fn new(
         reader: FramedRead<T, D>,
         session: Session,
-        deliver_rx: mpsc::Receiver<DeliverMessage>,
-        write_tx: mpsc::Sender<VariablePacket>,
+        deliver_rx: AsyncReceiver<DeliverMessage>,
+        write_tx: AsyncSender<VariablePacket>,
         global: &'static GlobalState,
         storage: &'static Storage<S>,
     ) -> Self {
@@ -174,7 +174,7 @@ where
                         }
                     },
                     packet = self.deliver_rx.recv() => match packet {
-                        Some(p) => match handle_deliver_packet(&self.write_tx, &mut self.session, &p, self.global, self.storage).await {
+                        Ok(p) => match handle_deliver_packet(&self.write_tx, &mut self.session, &p, self.global, self.storage).await {
                             Ok(should_stop) => if should_stop {
                                 break;
                             },
@@ -183,8 +183,8 @@ where
                                 break;
                             },
                         }
-                        None => {
-                            warn!("deliver channel closed");
+                        Err(err) => {
+                            warn!("deliver receive channel: {err}");
                             break;
                         }
                     },
@@ -217,7 +217,7 @@ where
                         }
                     },
                     packet = self.deliver_rx.recv() => match packet {
-                        Some(p) => match handle_deliver_packet(&self.write_tx, &mut self.session, &p, self.global, self.storage).await {
+                        Ok(p) => match handle_deliver_packet(&self.write_tx, &mut self.session, &p, self.global, self.storage).await {
                             Ok(should_stop) => if should_stop {
                                 break;
                             },
@@ -226,8 +226,8 @@ where
                                 break;
                             },
                         }
-                        None => {
-                            warn!("deliver receive channel closed");
+                        Err(err) => {
+                            warn!("deliver receive channel: {err}");
                             break;
                         }
                     },
@@ -253,7 +253,7 @@ where
 pub struct WriteLoop<'a, T, E, S> {
     writer: FramedWrite<T, E>,
     client_id: String,
-    write_rx: mpsc::Receiver<VariablePacket>,
+    write_rx: AsyncReceiver<VariablePacket>,
     storage: &'a Storage<S>,
 }
 
@@ -266,7 +266,7 @@ where
     pub fn new(
         writer: FramedWrite<T, E>,
         client_id: String,
-        write_rx: mpsc::Receiver<VariablePacket>,
+        write_rx: AsyncReceiver<VariablePacket>,
         storage: &'a Storage<S>,
     ) -> Self {
         Self {
@@ -288,14 +288,14 @@ where
         loop {
             tokio::select! {
                 ret = self.write_rx.recv() => match ret {
-                    Some(packet) => {
+                    Ok(packet) => {
                         if let Err(err) = self.writer.send(packet).await {
                             warn!("client#{} write failed: {}", self.client_id, err);
                             break;
                         }
                     }
-                    None => {
-                        info!("client#{} write task closed", self.client_id);
+                    Err(err) => {
+                        info!("client#{} write channel: {err}", self.client_id);
                         break;
                     }
                 },

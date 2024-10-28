@@ -1,7 +1,7 @@
 use std::io::{self, ErrorKind};
 
+use kanal::{AsyncReceiver, AsyncSender};
 use mqtt_codec_kit::v4::packet::{DisconnectPacket, PingrespPacket, VariablePacket};
-use tokio::sync::mpsc;
 
 use crate::{
     debug, error,
@@ -39,7 +39,7 @@ where
 }
 
 pub(super) async fn handle_read_packet<'a, S>(
-    write_tx: &mpsc::Sender<VariablePacket>,
+    write_tx: &AsyncSender<VariablePacket>,
     session: &mut Session,
     packet: &VariablePacket,
     global: &'a GlobalState,
@@ -194,7 +194,7 @@ where
 }
 
 pub(super) async fn handle_deliver_packet<'a, S>(
-    sender: &mpsc::Sender<VariablePacket>,
+    sender: &AsyncSender<VariablePacket>,
     session: &mut Session,
     packet: &DeliverMessage,
     global: &'a GlobalState,
@@ -217,7 +217,7 @@ where
 
 pub(super) async fn handle_clean_session<'a, S>(
     session: &mut Session,
-    deliver_rx: &mut mpsc::Receiver<DeliverMessage>,
+    deliver_rx: &mut AsyncReceiver<DeliverMessage>,
     global: &'a GlobalState,
     storage: &'a Storage<S>,
 ) -> io::Result<()>
@@ -245,7 +245,7 @@ where
         return Ok(());
     }
 
-    while let Some(p) = deliver_rx.recv().await {
+    while let Ok(p) = deliver_rx.recv().await {
         let (stop, _) = receive_deliver_message(session, &p, global, storage).await?;
         if stop {
             break;
