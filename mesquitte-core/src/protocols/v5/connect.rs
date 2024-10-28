@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use mqtt_codec_kit::{
     common::{
         ProtocolLevel, QualityOfService, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX, SYS_PREFIX,
@@ -19,9 +17,9 @@ use crate::{
 
 use super::{common::build_error_connack, session::Session};
 
-pub(super) async fn handle_connect(
+pub(super) async fn handle_connect<'a>(
     packet: ConnectPacket,
-    global: Arc<GlobalState>,
+    global: &'a GlobalState,
 ) -> Result<(ConnackPacket, Session, mpsc::Receiver<DeliverMessage>), ConnackPacket> {
     debug!(
         r#"client#{} received a connect packet:

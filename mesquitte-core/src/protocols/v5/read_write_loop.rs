@@ -1,4 +1,4 @@
-use std::{io, sync::Arc, time::Duration};
+use std::{io, time::Duration};
 
 use futures::{SinkExt as _, StreamExt as _};
 use mqtt_codec_kit::v5::{
@@ -57,10 +57,10 @@ where
     }
 }
 
-async fn remove_client<S>(
+async fn remove_client<'a, S>(
     session: &Session,
-    global: Arc<GlobalState>,
-    storage: Arc<Storage<S>>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -68,24 +68,20 @@ where
     global.remove_client(session.client_id());
     if session.clean_session() {
         storage
-            .inner
             .unsubscribe_topics(session.client_id(), session.subscriptions())
             .await?;
-        storage
-            .inner
-            .clear_all_messages(session.client_id())
-            .await?;
+        storage.clear_all_messages(session.client_id()).await?;
     }
 
     Ok(())
 }
 
-pub(super) async fn handle_read_packet<W, E, S>(
+pub(super) async fn handle_read_packet<'a, W, E, S>(
     writer: &mut FramedWrite<W, E>,
     session: &mut Session,
     packet: VariablePacket,
-    global: Arc<GlobalState>,
-    storage: Arc<Storage<S>>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<bool>
 where
     W: AsyncWrite + Unpin,
@@ -106,8 +102,7 @@ where
             writer.send(pkt.into()).await?;
         }
         VariablePacket::PublishPacket(packet) => {
-            let (stop, ack) =
-                handle_publish(session, &packet, global.clone(), storage.clone()).await?;
+            let (stop, ack) = handle_publish(session, &packet, global, storage).await?;
             if let Some(pkt) = ack {
                 debug!("write puback packet: {:?}", pkt);
                 writer.send(pkt).await?;
@@ -115,20 +110,20 @@ where
             should_stop = stop;
         }
         VariablePacket::PubrelPacket(packet) => {
-            let pkt = handle_pubrel(session, packet.packet_identifier(), storage.clone()).await?;
+            let pkt = handle_pubrel(session, packet.packet_identifier(), storage).await?;
             debug!("write pubcomp packet: {:?}", pkt);
             writer.send(pkt.into()).await?;
         }
         VariablePacket::PubackPacket(packet) => {
-            handle_puback(session, packet.packet_identifier(), storage.clone()).await?;
+            handle_puback(session, packet.packet_identifier(), storage).await?;
         }
         VariablePacket::PubrecPacket(packet) => {
-            let pkt = handle_pubrec(session, packet.packet_identifier(), storage.clone()).await?;
+            let pkt = handle_pubrec(session, packet.packet_identifier(), storage).await?;
             debug!("write pubrel packet: {:?}", pkt);
             writer.send(pkt.into()).await?;
         }
         VariablePacket::SubscribePacket(packet) => {
-            let ret = handle_subscribe(session, packet, storage.clone()).await?;
+            let ret = handle_subscribe(session, packet, storage).await?;
             match ret {
                 SubscribeAck::Success(packets) => {
                     debug!("write suback packets: {:?}", packets);
@@ -144,10 +139,10 @@ where
             }
         }
         VariablePacket::PubcompPacket(packet) => {
-            handle_pubcomp(session, packet.packet_identifier(), storage.clone()).await?;
+            handle_pubcomp(session, packet.packet_identifier(), storage).await?;
         }
         VariablePacket::UnsubscribePacket(packet) => {
-            let pkt = handle_unsubscribe(session, storage.clone(), &packet).await?;
+            let pkt = handle_unsubscribe(session, storage, &packet).await?;
             debug!("write unsuback packet: {:?}", pkt);
             writer.send(pkt.into()).await?;
         }
@@ -169,11 +164,11 @@ where
     Ok(should_stop)
 }
 
-pub(super) async fn receive_deliver_message<S>(
+pub(super) async fn receive_deliver_message<'a, S>(
     session: &mut Session,
     packet: DeliverMessage,
-    global: Arc<GlobalState>,
-    storage: Arc<Storage<S>>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<(bool, Option<VariablePacket>)>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -181,8 +176,7 @@ where
     let mut should_stop = false;
     let resp = match packet {
         DeliverMessage::Publish(subscribe_qos, packet) => {
-            let resp =
-                handle_deliver_publish(session, subscribe_qos, &packet, storage.clone()).await?;
+            let resp = handle_deliver_publish(session, subscribe_qos, &packet, storage).await?;
             if session.disconnected() {
                 None
             } else {
@@ -202,7 +196,7 @@ where
                 );
             }
 
-            remove_client(session, global.clone(), storage.clone()).await?;
+            remove_client(session, global, storage).await?;
 
             should_stop = true;
 
@@ -222,7 +216,7 @@ where
             if session.disconnected() && !session.clean_session() {
                 None
             } else {
-                remove_client(session, global.clone(), storage.clone()).await?;
+                remove_client(session, global, storage).await?;
 
                 should_stop = true;
 
@@ -233,12 +227,12 @@ where
     Ok((should_stop, resp))
 }
 
-pub(super) async fn handle_deliver_packet<T, E, S>(
+pub(super) async fn handle_deliver_packet<'a, T, E, S>(
     writer: &mut FramedWrite<T, E>,
     session: &mut Session,
     packet: DeliverMessage,
-    global: Arc<GlobalState>,
-    storage: Arc<Storage<S>>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<bool>
 where
     T: AsyncWrite + Unpin,
@@ -257,11 +251,11 @@ where
     Ok(should_stop)
 }
 
-pub(super) async fn handle_clean_session<S>(
+pub(super) async fn handle_clean_session<'a, S>(
     mut session: Session,
     mut deliver_rx: mpsc::Receiver<DeliverMessage>,
-    global: Arc<GlobalState>,
-    storage: Arc<Storage<S>>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -281,7 +275,7 @@ session expiry : {}"#,
     }
 
     if !session.client_disconnected() {
-        handle_will(&mut session, global.clone(), storage.clone()).await?;
+        handle_will(&mut session, global, storage).await?;
     }
 
     if session.session_expiry_interval() > 0 {
@@ -293,7 +287,7 @@ session expiry : {}"#,
                 out = deliver_rx.recv() => {
                     match out {
                         Some(p) => {
-                            let (stop, _) = receive_deliver_message(&mut session, p, global.clone(), storage.clone()).await?;
+                            let (stop, _) = receive_deliver_message(&mut session, p, global, storage).await?;
                             if stop {
                                 break;
                             }
@@ -309,13 +303,12 @@ session expiry : {}"#,
         }
     } else {
         if session.clean_session() {
-            remove_client(&session, global.clone(), storage.clone()).await?;
+            remove_client(&session, global, storage).await?;
             return Ok(());
         }
 
         while let Some(p) = deliver_rx.recv().await {
-            let (stop, _) =
-                receive_deliver_message(&mut session, p, global.clone(), storage.clone()).await?;
+            let (stop, _) = receive_deliver_message(&mut session, p, global, storage).await?;
             if stop {
                 break;
             }
@@ -329,12 +322,12 @@ async fn write_to_client<T, E, S>(
     mut writer: FramedWrite<T, E>,
     mut incoming_rx: mpsc::Receiver<VariablePacket>,
     mut deliver_rx: mpsc::Receiver<DeliverMessage>,
-    global: Arc<GlobalState>,
-    storage: Arc<Storage<S>>,
+    global: &'static GlobalState,
+    storage: &'static Storage<S>,
 ) where
     T: AsyncWrite + Unpin,
     E: Encoder<VariablePacket, Error = io::Error>,
-    S: MessageStore + RetainMessageStore + TopicStore + 'static,
+    S: MessageStore + RetainMessageStore + TopicStore,
 {
     if session.keep_alive() > 0 {
         let half_interval = Duration::from_millis(session.keep_alive() as u64 * 500);
@@ -343,7 +336,7 @@ async fn write_to_client<T, E, S>(
         loop {
             tokio::select! {
                 packet = incoming_rx.recv() => match packet {
-                    Some(p) => match handle_read_packet(&mut writer, &mut session, p, global.clone(), storage.clone()).await {
+                    Some(p) => match handle_read_packet(&mut writer, &mut session, p, global, storage).await {
                         Ok(true) => break,
                         Ok(false) => continue,
                         Err(err) => {
@@ -357,7 +350,7 @@ async fn write_to_client<T, E, S>(
                     }
                 },
                 packet = deliver_rx.recv() => match packet {
-                    Some(p) => match handle_deliver_packet(&mut writer, &mut session, p, global.clone(), storage.clone()).await {
+                    Some(p) => match handle_deliver_packet(&mut writer, &mut session, p, global, storage).await {
                         Ok(should_stop) => if should_stop {
                             break;
                         },
@@ -382,7 +375,7 @@ async fn write_to_client<T, E, S>(
         loop {
             tokio::select! {
                 packet = incoming_rx.recv() => match packet {
-                    Some(p) => match handle_read_packet(&mut writer, &mut session, p, global.clone(), storage.clone()).await {
+                    Some(p) => match handle_read_packet(&mut writer, &mut session, p, global, storage).await {
                         Ok(true) => break,
                         Ok(false) => continue,
                         Err(err) => {
@@ -396,7 +389,7 @@ async fn write_to_client<T, E, S>(
                     }
                 },
                 packet = deliver_rx.recv() => match packet {
-                    Some(p) => match handle_deliver_packet(&mut writer, &mut session, p, global.clone(), storage.clone()).await {
+                    Some(p) => match handle_deliver_packet(&mut writer, &mut session, p, global, storage).await {
                         Ok(should_stop) => if should_stop {
                             break;
                         },
@@ -415,9 +408,7 @@ async fn write_to_client<T, E, S>(
     };
 
     tokio::spawn(async move {
-        if let Err(err) =
-            handle_clean_session(session, deliver_rx, global.clone(), storage.clone()).await
-        {
+        if let Err(err) = handle_clean_session(session, deliver_rx, global, storage).await {
             error!("handle clean session: {err}");
         }
     });
@@ -426,8 +417,8 @@ async fn write_to_client<T, E, S>(
 pub async fn read_write_loop<R, W, S>(
     reader: R,
     writer: W,
-    global: Arc<GlobalState>,
-    storage: Arc<Storage<S>>,
+    global: &'static GlobalState,
+    storage: &'static Storage<S>,
 ) where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
@@ -444,7 +435,7 @@ pub async fn read_write_loop<R, W, S>(
         }
     };
 
-    let (mut session, deliver_rx) = match handle_connect(packet, global.clone()).await {
+    let (session, deliver_rx) = match handle_connect(packet, global).await {
         Ok((pkt, session, deliver_rx)) => {
             if let Err(err) = frame_writer.send(pkt).await {
                 error!("handle connect write connect ack: {err}");
@@ -460,7 +451,7 @@ pub async fn read_write_loop<R, W, S>(
         }
     };
 
-    match retrieve_pending_messages(&mut session, storage.clone()).await {
+    match retrieve_pending_messages(session.client_id(), storage).await {
         Ok(packets) => {
             for pkt in packets {
                 if let Err(err) = frame_writer.send(pkt).await {
@@ -481,15 +472,7 @@ pub async fn read_write_loop<R, W, S>(
     });
 
     let mut write_task = tokio::spawn(async move {
-        write_to_client(
-            session,
-            frame_writer,
-            msg_rx,
-            deliver_rx,
-            global.clone(),
-            storage.clone(),
-        )
-        .await;
+        write_to_client(session, frame_writer, msg_rx, deliver_rx, global, storage).await;
     });
 
     if tokio::try_join!(&mut read_task, &mut write_task).is_err() {
