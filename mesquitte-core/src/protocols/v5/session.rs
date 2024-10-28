@@ -1,3 +1,5 @@
+use std::fmt;
+
 use foldhash::{HashSet, HashSetExt};
 use mqtt_codec_kit::{common::TopicFilter, v5::packet::connect::LastWill};
 use tokio::time::Instant;
@@ -65,10 +67,6 @@ impl Session {
             user_properties: Vec::new(),
             authentication_method: None,
         }
-    }
-
-    pub fn connected_at(&self) -> &Instant {
-        &self.connected_at
     }
 
     pub fn last_packet_at(&self) -> &Instant {
@@ -259,5 +257,23 @@ impl Session {
 
     pub fn set_authentication_method(&mut self, authentication_method: &str) {
         self.authentication_method = Some(authentication_method.to_owned());
+    }
+}
+
+impl fmt::Display for Session {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            r#"client# {} session:
+                connect at : {:?}
+             clean session : {}
+                keep alive : {}
+        assigned client id : {}"#,
+            self.client_id,
+            self.connected_at,
+            self.clean_session,
+            self.keep_alive,
+            self.assigned_client_id
+        )
     }
 }

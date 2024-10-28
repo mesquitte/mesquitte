@@ -1,4 +1,4 @@
-use std::{cmp, io, sync::Arc};
+use std::{cmp, io};
 
 use mqtt_codec_kit::{
     common::{qos::QoSWithPacketIdentifier, QualityOfService, MATCH_ALL_STR, MATCH_ONE_STR},
@@ -28,11 +28,11 @@ use crate::{
 
 use super::session::Session;
 
-pub(super) async fn handle_publish<S>(
+pub(super) async fn handle_publish<'a, S>(
     session: &mut Session,
     packet: &PublishPacket,
-    global: Arc<GlobalState>,
-    storage: Arc<Storage<S>>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<(bool, Option<VariablePacket>)>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -50,7 +50,7 @@ topic name : {:?}
         packet.dup(),
     );
 
-    let message_count = storage.inner.get_message_count(session.client_id()).await?;
+    let message_count = storage.get_message_count(session.client_id()).await?;
     if message_count >= session.receive_maximum().into() {
         let err_pkt = build_error_disconnect(
             session,
@@ -91,12 +91,12 @@ topic name : {:?}
 
     match packet.qos() {
         QoSWithPacketIdentifier::Level0 => {
-            dispatch_publish(session, packet.into(), global, storage).await?;
+            deliver_publish_message(session, packet.into(), global, storage).await?;
             Ok((false, None))
         }
         QoSWithPacketIdentifier::Level1(packet_id) => {
             if !packet.dup() {
-                dispatch_publish(session, packet.into(), global, storage).await?;
+                deliver_publish_message(session, packet.into(), global, storage).await?;
             }
             Ok((
                 false,
@@ -106,7 +106,6 @@ topic name : {:?}
         QoSWithPacketIdentifier::Level2(packet_id) => {
             if !packet.dup() {
                 storage
-                    .inner
                     .save_received_message(session.client_id(), packet_id, packet.into())
                     .await?;
             }
@@ -118,12 +117,11 @@ topic name : {:?}
     }
 }
 
-// Dispatch a publish message from client or will to matched clients
-pub(super) async fn dispatch_publish<S>(
+pub(super) async fn deliver_publish_message<'a, S>(
     session: &mut Session,
     packet: ReceivedPublishMessage,
-    global: Arc<GlobalState>,
-    storage: Arc<Storage<S>>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -145,16 +143,15 @@ properties : {:?}
 
     if packet.retain() {
         if packet.payload().is_empty() {
-            storage.inner.remove(packet.topic_name()).await?;
+            storage.remove(packet.topic_name()).await?;
         } else {
             storage
-                .inner
                 .insert((session.client_id(), &packet).into())
                 .await?;
         }
     }
 
-    let matches = TopicStore::search(&storage.inner, packet.topic_name()).await?;
+    let matches = TopicStore::search(storage.as_ref(), packet.topic_name()).await?;
     let mut senders = Vec::new();
     for (client_id, opt) in matches.normal_clients {
         match opt {
@@ -202,10 +199,10 @@ properties : {:?}
     Ok(())
 }
 
-pub(super) async fn handle_pubrel<S>(
+pub(super) async fn handle_pubrel<'a, S>(
     session: &mut Session,
     packet_id: u16,
-    storage: Arc<Storage<S>>,
+    storage: &'a Storage<S>,
 ) -> io::Result<PubcompPacket>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -216,17 +213,17 @@ where
         packet_id
     );
 
-    storage.inner.pubrel(session.client_id(), packet_id).await?;
+    storage.pubrel(session.client_id(), packet_id).await?;
 
     Ok(PubcompPacket::new(packet_id, PubcompReasonCode::Success))
 }
 
-pub(super) async fn handle_deliver_publish<S>(
+pub(super) async fn handle_deliver_publish<'a, S>(
     session: &mut Session,
     subscribe_qos: QualityOfService,
     // retain_as_published: bool,
     message: &ReceivedPublishMessage,
-    storage: Arc<Storage<S>>,
+    storage: &'a Storage<S>,
 ) -> io::Result<PublishPacket>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -280,7 +277,6 @@ properties : {:?}
 
     if let Some(packet_id) = packet_id {
         storage
-            .inner
             .save_pending_message(
                 session.client_id(),
                 PendingPublishMessage::new(packet_id, subscribe_qos, message.clone()),
@@ -291,10 +287,10 @@ properties : {:?}
     Ok(packet)
 }
 
-pub(super) async fn handle_puback<S>(
+pub(super) async fn handle_puback<'a, S>(
     session: &mut Session,
     packet_id: u16,
-    storage: Arc<Storage<S>>,
+    storage: &'a Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -305,15 +301,15 @@ where
         packet_id
     );
 
-    storage.inner.puback(session.client_id(), packet_id).await?;
+    storage.puback(session.client_id(), packet_id).await?;
 
     Ok(())
 }
 
-pub(super) async fn handle_pubrec<S>(
+pub(super) async fn handle_pubrec<'a, S>(
     session: &mut Session,
     packet_id: u16,
-    storage: Arc<Storage<S>>,
+    storage: &'a Storage<S>,
 ) -> io::Result<PubrelPacket>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -324,7 +320,7 @@ where
         packet_id
     );
 
-    let matched = storage.inner.pubrec(session.client_id(), packet_id).await?;
+    let matched = storage.pubrec(session.client_id(), packet_id).await?;
 
     if matched {
         Ok(PubrelPacket::new(packet_id, PubrelReasonCode::Success))
@@ -336,10 +332,10 @@ where
     }
 }
 
-pub(super) async fn handle_pubcomp<S>(
+pub(super) async fn handle_pubcomp<'a, S>(
     session: &mut Session,
     packet_id: u16,
-    storage: Arc<Storage<S>>,
+    storage: &'a Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -350,18 +346,15 @@ where
         packet_id
     );
 
-    storage
-        .inner
-        .pubcomp(session.client_id(), packet_id)
-        .await?;
+    storage.pubcomp(session.client_id(), packet_id).await?;
 
     Ok(())
 }
 
-pub(super) async fn handle_will<S>(
+pub(super) async fn handle_will<'a, S>(
     session: &mut Session,
-    global: Arc<GlobalState>,
-    storage: Arc<Storage<S>>,
+    global: &'a GlobalState,
+    storage: &'a Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -378,24 +371,21 @@ server side disconnected : {}
     );
 
     if let Some(last_will) = session.take_last_will() {
-        dispatch_publish(session, last_will.into(), global, storage).await?;
+        deliver_publish_message(session, last_will.into(), global, storage).await?;
         session.clear_last_will();
     }
     Ok(())
 }
 
-pub(crate) async fn retrieve_pending_messages<S>(
-    session: &mut Session,
-    storage: Arc<Storage<S>>,
+pub(crate) async fn retrieve_pending_messages<'a, S>(
+    client_id: &str,
+    storage: &'a Storage<S>,
 ) -> io::Result<Vec<VariablePacket>>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
     let mut packets = Vec::new();
-    let ret = storage
-        .inner
-        .retrieve_pending_messages(session.client_id())
-        .await?;
+    let ret = storage.retrieve_pending_messages(client_id).await?;
     if let Some(messages) = ret {
         for msg in messages {
             match msg.pubrec_at() {

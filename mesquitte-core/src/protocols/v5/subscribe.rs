@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, io, sync::Arc};
+use std::{collections::VecDeque, io};
 
 use mqtt_codec_kit::{
     common::QualityOfService,
@@ -29,10 +29,10 @@ pub(super) enum SubscribeAck {
     Disconnect(DisconnectPacket),
 }
 
-pub(super) async fn handle_subscribe<S>(
+pub(super) async fn handle_subscribe<'a, S>(
     session: &mut Session,
     packet: SubscribePacket,
-    storage: Arc<Storage<S>>,
+    storage: &'a Storage<S>,
 ) -> io::Result<SubscribeAck>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -71,7 +71,6 @@ properties : {:?}"#,
         let granted_qos = subscribe_opts.qos().to_owned();
         // TODO: granted max qos from config
         storage
-            .inner
             .subscribe(
                 session.client_id(),
                 filter,
@@ -89,15 +88,14 @@ properties : {:?}"#,
             };
 
         if send_retain {
-            let retain_messages = RetainMessageStore::search(&storage.inner, filter).await?;
+            let retain_messages = RetainMessageStore::search(storage.as_ref(), filter).await?;
             for msg in retain_messages {
                 if subscribe_opts.no_local() && msg.client_id().eq(session.client_id()) {
                     continue;
                 }
 
                 let mut packet =
-                    handle_deliver_publish(session, granted_qos, &msg.into(), storage.clone())
-                        .await?;
+                    handle_deliver_publish(session, granted_qos, &msg.into(), storage).await?;
                 packet.set_retain(true);
 
                 retain_packets.push(packet.into());
@@ -120,9 +118,9 @@ properties : {:?}"#,
     Ok(SubscribeAck::Success(queue.into()))
 }
 
-pub(super) async fn handle_unsubscribe<S>(
+pub(super) async fn handle_unsubscribe<'a, S>(
     session: &mut Session,
-    store: Arc<Storage<S>>,
+    storage: &'a Storage<S>,
     packet: &UnsubscribePacket,
 ) -> io::Result<UnsubackPacket>
 where
@@ -140,7 +138,7 @@ packet id : {}
     let reason_codes = Vec::new();
     for filter in packet.subscribes() {
         session.unsubscribe(filter);
-        store.inner.unsubscribe(session.client_id(), filter).await?;
+        storage.unsubscribe(session.client_id(), filter).await?;
     }
 
     Ok(UnsubackPacket::new(
