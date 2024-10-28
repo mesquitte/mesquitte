@@ -7,7 +7,6 @@ use mqtt_codec_kit::{
         MqttDecoder, MqttEncoder, PubcompPacket, PublishPacket, VariablePacket, VariablePacketError,
     },
 };
-use publish::retrieve_pending_messages;
 use read_write_loop::{handle_clean_session, handle_deliver_packet, handle_read_packet};
 use session::Session;
 use tokio::{
@@ -87,21 +86,6 @@ where
         };
 
         debug!("{session}");
-
-        match retrieve_pending_messages(session.client_id(), self.storage).await {
-            Ok(packets) => {
-                for pkt in packets {
-                    if let Err(err) = frame_writer.send(pkt).await {
-                        error!("write pending packet failed: {err}");
-                        return;
-                    }
-                }
-            }
-            Err(err) => {
-                error!("retrieve pending messages: {err}");
-                return;
-            }
-        }
 
         let (write_tx, write_rx) = mpsc::channel(8);
         let client_id = session.client_id().to_owned();
@@ -335,7 +319,8 @@ where
                                         };
                                         let topic_name = msg.message().topic_name().to_owned();
                                         let mut packet = PublishPacket::new(topic_name, qos, msg.message().payload());
-                                        packet.set_dup(true);
+                                        // TODO: duplicate message？
+                                        packet.set_dup(msg.dup());
 
                                         if let Err(err) = self.writer.send(packet.into()).await {
                                             warn!("client#{} write publish packet failed: {}", self.client_id, err);
