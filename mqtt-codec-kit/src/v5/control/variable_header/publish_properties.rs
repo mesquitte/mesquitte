@@ -21,7 +21,7 @@ pub struct PublishProperties {
     response_topic: Option<String>,
     correlation_data: Option<VarBytes>,
     user_properties: Vec<(String, String)>,
-    subscription_identifiers: Vec<usize>,
+    subscription_identifier: Option<u32>,
     content_type: Option<String>,
 }
 
@@ -60,8 +60,8 @@ impl PublishProperties {
         self.fix_total_length();
     }
 
-    pub fn add_subscription_identifier(&mut self, subscription_identifier: usize) {
-        self.subscription_identifiers.push(subscription_identifier);
+    pub fn set_subscription_identifier(&mut self, subscription_identifier: u32) {
+        self.subscription_identifier = Some(subscription_identifier);
         self.fix_total_length();
     }
 
@@ -94,8 +94,8 @@ impl PublishProperties {
         &self.user_properties[..]
     }
 
-    pub fn subscription_identifiers(&self) -> &[usize] {
-        &self.subscription_identifiers[..]
+    pub fn subscription_identifier(&self) -> Option<u32> {
+        self.subscription_identifier
     }
 
     pub fn content_type(&self) -> &Option<String> {
@@ -124,8 +124,8 @@ impl PublishProperties {
         for (key, value) in self.user_properties.iter() {
             len += 1 + key.encoded_length() + value.encoded_length();
         }
-        for id in self.subscription_identifiers.iter() {
-            len += 1 + VarInt(*id as u32).encoded_length();
+        if let Some(subscription_identifier) = self.subscription_identifier {
+            len += 1 + VarInt(subscription_identifier).encoded_length();
         }
         if let Some(content_type) = &self.content_type {
             len += 1 + content_type.encoded_length();
@@ -164,9 +164,9 @@ impl Encodable for PublishProperties {
             key.encode(writer)?;
             value.encode(writer)?;
         }
-        for id in self.subscription_identifiers.iter() {
+        if let Some(subscription_identifier) = self.subscription_identifier {
             writer.write_u8(PropertyType::SubscriptionIdentifier as u8)?;
-            let identifier = VarInt(*id as u32);
+            let identifier = VarInt(subscription_identifier);
             identifier.encode(writer)?;
         }
         if let Some(content_type) = &self.content_type {
@@ -202,7 +202,7 @@ impl Decodable for PublishProperties {
         let mut response_topic = None;
         let mut correlation_data = None;
         let mut user_properties = Vec::new();
-        let mut subscription_identifiers = Vec::new();
+        let mut subscription_identifier = None;
         let mut content_type = None;
 
         let mut cursor = 0;
@@ -243,7 +243,7 @@ impl Decodable for PublishProperties {
                 PropertyType::SubscriptionIdentifier => {
                     let id = VarInt::decode(reader)?;
                     cursor += 1 + id.encoded_length();
-                    subscription_identifiers.push(id.0 as usize);
+                    subscription_identifier = Some(id.0);
                 }
                 PropertyType::ContentType => {
                     let typ = String::decode(reader)?;
@@ -262,7 +262,7 @@ impl Decodable for PublishProperties {
             response_topic,
             correlation_data,
             user_properties,
-            subscription_identifiers,
+            subscription_identifier,
             content_type,
         })
     }
