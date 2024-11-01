@@ -24,11 +24,11 @@ use crate::{
 
 use super::session::Session;
 
-pub(super) async fn handle_publish<'a, S>(
+pub(super) async fn handle_publish<S>(
     session: &mut Session,
     packet: &PublishPacket,
-    global: &'a GlobalState,
-    storage: &'a Storage<S>,
+    global: &GlobalState,
+    storage: &Storage<S>,
 ) -> io::Result<(bool, Option<VariablePacket>)>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -93,11 +93,11 @@ topic name : {:?}
     }
 }
 
-pub(super) async fn deliver_publish_message<'a, S>(
+pub(super) async fn deliver_publish_message<S>(
     session: &mut Session,
     packet: &ReceivedPublishMessage,
-    global: &'a GlobalState,
-    storage: &'a Storage<S>,
+    global: &GlobalState,
+    storage: &Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -148,11 +148,11 @@ topic name : {:?}
     Ok(())
 }
 
-pub(super) async fn handle_pubrel<'a, S>(
+pub(super) async fn handle_pubrel<S>(
     session: &mut Session,
     packet_id: u16,
-    global: &'a GlobalState,
-    storage: &'a Storage<S>,
+    global: &GlobalState,
+    storage: &Storage<S>,
 ) -> io::Result<PubcompPacket>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -170,11 +170,11 @@ where
     Ok(PubcompPacket::new(packet_id))
 }
 
-pub(super) async fn handle_deliver_publish<'a, S>(
+pub(super) async fn handle_deliver_publish<S>(
     session: &mut Session,
     subscribe_qos: &QualityOfService,
     message: &ReceivedPublishMessage,
-    storage: &'a Storage<S>,
+    storage: &Storage<S>,
 ) -> io::Result<PublishPacket>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -222,10 +222,10 @@ topic name : {:?}
     Ok(packet)
 }
 
-pub(super) async fn handle_puback<'a, S>(
+pub(super) async fn handle_puback<S>(
     session: &mut Session,
     packet_id: u16,
-    storage: &'a Storage<S>,
+    storage: &Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -241,10 +241,10 @@ where
     Ok(())
 }
 
-pub(super) async fn handle_pubrec<'a, S>(
+pub(super) async fn handle_pubrec<S>(
     session: &mut Session,
     packet_id: u16,
-    storage: &'a Storage<S>,
+    storage: &Storage<S>,
 ) -> io::Result<PubrelPacket>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -260,10 +260,10 @@ where
     Ok(PubrelPacket::new(packet_id))
 }
 
-pub(super) async fn handle_pubcomp<'a, S>(
+pub(super) async fn handle_pubcomp<S>(
     session: &mut Session,
     packet_id: u16,
-    storage: &'a Storage<S>,
+    storage: &Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -279,10 +279,10 @@ where
     Ok(())
 }
 
-pub(super) async fn handle_will<'a, S>(
+pub(super) async fn handle_will<S>(
     session: &mut Session,
-    global: &'a GlobalState,
-    storage: &'a Storage<S>,
+    global: &GlobalState,
+    storage: &Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,

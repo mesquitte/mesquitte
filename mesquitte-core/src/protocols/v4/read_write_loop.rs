@@ -19,10 +19,10 @@ use super::{
     subscribe::{handle_subscribe, handle_unsubscribe},
 };
 
-async fn remove_client<'a, S>(
+async fn remove_client<S>(
     session: &Session,
-    global: &'a GlobalState,
-    storage: &'a Storage<S>,
+    global: &GlobalState,
+    storage: &Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -38,12 +38,12 @@ where
     Ok(())
 }
 
-pub(super) async fn handle_read_packet<'a, S>(
+pub(super) async fn handle_read_packet<S>(
     write_tx: &AsyncSender<VariablePacket>,
     session: &mut Session,
     packet: &VariablePacket,
-    global: &'a GlobalState,
-    storage: &'a Storage<S>,
+    global: &GlobalState,
+    storage: &Storage<S>,
 ) -> io::Result<bool>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -130,11 +130,11 @@ where
     Ok(should_stop)
 }
 
-pub(super) async fn receive_deliver_message<'a, S>(
+pub(super) async fn receive_deliver_message<S>(
     session: &mut Session,
     packet: &DeliverMessage,
-    global: &'a GlobalState,
-    storage: &'a Storage<S>,
+    global: &GlobalState,
+    storage: &Storage<S>,
 ) -> io::Result<(bool, Option<VariablePacket>)>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -193,12 +193,12 @@ where
     Ok((should_stop, resp))
 }
 
-pub(super) async fn handle_deliver_packet<'a, S>(
+pub(super) async fn handle_deliver_packet<S>(
     sender: &AsyncSender<VariablePacket>,
     session: &mut Session,
     packet: &DeliverMessage,
-    global: &'a GlobalState,
-    storage: &'a Storage<S>,
+    global: &GlobalState,
+    storage: &Storage<S>,
 ) -> io::Result<bool>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -215,11 +215,11 @@ where
     Ok(should_stop)
 }
 
-pub(super) async fn handle_clean_session<'a, S>(
+pub(super) async fn handle_clean_session<S>(
     session: &mut Session,
     deliver_rx: &mut AsyncReceiver<DeliverMessage>,
-    global: &'a GlobalState,
-    storage: &'a Storage<S>,
+    global: &GlobalState,
+    storage: &Storage<S>,
 ) -> io::Result<()>
 where
     S: MessageStore + RetainMessageStore + TopicStore,

@@ -18,10 +18,10 @@ use crate::{
 
 use super::{publish::handle_deliver_publish, session::Session};
 
-pub(super) async fn handle_subscribe<'a, S>(
+pub(super) async fn handle_subscribe<S>(
     session: &mut Session,
     packet: &SubscribePacket,
-    storage: &'a Storage<S>,
+    storage: &Storage<S>,
 ) -> io::Result<Vec<VariablePacket>>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
@@ -65,9 +65,9 @@ packet id : {}
     Ok(queue.into())
 }
 
-pub(super) async fn handle_unsubscribe<'a, S>(
+pub(super) async fn handle_unsubscribe<S>(
     session: &mut Session,
-    store: &'a Storage<S>,
+    store: &Storage<S>,
     packet: &UnsubscribePacket,
 ) -> io::Result<UnsubackPacket>
 where
