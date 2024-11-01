@@ -5,8 +5,7 @@ use kanal::{bounded_async, AsyncReceiver, AsyncSender};
 use mqtt_codec_kit::{
     common::qos::QoSWithPacketIdentifier,
     v4::packet::{
-        DisconnectPacket, MqttDecoder, MqttEncoder, PublishPacket, PubrelPacket, VariablePacket,
-        VariablePacketError,
+        MqttDecoder, MqttEncoder, PublishPacket, PubrelPacket, VariablePacket, VariablePacketError,
     },
 };
 use read_write_loop::{handle_clean_session, handle_deliver_packet, handle_read_packet};
@@ -305,6 +304,34 @@ pub struct WriteLoop<T, E, S: 'static> {
     storage: &'static Storage<S>,
 }
 
+impl From<PendingPublishMessage> for PublishPacket {
+    fn from(value: PendingPublishMessage) -> Self {
+        let mut pkt = PublishPacket::new(
+            value.message().topic_name().to_owned(),
+            value.qos(),
+            value.message().payload(),
+        );
+        pkt.set_dup(value.dup());
+        pkt.set_retain(value.message().retain());
+
+        pkt
+    }
+}
+
+impl From<&PendingPublishMessage> for PublishPacket {
+    fn from(value: &PendingPublishMessage) -> Self {
+        let mut pkt = PublishPacket::new(
+            value.message().topic_name().to_owned(),
+            value.qos(),
+            value.message().payload(),
+        );
+        pkt.set_dup(value.dup());
+        pkt.set_retain(value.message().retain());
+
+        pkt
+    }
+}
+
 impl<T, E, S> WriteLoop<T, E, S>
 where
     T: AsyncWrite + Unpin,
@@ -348,14 +375,7 @@ where
                             }
                         }
                         None => {
-                            let mut pkt = PublishPacket::new(
-                                pending_message.message().topic_name().to_owned(),
-                                pending_message.qos(),
-                                pending_message.message().payload(),
-                            );
-                            pkt.set_dup(pending_message.dup());
-                            pkt.set_retain(pending_message.message().retain());
-
+                            let pkt: PublishPacket = pending_message.into();
                             if let Err(err) = self.writer.send(pkt.into()).await {
                                 warn!(
                                     "client#{} write publish packet failed: {}",
@@ -392,21 +412,14 @@ where
                 ret = self.write_rx.recv() => match ret {
                     Ok(message) => {
                         match message {
-                            WritePacket::VariablePacket(variable_packet) => {
-                                if let Err(err) = self.writer.send(variable_packet).await {
+                            WritePacket::VariablePacket(pkt) => {
+                                if let Err(err) = self.writer.send(pkt).await {
                                     warn!("client#{} write failed: {}", self.client_id, err);
                                     break;
                                 }
                             }
                             WritePacket::PendingMessage(pending_message) => {
-                                let mut pkt = PublishPacket::new(
-                                    pending_message.message().topic_name().to_owned(),
-                                    pending_message.qos(),
-                                    pending_message.message().payload(),
-                                );
-                                pkt.set_dup(pending_message.dup());
-                                pkt.set_retain(pending_message.message().retain());
-
+                                let pkt: PublishPacket = (&pending_message).into();
                                 if let Err(err) = self.writer.send(pkt.into()).await {
                                     warn!("client#{} write failed: {}", self.client_id, err);
                                     break;
@@ -440,6 +453,5 @@ where
                 },
             }
         }
-        let _ = self.writer.send(DisconnectPacket::new().into()).await;
     }
 }
