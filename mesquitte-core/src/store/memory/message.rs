@@ -5,12 +5,20 @@ use parking_lot::RwLock;
 
 use crate::{
     error,
-    store::message::{get_unix_ts, MessageStore, PendingPublishMessage, ReceivedPublishMessage},
+    store::message::{get_unix_ts, MessageStore, PendingPublishMessage, PublishMessage},
 };
 
-pub struct PendingMessage {
+#[derive(Debug)]
+struct ReceivedMessage {
+    message: PublishMessage,
+    add_at: u64,
+}
+
+#[derive(Debug)]
+struct PendingMessage {
     message: PendingPublishMessage,
     retrieve_attempts: usize,
+    add_at: u64,
 }
 
 #[derive(Default)]
@@ -19,8 +27,8 @@ pub struct MessageMemoryStore {
     max_attempts: usize,
     max_timeout: usize,
     retrieve_factor: usize,
-    received_publish_message: RwLock<HashMap<String, HashMap<u16, ReceivedPublishMessage>>>,
-    pending_publish_message: RwLock<HashMap<String, HashMap<u16, PendingMessage>>>,
+    received_message: RwLock<HashMap<String, HashMap<u16, ReceivedMessage>>>,
+    pending_message: RwLock<HashMap<String, HashMap<u16, PendingMessage>>>,
 }
 
 impl MessageMemoryStore {
@@ -37,124 +45,168 @@ impl MessageMemoryStore {
             max_attempts,
             max_timeout,
             retrieve_factor,
-            received_publish_message: Default::default(),
-            pending_publish_message: Default::default(),
+            received_message: Default::default(),
+            pending_message: Default::default(),
         }
     }
 }
 
 impl MessageStore for MessageMemoryStore {
-    async fn save_received_message(
+    async fn save_publish_message(
         &self,
         client_id: &str,
         packet_id: u16,
-        message: ReceivedPublishMessage,
+        message: PublishMessage,
     ) -> Result<bool, io::Error> {
-        if let Some(queue) = self.received_publish_message.read().get(client_id) {
-            if queue.len() > self.max_packets {
+        if let Some(messages) = self.received_message.read().get(client_id) {
+            if messages.len() > self.max_packets {
                 error!(
-                    "drop received publish packet {:?}, queue is full: {}",
+                    "drop received publish packet {:?}, store is full: {}",
                     message,
-                    queue.len()
+                    messages.len()
                 );
                 return Ok(true);
             }
         }
 
-        let mut queue = self.received_publish_message.write();
-        let packets = queue.entry(client_id.to_string()).or_default();
-        packets.insert(packet_id, message);
-        Ok(false)
-    }
-
-    async fn save_pending_message(
-        &self,
-        client_id: &str,
-        message: PendingPublishMessage,
-    ) -> Result<bool, io::Error> {
-        if let Some(queue) = self.pending_publish_message.read().get(client_id) {
-            if queue.len() > self.max_packets {
-                error!(
-                    "drop pending publish packet {:?}, queue is full: {}",
-                    message,
-                    queue.len()
-                );
-                return Ok(true);
-            }
-        }
-
-        let mut queue = self.pending_publish_message.write();
-        let packets = queue.entry(client_id.to_string()).or_default();
+        let mut received_message_guard = self.received_message.write();
+        let packets = received_message_guard
+            .entry(client_id.to_string())
+            .or_default();
 
         packets.insert(
-            message.server_packet_id(),
-            PendingMessage {
+            packet_id,
+            ReceivedMessage {
                 message,
-                retrieve_attempts: 1,
+                add_at: get_unix_ts(),
             },
         );
-
         Ok(false)
-    }
-
-    async fn retrieve_pending_messages(
-        &self,
-        client_id: &str,
-    ) -> Result<Option<Vec<PendingPublishMessage>>, io::Error> {
-        if let Some(packets) = self.pending_publish_message.write().get_mut(client_id) {
-            if packets.is_empty() {
-                return Ok(None);
-            }
-
-            let now_ts = get_unix_ts();
-            let retrieve_factor = self.retrieve_factor as u64;
-            let max_timeout = self.max_timeout as u64;
-            let useful_values = packets
-                .iter_mut()
-                .filter_map(|(_, msg)| {
-                    if msg.retrieve_attempts > self.max_attempts {
-                        return None;
-                    }
-                    if now_ts
-                        > retrieve_factor * msg.retrieve_attempts as u64 + msg.message.receive_at()
-                    {
-                        msg.retrieve_attempts += 1;
-                        msg.message.set_dup();
-                        Some(msg.message.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            packets.retain(|_, msg| match msg.message.pubrec_at() {
-                Some(pubrec_at) => now_ts < max_timeout + pubrec_at,
-                None => now_ts < max_timeout + msg.message.receive_at(),
-            });
-            return Ok(Some(useful_values));
-        }
-        Ok(None)
     }
 
     async fn pubrel(
         &self,
         client_id: &str,
         packet_id: u16,
-    ) -> Result<Option<ReceivedPublishMessage>, io::Error> {
-        if let Some(packets) = self.received_publish_message.write().get_mut(client_id) {
-            let ret = packets.remove(&packet_id);
+    ) -> Result<Option<PublishMessage>, io::Error> {
+        if let Some(packets) = self.received_message.write().get_mut(client_id) {
+            let ret = packets.remove(&packet_id).map(|v| v.message);
             let max_timeout = self.max_timeout as u64;
-
             let now_ts = get_unix_ts();
-            packets.retain(|_, v| now_ts < max_timeout + v.receive_at());
+            packets.retain(|_, v| now_ts < max_timeout + v.add_at);
             return Ok(ret);
         }
         Ok(None)
     }
 
-    async fn puback(&self, client_id: &str, server_packet_id: u16) -> Result<bool, io::Error> {
-        match self.pending_publish_message.write().get_mut(client_id) {
-            Some(packets) => match packets.remove(&server_packet_id) {
+    async fn save_pending_publish_message(
+        &self,
+        client_id: &str,
+        packet_id: u16,
+        message: PendingPublishMessage,
+    ) -> Result<bool, io::Error> {
+        if let Some(messages) = self.pending_message.read().get(client_id) {
+            if messages.len() > self.max_packets {
+                error!(
+                    "drop pending publish packet {:?}, store is full: {}",
+                    message,
+                    messages.len()
+                );
+                return Ok(true);
+            }
+        }
+
+        let mut pending_message_guard = self.pending_message.write();
+        let packets = pending_message_guard
+            .entry(client_id.to_string())
+            .or_default();
+
+        packets.insert(
+            packet_id,
+            PendingMessage {
+                message,
+                retrieve_attempts: 1,
+                add_at: get_unix_ts(),
+            },
+        );
+
+        Ok(false)
+    }
+
+    async fn try_get_pending_messages(
+        &self,
+        client_id: &str,
+    ) -> Result<Option<Vec<(u16, PendingPublishMessage)>>, io::Error> {
+        if let Some(packets) = self.pending_message.write().get_mut(client_id) {
+            if packets.is_empty() {
+                return Ok(None);
+            }
+
+            let now_ts = get_unix_ts();
+            let retrieve_factor = self.retrieve_factor as u64;
+            let useful_values = packets
+                .iter_mut()
+                .filter_map(|(packet_id, msg)| {
+                    if msg.retrieve_attempts > self.max_attempts {
+                        return None;
+                    }
+                    if now_ts > retrieve_factor * msg.retrieve_attempts as u64 + msg.add_at {
+                        msg.retrieve_attempts += 1;
+                        msg.message.set_dup(true);
+                        Some((*packet_id, msg.message.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            let max_timeout = self.max_timeout as u64;
+            packets.retain(|_, msg| match msg.message.pubrec_at() {
+                Some(pubrec_at) => now_ts < max_timeout + pubrec_at,
+                None => now_ts < max_timeout + msg.add_at,
+            });
+            return Ok(Some(useful_values));
+        }
+        Ok(None)
+    }
+
+    async fn get_all_pending_messages(
+        &self,
+        client_id: &str,
+    ) -> Result<Option<Vec<(u16, PendingPublishMessage)>>, io::Error> {
+        if let Some(packets) = self.pending_message.write().get_mut(client_id) {
+            if packets.is_empty() {
+                return Ok(None);
+            }
+
+            let useful_values = packets
+                .iter_mut()
+                .filter_map(|(packet_id, msg)| {
+                    if msg.retrieve_attempts > self.max_attempts {
+                        return None;
+                    }
+
+                    msg.retrieve_attempts += 1;
+                    msg.message.set_dup(true);
+                    Some((*packet_id, msg.message.clone()))
+                })
+                .collect();
+
+            let now_ts = get_unix_ts();
+            let max_timeout = self.max_timeout as u64;
+
+            packets.retain(|_, msg| match msg.message.pubrec_at() {
+                Some(pubrec_at) => now_ts < max_timeout + pubrec_at,
+                None => now_ts < max_timeout + msg.add_at,
+            });
+            return Ok(Some(useful_values));
+        }
+        Ok(None)
+    }
+
+    async fn puback(&self, client_id: &str, packet_id: u16) -> Result<bool, io::Error> {
+        match self.pending_message.write().get_mut(client_id) {
+            Some(packets) => match packets.remove(&packet_id) {
                 Some(_) => Ok(true),
                 None => Ok(false),
             },
@@ -162,9 +214,9 @@ impl MessageStore for MessageMemoryStore {
         }
     }
 
-    async fn pubrec(&self, client_id: &str, server_packet_id: u16) -> Result<bool, io::Error> {
-        if let Some(packets) = self.pending_publish_message.write().get_mut(client_id) {
-            return if let Some(pkt) = packets.get_mut(&server_packet_id) {
+    async fn pubrec(&self, client_id: &str, packet_id: u16) -> Result<bool, io::Error> {
+        if let Some(packets) = self.pending_message.write().get_mut(client_id) {
+            return if let Some(pkt) = packets.get_mut(&packet_id) {
                 pkt.message.renew_pubrec_at();
                 Ok(true)
             } else {
@@ -175,9 +227,9 @@ impl MessageStore for MessageMemoryStore {
         Ok(false)
     }
 
-    async fn pubcomp(&self, client_id: &str, server_packet_id: u16) -> Result<bool, io::Error> {
-        match self.pending_publish_message.write().get_mut(client_id) {
-            Some(packets) => match packets.remove(&server_packet_id) {
+    async fn pubcomp(&self, client_id: &str, packet_id: u16) -> Result<bool, io::Error> {
+        match self.pending_message.write().get_mut(client_id) {
+            Some(packets) => match packets.remove(&packet_id) {
                 Some(_) => Ok(true),
                 None => Ok(false),
             },
@@ -186,10 +238,10 @@ impl MessageStore for MessageMemoryStore {
     }
 
     async fn is_full(&self, client_id: &str) -> Result<bool, io::Error> {
-        let l = match self.received_publish_message.read().get(client_id) {
+        let l = match self.received_message.read().get(client_id) {
             Some(v) => v.len(),
             None => 0,
-        } + match self.pending_publish_message.read().get(client_id) {
+        } + match self.pending_message.read().get(client_id) {
             Some(v) => v.len(),
             None => 0,
         };
@@ -197,11 +249,11 @@ impl MessageStore for MessageMemoryStore {
         Ok(l > self.max_packets)
     }
 
-    async fn get_message_count(&self, client_id: &str) -> Result<usize, io::Error> {
-        let l = match self.received_publish_message.read().get(client_id) {
+    async fn message_count(&self, client_id: &str) -> Result<usize, io::Error> {
+        let l = match self.received_message.read().get(client_id) {
             Some(v) => v.len(),
             None => 0,
-        } + match self.pending_publish_message.read().get(client_id) {
+        } + match self.pending_message.read().get(client_id) {
             Some(v) => v.len(),
             None => 0,
         };
@@ -209,9 +261,9 @@ impl MessageStore for MessageMemoryStore {
         Ok(l)
     }
 
-    async fn clear_all_messages(&self, client_id: &str) -> Result<(), io::Error> {
-        self.pending_publish_message.write().remove(client_id);
-        self.received_publish_message.write().remove(client_id);
+    async fn clear_all(&self, client_id: &str) -> Result<(), io::Error> {
+        self.pending_message.write().remove(client_id);
+        self.received_message.write().remove(client_id);
         Ok(())
     }
 }

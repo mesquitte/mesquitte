@@ -1,9 +1,10 @@
 use std::{future::Future, io, sync::Arc};
 
 use mqtt_codec_kit::common::{QualityOfService, TopicFilter, TopicName};
+#[cfg(feature = "v5")]
 use mqtt_codec_kit::v5::control::PublishProperties;
 
-use super::message::ReceivedPublishMessage;
+use super::message::PublishMessage;
 
 #[derive(Clone)]
 pub struct RetainContent {
@@ -11,9 +12,9 @@ pub struct RetainContent {
     client_id: String,
     topic_name: TopicName,
     payload: Vec<u8>,
-    // #[cfg(feature = "v5")]
-    properties: Option<PublishProperties>,
     qos: QualityOfService,
+    #[cfg(feature = "v5")]
+    properties: Option<PublishProperties>,
 }
 
 impl RetainContent {
@@ -25,10 +26,6 @@ impl RetainContent {
         self.payload.as_ref()
     }
 
-    pub fn properties(&self) -> Option<&PublishProperties> {
-        self.properties.as_ref()
-    }
-
     pub fn qos(&self) -> QualityOfService {
         self.qos
     }
@@ -36,18 +33,24 @@ impl RetainContent {
     pub fn client_id(&self) -> &str {
         &self.client_id
     }
+
+    #[cfg(feature = "v5")]
+    pub fn properties(&self) -> Option<&PublishProperties> {
+        self.properties.as_ref()
+    }
 }
 
-impl<T> From<(T, &ReceivedPublishMessage)> for RetainContent
+impl<T> From<(T, &PublishMessage)> for RetainContent
 where
     T: Into<String>,
 {
-    fn from((client_id, packet): (T, &ReceivedPublishMessage)) -> Self {
+    fn from((client_id, packet): (T, &PublishMessage)) -> Self {
         Self {
             client_id: client_id.into(),
             topic_name: packet.topic_name().clone(),
             payload: packet.payload().into(),
             qos: packet.qos(),
+            #[cfg(feature = "v5")]
             properties: packet.properties().map(|p| p.to_owned()),
         }
     }

@@ -1,12 +1,15 @@
-use std::fmt;
+use std::{fmt, mem};
 
-use foldhash::{HashSet, HashSetExt};
-use mqtt_codec_kit::{common::TopicFilter, v5::packet::connect::LastWill};
+use foldhash::{HashMap, HashMapExt};
+use mqtt_codec_kit::{
+    common::TopicFilter,
+    v5::packet::{connect::LastWill, subscribe::SubscribeOptions},
+};
 use tokio::time::Instant;
 
 pub const DEFAULT_MAX_PACKET_SIZE: u32 = 5 + 268_435_455;
 
-pub struct Session {
+pub(super) struct Session {
     connected_at: Instant,
     // last package timestamp
     last_packet_at: Instant,
@@ -18,7 +21,7 @@ pub struct Session {
     keep_alive: u16,
     clean_session: bool,
     last_will: Option<LastWill>,
-    subscriptions: HashSet<TopicFilter>,
+    subscriptions: HashMap<TopicFilter, SubscribeOptions>,
 
     authorized: bool,
     assigned_client_id: bool,
@@ -50,7 +53,7 @@ impl Session {
             keep_alive: 0,
             clean_session: true,
             last_will: None,
-            subscriptions: HashSet::new(),
+            subscriptions: HashMap::new(),
 
             authorized: false,
             client_disconnected: false,
@@ -163,30 +166,22 @@ impl Session {
         self.clean_session = clean_session;
     }
 
-    pub fn subscriptions(&self) -> &HashSet<TopicFilter> {
+    pub fn subscriptions(&self) -> &HashMap<TopicFilter, SubscribeOptions> {
         &self.subscriptions
     }
 
-    pub fn subscribe(&mut self, topic: TopicFilter) -> bool {
-        self.subscriptions.insert(topic)
+    pub fn subscribe(&mut self, topic: TopicFilter, options: SubscribeOptions) -> bool {
+        self.subscriptions.insert(topic, options).is_some()
     }
 
-    pub fn unsubscribe(&mut self, topic: &TopicFilter) -> bool {
-        self.subscriptions.remove(topic)
+    pub fn unsubscribe(&mut self, topic: &TopicFilter) {
+        self.subscriptions.remove(topic);
     }
 
     pub fn incr_server_packet_id(&mut self) -> u16 {
         let old_value = self.server_packet_id;
         self.server_packet_id += 1;
         old_value
-    }
-
-    pub fn set_server_packet_id(&mut self, server_packet_id: u16) {
-        self.server_packet_id = server_packet_id;
-    }
-
-    pub fn server_packet_id(&self) -> u16 {
-        self.server_packet_id
     }
 
     pub fn assigned_client_id(&self) -> bool {
@@ -258,6 +253,26 @@ impl Session {
     pub fn set_authentication_method(&mut self, authentication_method: &str) {
         self.authentication_method = Some(authentication_method.to_owned());
     }
+
+    pub fn build_state(&mut self) -> SessionState {
+        let mut subscriptions = HashMap::new();
+        mem::swap(&mut self.subscriptions, &mut subscriptions);
+
+        SessionState {
+            server_packet_id: self.server_packet_id,
+            subscriptions,
+        }
+    }
+
+    pub fn copy_state(&mut self, state: SessionState) {
+        self.server_packet_id = state.server_packet_id;
+        self.subscriptions = state.subscriptions;
+    }
+}
+
+pub struct SessionState {
+    server_packet_id: u16,
+    subscriptions: HashMap<TopicFilter, SubscribeOptions>,
 }
 
 impl fmt::Display for Session {

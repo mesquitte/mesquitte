@@ -17,6 +17,7 @@ use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
 use crate::{
     debug, error, info,
+    protocols::ProtocolSessionState,
     server::state::{DeliverMessage, GlobalState},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
     warn,
@@ -26,7 +27,7 @@ use super::{
     connect::{handle_connect, handle_disconnect},
     publish::{
         handle_deliver_publish, handle_puback, handle_pubcomp, handle_publish, handle_pubrec,
-        handle_pubrel, handle_will, retrieve_pending_messages,
+        handle_pubrel, handle_will, retrieve_all_pending_messages,
     },
     session::Session,
     subscribe::{handle_subscribe, handle_unsubscribe, SubscribeAck},
@@ -67,10 +68,12 @@ where
 {
     global.remove_client(session.client_id());
     if session.clean_session() {
-        storage
-            .unsubscribe_topics(session.client_id(), session.subscriptions())
-            .await?;
-        storage.clear_all_messages(session.client_id()).await?;
+        for topic_filter in session.subscriptions().keys() {
+            storage
+                .unsubscribe(session.client_id(), topic_filter)
+                .await?;
+        }
+        storage.clear_all(session.client_id()).await?;
     }
 
     Ok(())
@@ -175,7 +178,7 @@ where
 {
     let mut should_stop = false;
     let resp = match packet {
-        DeliverMessage::Publish(subscribe_qos, packet) => {
+        DeliverMessage::Publish(topic_filter, subscribe_qos, packet) => {
             let resp = handle_deliver_publish(session, subscribe_qos, &packet, storage).await?;
             if session.disconnected() {
                 None
@@ -183,13 +186,17 @@ where
                 Some(resp.into())
             }
         }
+
         DeliverMessage::Online(sender) => {
             debug!(
                 "handle deliver client#{} receive new client online",
                 session.client_id(),
             );
 
-            if let Err(err) = sender.send(session.server_packet_id()).await {
+            if let Err(err) = sender
+                .send(ProtocolSessionState::V5(session.build_state()))
+                .await
+            {
                 error!(
                     "handle deliver client#{} send session state: {err}",
                     session.client_id(),
@@ -454,7 +461,7 @@ pub async fn read_write_loop<R, W, S>(
         }
     };
 
-    match retrieve_pending_messages(session.client_id(), storage).await {
+    match retrieve_all_pending_messages(session.client_id(), storage).await {
         Ok(packets) => {
             for pkt in packets {
                 if let Err(err) = frame_writer.send(pkt).await {

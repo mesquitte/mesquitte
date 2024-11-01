@@ -2,13 +2,13 @@ use std::{fmt::Display, time::Duration};
 
 use dashmap::DashMap;
 use kanal::{bounded_async, AsyncSender};
-use mqtt_codec_kit::common::QualityOfService;
+use mqtt_codec_kit::common::{QualityOfService, TopicFilter};
 use tokio::time;
 
-use crate::{store::message::ReceivedPublishMessage, warn};
+use crate::{protocols::ProtocolSessionState, store::message::PublishMessage, warn};
 
 pub enum AddClientReceipt {
-    Present(u16),
+    Present(ProtocolSessionState),
     New,
 }
 
@@ -27,8 +27,8 @@ impl Display for KickReason {
 
 #[derive(Debug)]
 pub enum DeliverMessage {
-    Publish(QualityOfService, Box<ReceivedPublishMessage>),
-    Online(AsyncSender<u16>),
+    Publish(TopicFilter, QualityOfService, Box<PublishMessage>),
+    Online(AsyncSender<ProtocolSessionState>),
     Kick(KickReason),
 }
 
@@ -63,28 +63,29 @@ impl GlobalState {
     ) -> AddClientReceipt {
         if let Some(old_sender) = self.get_deliver(client_id) {
             if !old_sender.is_closed() {
+                // TODO: config: build session state timeout
+                let receive_timeout = Duration::from_secs(10);
                 let (control_sender, control_receiver) = bounded_async(1);
-                match old_sender
+                let ret = old_sender
                     .send(DeliverMessage::Online(control_sender))
-                    .await
-                {
-                    Ok(()) => {
-                        // TODO: config: build session state timeout
-                        match time::timeout(Duration::from_secs(10), control_receiver.recv()).await
-                        {
-                            Ok(data) => {
-                                if let Ok(state) = data {
-                                    self.clients.insert(client_id.to_owned(), new_sender);
-                                    return AddClientReceipt::Present(state);
-                                }
+                    .await;
+                match ret {
+                    Ok(_) => match time::timeout(receive_timeout, control_receiver.recv()).await {
+                        Ok(data) => match data {
+                            Ok(state) => {
+                                self.clients.insert(client_id.to_owned(), new_sender);
+                                return AddClientReceipt::Present(state);
                             }
-                            Err(_) => {
-                                warn!("receive old session state timeout");
+                            Err(err) => {
+                                warn!("add client failed: {err}");
                             }
+                        },
+                        Err(_) => {
+                            warn!("receive old session state timeout");
                         }
-                    }
+                    },
                     Err(err) => {
-                        warn!("send online message to old session: {err}")
+                        warn!("send online failed: {err}")
                     }
                 }
             }

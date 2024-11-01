@@ -1,8 +1,8 @@
-use std::{cmp, io};
+use std::io;
 
 use mqtt_codec_kit::{
     common::{
-        qos::QoSWithPacketIdentifier, QualityOfService, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX,
+        qos::QoSWithPacketIdentifier, TopicFilter, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX,
     },
     v4::packet::{
         DisconnectPacket, PubackPacket, PubcompPacket, PublishPacket, PubrecPacket, PubrelPacket,
@@ -14,9 +14,9 @@ use crate::{
     debug, error,
     server::state::{DeliverMessage, GlobalState},
     store::{
-        message::{MessageStore, PendingPublishMessage, ReceivedPublishMessage},
+        message::{MessageStore, PublishMessage},
         retain::RetainMessageStore,
-        topic::{RouteOption, TopicStore},
+        topic::TopicStore,
         Storage,
     },
     warn,
@@ -85,7 +85,7 @@ topic name : {:?}
         QoSWithPacketIdentifier::Level2(packet_id) => {
             if !packet.dup() {
                 storage
-                    .save_received_message(session.client_id(), packet_id, packet.into())
+                    .save_publish_message(session.client_id(), packet_id, packet.into())
                     .await?;
             }
             Ok((false, Some(PubrecPacket::new(packet_id).into())))
@@ -95,7 +95,7 @@ topic name : {:?}
 
 pub(super) async fn deliver_publish_message<S>(
     session: &mut Session,
-    packet: &ReceivedPublishMessage,
+    packet: &PublishMessage,
     global: &GlobalState,
     storage: &Storage<S>,
 ) -> io::Result<()>
@@ -103,7 +103,7 @@ where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
     debug!(
-        r#"client#{} dispatch publish message:
+        r#"client#{} deliver publish message:
 topic name : {:?}
    payload : {:?}
      flags : qos={:?}, retain={}, dup={}"#,
@@ -122,25 +122,36 @@ topic name : {:?}
             storage.insert((session.client_id(), packet).into()).await?;
         }
     }
-    let matches = TopicStore::search(storage.as_ref(), packet.topic_name()).await?;
-    for (receiver_client_id, opt) in matches.normal_clients {
-        if let Some(sender) = global.get_deliver(&receiver_client_id) {
-            if sender.is_closed() {
-                warn!("client#{:?} deliver channel is closed", receiver_client_id,);
-                continue;
+
+    let subscribes = storage.match_topic(packet.topic_name()).await?;
+    for topic_content in subscribes {
+        let topic_filter = if let Some(topic_filter) = topic_content.topic_filter {
+            match TopicFilter::new(topic_filter) {
+                Ok(filter) => filter,
+                Err(err) => {
+                    error!("deliver publish message new topic filter: {err}");
+                    continue;
+                }
             }
-            let subscribe_qos = match opt {
-                RouteOption::V4(qos) => qos,
-                RouteOption::V5(subscribe_options) => subscribe_options.qos(),
-            };
-            if let Err(err) = sender
-                .send(DeliverMessage::Publish(
-                    subscribe_qos,
-                    Box::new(packet.clone()),
-                ))
-                .await
-            {
-                error!("{} send publish: {}", receiver_client_id, err,)
+        } else {
+            continue;
+        };
+        for (client_id, subscribe_qos) in topic_content.clients {
+            if let Some(sender) = global.get_deliver(&client_id) {
+                if sender.is_closed() {
+                    warn!("client#{:?} deliver channel is closed", client_id,);
+                    continue;
+                }
+                if let Err(err) = sender
+                    .send(DeliverMessage::Publish(
+                        topic_filter.clone(),
+                        subscribe_qos,
+                        Box::new(packet.clone()),
+                    ))
+                    .await
+                {
+                    error!("{} send publish: {}", client_id, err,)
+                }
             }
         }
     }
@@ -168,58 +179,6 @@ where
     }
 
     Ok(PubcompPacket::new(packet_id))
-}
-
-pub(super) async fn handle_deliver_publish<S>(
-    session: &mut Session,
-    subscribe_qos: &QualityOfService,
-    message: &ReceivedPublishMessage,
-    storage: &Storage<S>,
-) -> io::Result<PublishPacket>
-where
-    S: MessageStore + RetainMessageStore + TopicStore,
-{
-    debug!(
-        r#"client#{} receive deliver publish message:
-topic name : {:?}
-   payload : {:?}
-     flags : publish qos={:?}, subscribe_qos={:?}, retain={}, dup={}"#,
-        session.client_id(),
-        message.topic_name(),
-        message.payload(),
-        message.qos(),
-        subscribe_qos,
-        message.retain(),
-        message.dup(),
-    );
-
-    let msg_qos = message.qos();
-    let final_qos = cmp::min(subscribe_qos, &msg_qos);
-    let (packet_id, qos) = match final_qos {
-        QualityOfService::Level0 => (None, QoSWithPacketIdentifier::Level0),
-        QualityOfService::Level1 => {
-            let packet_id = session.incr_server_packet_id();
-            (Some(packet_id), QoSWithPacketIdentifier::Level1(packet_id))
-        }
-        QualityOfService::Level2 => {
-            let packet_id = session.incr_server_packet_id();
-            (Some(packet_id), QoSWithPacketIdentifier::Level2(packet_id))
-        }
-    };
-
-    let mut packet = PublishPacket::new(message.topic_name().to_owned(), qos, message.payload());
-    packet.set_dup(message.dup());
-
-    if let Some(packet_id) = packet_id {
-        storage
-            .save_pending_message(
-                session.client_id(),
-                PendingPublishMessage::new(packet_id, *subscribe_qos, message.clone()),
-            )
-            .await?;
-    }
-
-    Ok(packet)
 }
 
 pub(super) async fn handle_puback<S>(

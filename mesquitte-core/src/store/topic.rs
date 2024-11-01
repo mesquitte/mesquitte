@@ -1,44 +1,41 @@
-use std::io;
-use std::{fmt::Debug, future::Future};
+use std::{future::Future, io};
 
-use foldhash::{HashMap, HashSet};
+use foldhash::{HashMap, HashMapExt};
 use mqtt_codec_kit::common::{QualityOfService, TopicFilter, TopicName};
-use mqtt_codec_kit::v5::packet::subscribe::SubscribeOptions;
 
 #[derive(Debug, Clone)]
-pub enum RouteOption {
-    V4(QualityOfService),
-    V5(SubscribeOptions),
+pub struct TopicContent {
+    pub topic_filter: Option<String>,
+    pub clients: HashMap<String, QualityOfService>,
+    pub shared_clients: HashMap<String, HashMap<String, QualityOfService>>,
 }
 
-#[derive(Debug, Clone)]
-pub struct RouteContent {
-    pub normal_clients: Vec<(String, RouteOption)>,
-    pub shared_clients: HashMap<String, HashMap<String, RouteOption>>,
+impl Default for TopicContent {
+    fn default() -> Self {
+        Self {
+            topic_filter: Default::default(),
+            clients: HashMap::new(),
+            shared_clients: HashMap::new(),
+        }
+    }
 }
 
 pub trait TopicStore: Send + Sync {
-    fn search(
+    fn match_topic(
         &self,
         topic_name: &TopicName,
-    ) -> impl Future<Output = Result<RouteContent, io::Error>> + Send;
+    ) -> impl Future<Output = io::Result<Vec<TopicContent>>> + Send;
 
     fn subscribe(
         &self,
         client_id: &str,
         topic_filter: &TopicFilter,
-        options: RouteOption,
-    ) -> impl Future<Output = Result<(), io::Error>> + Send;
+        qos: QualityOfService,
+    ) -> impl Future<Output = io::Result<()>> + Send;
 
     fn unsubscribe(
         &self,
         client_id: &str,
         topic_filter: &TopicFilter,
-    ) -> impl Future<Output = Result<bool, io::Error>> + Send;
-
-    fn unsubscribe_topics(
-        &self,
-        client_id: &str,
-        topics: &HashSet<TopicFilter>,
-    ) -> impl Future<Output = Result<bool, io::Error>> + Send;
+    ) -> impl Future<Output = io::Result<bool>> + Send;
 }

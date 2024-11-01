@@ -12,14 +12,15 @@ use nanoid::nanoid;
 
 use crate::{
     debug, info,
+    protocols::ProtocolSessionState,
     server::state::{AddClientReceipt, DeliverMessage, GlobalState},
 };
 
 use super::{common::build_error_connack, session::Session};
 
-pub(super) async fn handle_connect<'a>(
+pub(super) async fn handle_connect(
     packet: ConnectPacket,
-    global: &'a GlobalState,
+    global: &GlobalState,
 ) -> Result<(ConnackPacket, Session, AsyncReceiver<DeliverMessage>), ConnackPacket> {
     debug!(
         r#"client#{} received a connect packet:
@@ -208,10 +209,16 @@ protocol level : {:?}
     let receipt = global.add_client(session.client_id(), deliver_tx).await;
 
     let session_present = match receipt {
-        AddClientReceipt::Present(server_packet_id) => {
+        AddClientReceipt::Present(state) => {
             if !session.clean_session() {
-                session.set_server_packet_id(server_packet_id);
-                true
+                match state {
+                    ProtocolSessionState::V5(session_state) => {
+                        session.copy_state(session_state);
+                        true
+                    }
+                    #[cfg(feature = "v4")]
+                    ProtocolSessionState::V4(_) => false,
+                }
             } else {
                 info!(
                     "{} session removed due to reconnect with clean session",
