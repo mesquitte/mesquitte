@@ -1,11 +1,11 @@
-use std::{cmp, fmt::Debug, future::Future, io, sync::Arc, time::SystemTime};
+use std::{fmt::Debug, future::Future, io, sync::Arc, time::SystemTime};
 
-use mqtt_codec_kit::common::{QualityOfService, TopicName};
-// #[cfg(feature = "v4")]
+use mqtt_codec_kit::common::{qos::QoSWithPacketIdentifier, QualityOfService, TopicName};
+#[cfg(feature = "v4")]
 use mqtt_codec_kit::v4::{
     packet::connect::LastWill as V4LastWill, packet::PublishPacket as V4PublishPacket,
 };
-// #[cfg(feature = "v5")]
+#[cfg(feature = "v5")]
 use mqtt_codec_kit::v5::{
     control::PublishProperties, packet::connect::LastWill as V5LastWill,
     packet::PublishPacket as V5PublishPacket,
@@ -21,17 +21,17 @@ pub fn get_unix_ts() -> u64 {
 }
 
 #[derive(Clone, Debug)]
-pub struct ReceivedPublishMessage {
+pub struct PublishMessage {
     topic_name: TopicName,
     payload: Vec<u8>,
     qos: QualityOfService,
     retain: bool,
     dup: bool,
+    #[cfg(feature = "v5")]
     properties: Option<PublishProperties>,
-    receive_at: u64,
 }
 
-impl ReceivedPublishMessage {
+impl PublishMessage {
     pub fn topic_name(&self) -> &TopicName {
         &self.topic_name
     }
@@ -52,16 +52,18 @@ impl ReceivedPublishMessage {
         self.retain
     }
 
+    pub fn set_retain(&mut self, retain: bool) {
+        self.retain = retain
+    }
+
+    #[cfg(feature = "v5")]
     pub fn properties(&self) -> Option<&PublishProperties> {
         self.properties.as_ref()
     }
-
-    pub fn receive_at(&self) -> u64 {
-        self.receive_at
-    }
 }
 
-impl From<&V4PublishPacket> for ReceivedPublishMessage {
+#[cfg(feature = "v4")]
+impl From<&V4PublishPacket> for PublishMessage {
     fn from(packet: &V4PublishPacket) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
@@ -72,13 +74,14 @@ impl From<&V4PublishPacket> for ReceivedPublishMessage {
             qos: packet.qos().into(),
             retain: packet.retain(),
             dup: packet.dup(),
+            #[cfg(feature = "v5")]
             properties: None,
-            receive_at: get_unix_ts(),
         }
     }
 }
 
-impl From<&V5PublishPacket> for ReceivedPublishMessage {
+#[cfg(feature = "v5")]
+impl From<&V5PublishPacket> for PublishMessage {
     fn from(packet: &V5PublishPacket) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
@@ -90,12 +93,11 @@ impl From<&V5PublishPacket> for ReceivedPublishMessage {
             retain: packet.retain(),
             dup: packet.dup(),
             properties: Some(packet.properties().to_owned()),
-            receive_at: get_unix_ts(),
         }
     }
 }
 
-impl From<Arc<RetainContent>> for ReceivedPublishMessage {
+impl From<Arc<RetainContent>> for PublishMessage {
     fn from(packet: Arc<RetainContent>) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
@@ -106,14 +108,14 @@ impl From<Arc<RetainContent>> for ReceivedPublishMessage {
             qos: packet.qos().to_owned(),
             retain: false,
             dup: false,
+            #[cfg(feature = "v5")]
             properties: packet.properties().cloned(),
-            receive_at: get_unix_ts(),
         }
     }
 }
 
-// #[cfg(feature = "v4")]
-impl From<V4LastWill> for ReceivedPublishMessage {
+#[cfg(feature = "v4")]
+impl From<V4LastWill> for PublishMessage {
     fn from(value: V4LastWill) -> Self {
         let mut payload = vec![0u8; value.message().0.len()];
         payload.copy_from_slice(&value.message().0);
@@ -123,15 +125,15 @@ impl From<V4LastWill> for ReceivedPublishMessage {
             payload,
             qos: value.qos(),
             retain: value.retain(),
-            properties: None,
             dup: false,
-            receive_at: get_unix_ts(),
+            #[cfg(feature = "v5")]
+            properties: None,
         }
     }
 }
 
-// #[cfg(feature = "v5")]
-impl From<V5LastWill> for ReceivedPublishMessage {
+#[cfg(feature = "v5")]
+impl From<V5LastWill> for PublishMessage {
     fn from(value: V5LastWill) -> Self {
         let mut payload = vec![0u8; value.message().0.len()];
         payload.copy_from_slice(&value.message().0);
@@ -154,43 +156,26 @@ impl From<V5LastWill> for ReceivedPublishMessage {
             retain: value.retain(),
             dup: false,
             properties: Some(publish_properties),
-            receive_at: get_unix_ts(),
         }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct PendingPublishMessage {
-    server_packet_id: u16,
-    subscribe_qos: QualityOfService,
-    message: ReceivedPublishMessage,
+    message: PublishMessage,
+    qos: QoSWithPacketIdentifier,
     dup: bool,
-    receive_at: u64,
     pubrec_at: Option<u64>,
 }
 
 impl PendingPublishMessage {
-    pub fn new(
-        server_packet_id: u16,
-        subscribe_qos: QualityOfService,
-        message: ReceivedPublishMessage,
-    ) -> Self {
+    pub fn new(qos: QoSWithPacketIdentifier, message: PublishMessage) -> Self {
         Self {
-            server_packet_id,
-            receive_at: get_unix_ts(),
             pubrec_at: None,
-            subscribe_qos,
+            qos,
             dup: message.dup,
             message,
         }
-    }
-
-    pub fn server_packet_id(&self) -> u16 {
-        self.server_packet_id
-    }
-
-    pub fn receive_at(&self) -> u64 {
-        self.receive_at
     }
 
     pub fn pubrec_at(&self) -> Option<u64> {
@@ -201,7 +186,7 @@ impl PendingPublishMessage {
         self.pubrec_at = Some(get_unix_ts())
     }
 
-    pub fn message(&self) -> &ReceivedPublishMessage {
+    pub fn message(&self) -> &PublishMessage {
         &self.message
     }
 
@@ -209,71 +194,70 @@ impl PendingPublishMessage {
         self.dup
     }
 
-    pub fn set_dup(&mut self) {
-        self.dup = true;
+    pub fn set_dup(&mut self, dup: bool) {
+        self.dup = dup;
     }
 
-    pub fn subscribe_qos(&self) -> QualityOfService {
-        self.subscribe_qos
-    }
-
-    pub fn final_qos(&self) -> QualityOfService {
-        cmp::min(self.message.qos, self.subscribe_qos)
+    pub fn qos(&self) -> QoSWithPacketIdentifier {
+        self.qos
     }
 }
 
 pub trait MessageStore: Send + Sync {
-    fn save_received_message(
+    fn save_publish_message(
         &self,
         client_id: &str,
         packet_id: u16,
-        message: ReceivedPublishMessage,
+        message: PublishMessage,
     ) -> impl Future<Output = Result<bool, io::Error>> + Send;
-
-    fn save_pending_message(
-        &self,
-        client_id: &str,
-        message: PendingPublishMessage,
-    ) -> impl Future<Output = Result<bool, io::Error>> + Send;
-
-    fn retrieve_pending_messages(
-        &self,
-        client_id: &str,
-    ) -> impl Future<Output = Result<Option<Vec<PendingPublishMessage>>, io::Error>> + Send;
 
     fn pubrel(
         &self,
         client_id: &str,
         packet_id: u16,
-    ) -> impl Future<Output = Result<Option<ReceivedPublishMessage>, io::Error>> + Send;
+    ) -> impl Future<Output = Result<Option<PublishMessage>, io::Error>> + Send;
+
+    fn save_pending_publish_message(
+        &self,
+        client_id: &str,
+        packet_id: u16,
+        message: PendingPublishMessage,
+    ) -> impl Future<Output = Result<bool, io::Error>> + Send;
+
+    fn try_get_pending_messages(
+        &self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<Option<Vec<(u16, PendingPublishMessage)>>, io::Error>> + Send;
+
+    fn get_all_pending_messages(
+        &self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<Option<Vec<(u16, PendingPublishMessage)>>, io::Error>> + Send;
 
     fn puback(
         &self,
         client_id: &str,
-        server_packet_id: u16,
+        packet_id: u16,
     ) -> impl Future<Output = Result<bool, io::Error>> + Send;
 
     fn pubrec(
         &self,
         client_id: &str,
-        server_packet_id: u16,
+        packet_id: u16,
     ) -> impl Future<Output = Result<bool, io::Error>> + Send;
 
     fn pubcomp(
         &self,
         client_id: &str,
-        server_packet_id: u16,
+        packet_id: u16,
     ) -> impl Future<Output = Result<bool, io::Error>> + Send;
 
     fn is_full(&self, client_id: &str) -> impl Future<Output = Result<bool, io::Error>> + Send;
 
-    fn get_message_count(
+    fn message_count(
         &self,
         client_id: &str,
     ) -> impl Future<Output = Result<usize, io::Error>> + Send;
 
-    fn clear_all_messages(
-        &self,
-        client_id: &str,
-    ) -> impl Future<Output = Result<(), io::Error>> + Send;
+    fn clear_all(&self, client_id: &str) -> impl Future<Output = Result<(), io::Error>> + Send;
 }

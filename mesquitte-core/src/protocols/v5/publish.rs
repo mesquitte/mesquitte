@@ -14,16 +14,15 @@ use mqtt_codec_kit::{
 };
 
 use crate::{
-    debug, error,
+    debug,
     protocols::v5::common::build_error_disconnect,
-    server::state::{DeliverMessage, GlobalState},
+    server::state::GlobalState,
     store::{
-        message::{MessageStore, PendingPublishMessage, ReceivedPublishMessage},
+        message::{MessageStore, PublishMessage},
         retain::RetainMessageStore,
-        topic::{RouteOption, TopicStore},
+        topic::TopicStore,
         Storage,
     },
-    warn,
 };
 
 use super::session::Session;
@@ -50,7 +49,7 @@ topic name : {:?}
         packet.dup(),
     );
 
-    let message_count = storage.get_message_count(session.client_id()).await?;
+    let message_count = storage.message_count(session.client_id()).await?;
     if message_count >= session.receive_maximum().into() {
         let err_pkt = build_error_disconnect(
             session,
@@ -106,7 +105,7 @@ topic name : {:?}
         QoSWithPacketIdentifier::Level2(packet_id) => {
             if !packet.dup() {
                 storage
-                    .save_received_message(session.client_id(), packet_id, packet.into())
+                    .save_publish_message(session.client_id(), packet_id, packet.into())
                     .await?;
             }
             Ok((
@@ -119,7 +118,7 @@ topic name : {:?}
 
 pub(super) async fn deliver_publish_message<'a, S>(
     session: &mut Session,
-    packet: ReceivedPublishMessage,
+    packet: PublishMessage,
     global: &'a GlobalState,
     storage: &'a Storage<S>,
 ) -> io::Result<()>
@@ -151,50 +150,32 @@ properties : {:?}
         }
     }
 
-    let matches = TopicStore::search(storage.as_ref(), packet.topic_name()).await?;
-    let mut senders = Vec::new();
-    for (client_id, opt) in matches.normal_clients {
-        match opt {
-            RouteOption::V4(qos) => {
-                senders.push((client_id.to_owned(), qos));
-            }
-            RouteOption::V5(subscribe_options) => {
-                senders.push((client_id.to_owned(), subscribe_options.qos()));
-            }
-        }
-    }
+    // let (mut senders, shared_subscribes) = storage.match_topic(packet.topic_name()).await?;
 
-    // TODO: config: shared subscription available
-    for (_group_name, shared_clients) in matches.shared_clients {
-        // TODO: config: shared subscription mode
-        // TODO: shared subscription index by group_name?
-        for (client_id, opt) in shared_clients {
-            match opt {
-                RouteOption::V4(qos) => {
-                    senders.push((client_id.to_owned(), qos));
-                }
-                RouteOption::V5(subscribe_options) => {
-                    senders.push((client_id.to_owned(), subscribe_options.qos()));
-                }
-            }
-            break;
-        }
-    }
+    // // TODO: config: shared subscription available
+    // for (_group_name, shared_clients) in shared_subscribes {
+    //     // TODO: config: shared subscription mode
+    //     // TODO: shared subscription index by group_name?
+    //     for (client_id, qos) in shared_clients {
+    //         senders.push((client_id.to_owned(), qos));
+    //         break;
+    //     }
+    // }
 
-    for (receiver_client_id, qos) in senders {
-        if let Some(sender) = global.get_deliver(&receiver_client_id) {
-            if sender.is_closed() {
-                warn!("client#{:?} deliver channel is closed", receiver_client_id,);
-                continue;
-            }
-            if let Err(err) = sender
-                .send(DeliverMessage::Publish(qos, Box::new(packet.clone())))
-                .await
-            {
-                error!("{} send publish: {}", receiver_client_id, err,)
-            }
-        }
-    }
+    // for (receiver_client_id, qos) in senders {
+    //     if let Some(sender) = global.get_deliver(&receiver_client_id) {
+    //         if sender.is_closed() {
+    //             warn!("client#{:?} deliver channel is closed", receiver_client_id,);
+    //             continue;
+    //         }
+    //         if let Err(err) = sender
+    //             .send(DeliverMessage::Publish(qos, Box::new(packet.clone())))
+    //             .await
+    //         {
+    //             error!("{} send publish: {}", receiver_client_id, err,)
+    //         }
+    //     }
+    // }
 
     Ok(())
 }
@@ -222,7 +203,7 @@ pub(super) async fn handle_deliver_publish<'a, S>(
     session: &mut Session,
     subscribe_qos: QualityOfService,
     // retain_as_published: bool,
-    message: &ReceivedPublishMessage,
+    message: &PublishMessage,
     storage: &'a Storage<S>,
 ) -> io::Result<PublishPacket>
 where
@@ -274,15 +255,6 @@ properties : {:?}
     let mut packet = PublishPacket::new(message.topic_name().to_owned(), qos, message.payload());
     packet.set_dup(message.dup());
     packet.set_properties(properties);
-
-    if let Some(packet_id) = packet_id {
-        storage
-            .save_pending_message(
-                session.client_id(),
-                PendingPublishMessage::new(packet_id, subscribe_qos, message.clone()),
-            )
-            .await?;
-    }
 
     Ok(packet)
 }
@@ -377,7 +349,7 @@ server side disconnected : {}
     Ok(())
 }
 
-pub(crate) async fn retrieve_pending_messages<'a, S>(
+pub(crate) async fn retrieve_all_pending_messages<'a, S>(
     client_id: &str,
     storage: &'a Storage<S>,
 ) -> io::Result<Vec<VariablePacket>>
@@ -385,28 +357,17 @@ where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
     let mut packets = Vec::new();
-    let ret = storage.retrieve_pending_messages(client_id).await?;
+    let ret = storage.get_all_pending_messages(client_id).await?;
     if let Some(messages) = ret {
-        for msg in messages {
+        for (packet_id, msg) in messages {
             match msg.pubrec_at() {
                 Some(_) => {
-                    packets.push(
-                        PubcompPacket::new(msg.server_packet_id(), PubcompReasonCode::Success)
-                            .into(),
-                    );
+                    packets.push(PubcompPacket::new(packet_id, PubcompReasonCode::Success).into());
                 }
                 None => {
-                    let qos = match msg.final_qos() {
-                        QualityOfService::Level1 => {
-                            QoSWithPacketIdentifier::Level1(msg.server_packet_id())
-                        }
-                        QualityOfService::Level2 => {
-                            QoSWithPacketIdentifier::Level2(msg.server_packet_id())
-                        }
-                        QualityOfService::Level0 => unreachable!(),
-                    };
                     let topic_name = msg.message().topic_name().to_owned();
-                    let mut packet = PublishPacket::new(topic_name, qos, msg.message().payload());
+                    let mut packet =
+                        PublishPacket::new(topic_name, msg.qos(), msg.message().payload());
                     packet.set_dup(msg.message().dup());
 
                     packets.push(packet.into());

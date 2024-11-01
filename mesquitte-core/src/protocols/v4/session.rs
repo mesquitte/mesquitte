@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, mem};
 
 use foldhash::{HashSet, HashSetExt};
 use mqtt_codec_kit::{common::TopicFilter, v4::packet::connect::LastWill};
@@ -142,13 +142,25 @@ impl Session {
         old_value
     }
 
-    pub fn set_server_packet_id(&mut self, server_packet_id: u16) {
-        self.server_packet_id = server_packet_id;
+    pub fn build_state(&mut self) -> SessionState {
+        let mut subscriptions = HashSet::new();
+        mem::swap(&mut self.subscriptions, &mut subscriptions);
+
+        SessionState {
+            server_packet_id: self.server_packet_id,
+            subscriptions,
+        }
     }
 
-    pub fn server_packet_id(&self) -> u16 {
-        self.server_packet_id
+    pub fn copy_state(&mut self, state: SessionState) {
+        self.server_packet_id = state.server_packet_id;
+        self.subscriptions = state.subscriptions;
     }
+}
+
+pub struct SessionState {
+    server_packet_id: u16,
+    subscriptions: HashSet<TopicFilter>,
 }
 
 impl fmt::Display for Session {

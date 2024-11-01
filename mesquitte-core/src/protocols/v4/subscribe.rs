@@ -1,28 +1,31 @@
 use std::{collections::VecDeque, io};
 
-use mqtt_codec_kit::v4::packet::{
-    suback::SubscribeReturnCode, SubackPacket, SubscribePacket, UnsubackPacket, UnsubscribePacket,
-    VariablePacket,
+use mqtt_codec_kit::{
+    common::{qos::QoSWithPacketIdentifier, QualityOfService},
+    v4::packet::{
+        suback::SubscribeReturnCode, SubackPacket, SubscribePacket, UnsubackPacket,
+        UnsubscribePacket,
+    },
 };
 
 use crate::{
     debug,
     store::{
-        message::MessageStore,
+        message::{MessageStore, PendingPublishMessage, PublishMessage},
         retain::RetainMessageStore,
-        topic::{RouteOption, TopicStore},
+        topic::TopicStore,
         Storage,
     },
     warn,
 };
 
-use super::{publish::handle_deliver_publish, session::Session};
+use super::{session::Session, WritePacket};
 
 pub(super) async fn handle_subscribe<S>(
     session: &mut Session,
     packet: &SubscribePacket,
     storage: &Storage<S>,
-) -> io::Result<Vec<VariablePacket>>
+) -> io::Result<Vec<WritePacket>>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
@@ -35,7 +38,7 @@ packet id : {}
         packet.subscribes(),
     );
     let mut return_codes = Vec::with_capacity(packet.subscribes().len());
-    let mut retain_packets: Vec<VariablePacket> = Vec::new();
+    let mut retain_packets = Vec::new();
     for (filter, subscribe_qos) in packet.subscribes() {
         if filter.is_shared() {
             warn!("mqtt v3.x don't support shared subscription");
@@ -46,22 +49,34 @@ packet id : {}
         // TODO: granted max qos from config
         let granted_qos = subscribe_qos.to_owned();
         storage
-            .subscribe(session.client_id(), filter, RouteOption::V4(granted_qos))
+            .subscribe(session.client_id(), filter, granted_qos)
             .await?;
         session.subscribe(filter.clone());
         let retain_messages = RetainMessageStore::search(storage.as_ref(), filter).await?;
         for msg in retain_messages {
-            let mut packet =
-                handle_deliver_publish(session, &granted_qos, &msg.into(), storage).await?;
-            packet.set_retain(true);
-            retain_packets.push(packet.into());
+            let qos = match granted_qos {
+                QualityOfService::Level0 => QoSWithPacketIdentifier::Level0,
+                QualityOfService::Level1 => {
+                    QoSWithPacketIdentifier::Level1(session.incr_server_packet_id())
+                }
+                QualityOfService::Level2 => {
+                    QoSWithPacketIdentifier::Level2(session.incr_server_packet_id())
+                }
+            };
+            let mut received_publish: PublishMessage = msg.into();
+            received_publish.set_retain(true);
+
+            let pending_message = PendingPublishMessage::new(qos, received_publish);
+            retain_packets.push(WritePacket::PendingMessage(pending_message));
         }
 
         return_codes.push(granted_qos.into());
     }
 
-    let mut queue: VecDeque<VariablePacket> = VecDeque::from(retain_packets);
-    queue.push_front(SubackPacket::new(packet.packet_identifier(), return_codes).into());
+    let mut queue: VecDeque<WritePacket> = VecDeque::from(retain_packets);
+    queue.push_front(WritePacket::VariablePacket(
+        SubackPacket::new(packet.packet_identifier(), return_codes).into(),
+    ));
     Ok(queue.into())
 }
 

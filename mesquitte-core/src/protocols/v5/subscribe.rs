@@ -14,12 +14,7 @@ use mqtt_codec_kit::{
 use crate::{
     debug,
     protocols::v5::common::build_error_disconnect,
-    store::{
-        message::MessageStore,
-        retain::RetainMessageStore,
-        topic::{RouteOption, TopicStore},
-        Storage,
-    },
+    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
 
 use super::{publish::handle_deliver_publish, session::Session};
@@ -71,13 +66,9 @@ properties : {:?}"#,
         let granted_qos = subscribe_opts.qos().to_owned();
         // TODO: granted max qos from config
         storage
-            .subscribe(
-                session.client_id(),
-                filter,
-                RouteOption::V5(subscribe_opts.clone()),
-            )
+            .subscribe(session.client_id(), filter, granted_qos)
             .await?;
-        let exist = session.subscribe(filter.clone());
+        let exist = session.subscribe(filter.clone(), *subscribe_opts);
 
         // TODO: config: retain available?
         let send_retain = !filter.is_shared()

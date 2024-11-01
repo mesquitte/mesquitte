@@ -11,6 +11,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     debug, info,
+    protocols::ProtocolSessionState,
     server::state::{AddClientReceipt, DeliverMessage, GlobalState},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore},
 };
@@ -119,13 +120,19 @@ protocol level : {:?}
 
         let receipt = global.add_client(session.client_id(), deliver_tx).await;
         let session_present = match receipt {
-            AddClientReceipt::Present(server_packet_id) => {
+            AddClientReceipt::Present(state) => {
                 if !session.clean_session() {
-                    session.set_server_packet_id(server_packet_id);
-                    true
+                    match state {
+                        ProtocolSessionState::V4(session_state) => {
+                            session.copy_state(session_state);
+                            true
+                        }
+                        #[cfg(feature = "v5")]
+                        ProtocolSessionState::V5(_) => false,
+                    }
                 } else {
                     info!(
-                        "{} session removed due to reconnect with clean session",
+                        "packet id#{} session removed due to reconnect with clean session",
                         packet.client_identifier(),
                     );
                     false
