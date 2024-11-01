@@ -177,6 +177,9 @@ subscribe qos : {:?},
                 subscribe_qos,
                 packet,
             );
+            if !session.subscriptions().contains(&topic_filter) {
+                return Ok(false);
+            }
             let final_qos = cmp::min(packet.qos(), subscribe_qos);
             let qos = match final_qos {
                 QualityOfService::Level0 => QoSWithPacketIdentifier::Level0,
@@ -267,6 +270,9 @@ where
                     subscribe_qos,
                     packet,
                 );
+                if !session.subscriptions().contains(&topic_filter) {
+                    continue;
+                }
                 let final_qos = cmp::min(packet.qos(), subscribe_qos);
                 let (packet_id, qos) = match final_qos {
                     QualityOfService::Level0 => continue,
