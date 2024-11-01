@@ -1,6 +1,10 @@
-use std::io;
+use std::{
+    hash::{Hash, Hasher},
+    io,
+};
 
 use foldhash::HashMap;
+use mqtt_codec_kit::common::QualityOfService;
 use parking_lot::RwLock;
 
 use crate::{
@@ -21,6 +25,24 @@ struct PendingMessage {
     add_at: u64,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub struct MessageKey {
+    packet_id: u16,
+    qos: QualityOfService,
+}
+
+impl Hash for MessageKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.packet_id.hash(state);
+        let qos_value = match self.qos {
+            QualityOfService::Level0 => 0,
+            QualityOfService::Level1 => 1,
+            QualityOfService::Level2 => 2,
+        };
+        qos_value.hash(state);
+    }
+}
+
 #[derive(Default)]
 pub struct MessageMemoryStore {
     max_packets: usize,
@@ -28,7 +50,7 @@ pub struct MessageMemoryStore {
     max_timeout: usize,
     retrieve_factor: usize,
     received_message: RwLock<HashMap<String, HashMap<u16, ReceivedMessage>>>,
-    pending_message: RwLock<HashMap<String, HashMap<u16, PendingMessage>>>,
+    pending_message: RwLock<HashMap<String, HashMap<MessageKey, PendingMessage>>>,
 }
 
 impl MessageMemoryStore {
@@ -120,9 +142,10 @@ impl MessageStore for MessageMemoryStore {
         let packets = pending_message_guard
             .entry(client_id.to_string())
             .or_default();
+        let (qos, _) = message.qos().split();
 
         packets.insert(
-            packet_id,
+            MessageKey { packet_id, qos },
             PendingMessage {
                 message,
                 retrieve_attempts: 1,
@@ -146,14 +169,14 @@ impl MessageStore for MessageMemoryStore {
             let retrieve_factor = self.retrieve_factor as u64;
             let useful_values = packets
                 .iter_mut()
-                .filter_map(|(packet_id, msg)| {
+                .filter_map(|(key, msg)| {
                     if msg.retrieve_attempts > self.max_attempts {
                         return None;
                     }
                     if now_ts > retrieve_factor * msg.retrieve_attempts as u64 + msg.add_at {
                         msg.retrieve_attempts += 1;
                         msg.message.set_dup(true);
-                        Some((*packet_id, msg.message.clone()))
+                        Some((key.packet_id, msg.message.clone()))
                     } else {
                         None
                     }
@@ -181,14 +204,14 @@ impl MessageStore for MessageMemoryStore {
 
             let useful_values = packets
                 .iter_mut()
-                .filter_map(|(packet_id, msg)| {
+                .filter_map(|(key, msg)| {
                     if msg.retrieve_attempts > self.max_attempts {
                         return None;
                     }
 
                     msg.retrieve_attempts += 1;
                     msg.message.set_dup(true);
-                    Some((*packet_id, msg.message.clone()))
+                    Some((key.packet_id, msg.message.clone()))
                 })
                 .collect();
 
@@ -205,8 +228,12 @@ impl MessageStore for MessageMemoryStore {
     }
 
     async fn puback(&self, client_id: &str, packet_id: u16) -> Result<bool, io::Error> {
+        let key = MessageKey {
+            packet_id,
+            qos: QualityOfService::Level1,
+        };
         match self.pending_message.write().get_mut(client_id) {
-            Some(packets) => match packets.remove(&packet_id) {
+            Some(packets) => match packets.remove(&key) {
                 Some(_) => Ok(true),
                 None => Ok(false),
             },
@@ -215,8 +242,12 @@ impl MessageStore for MessageMemoryStore {
     }
 
     async fn pubrec(&self, client_id: &str, packet_id: u16) -> Result<bool, io::Error> {
+        let key = MessageKey {
+            packet_id,
+            qos: QualityOfService::Level2,
+        };
         if let Some(packets) = self.pending_message.write().get_mut(client_id) {
-            return if let Some(pkt) = packets.get_mut(&packet_id) {
+            return if let Some(pkt) = packets.get_mut(&key) {
                 pkt.message.renew_pubrec_at();
                 Ok(true)
             } else {
@@ -228,8 +259,12 @@ impl MessageStore for MessageMemoryStore {
     }
 
     async fn pubcomp(&self, client_id: &str, packet_id: u16) -> Result<bool, io::Error> {
+        let key = MessageKey {
+            packet_id,
+            qos: QualityOfService::Level2,
+        };
         match self.pending_message.write().get_mut(client_id) {
-            Some(packets) => match packets.remove(&packet_id) {
+            Some(packets) => match packets.remove(&key) {
                 Some(_) => Ok(true),
                 None => Ok(false),
             },
