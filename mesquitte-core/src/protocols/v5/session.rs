@@ -270,11 +270,6 @@ impl Session {
     }
 }
 
-pub struct SessionState {
-    server_packet_id: u16,
-    subscriptions: HashMap<TopicFilter, SubscribeOptions>,
-}
-
 impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
@@ -290,5 +285,16 @@ impl fmt::Display for Session {
             self.keep_alive,
             self.assigned_client_id
         )
+    }
+}
+
+pub struct SessionState {
+    server_packet_id: u16,
+    subscriptions: HashMap<TopicFilter, SubscribeOptions>,
+}
+
+impl SessionState {
+    pub fn subscriptions(&self) -> &HashMap<TopicFilter, SubscribeOptions> {
+        &self.subscriptions
     }
 }

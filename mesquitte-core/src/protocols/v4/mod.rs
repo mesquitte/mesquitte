@@ -80,21 +80,22 @@ where
             }
         };
 
-        let (session, deliver_rx) = match Self::handle_connect(&packet, self.global).await {
-            Ok((pkt, session, deliver_rx)) => {
-                if let Err(err) = frame_writer.send(pkt).await {
-                    error!("handle connect write connect ack: {err}");
+        let (session, deliver_rx) =
+            match Self::handle_connect(&packet, &self.storage, self.global).await {
+                Ok((pkt, session, deliver_rx)) => {
+                    if let Err(err) = frame_writer.send(pkt).await {
+                        error!("handle connect write connect ack: {err}");
+                        return;
+                    }
+                    (session, deliver_rx)
+                }
+                Err(pkt) => {
+                    if let Err(err) = frame_writer.send(pkt).await {
+                        error!("handle connect write connect ack: {err}");
+                    }
                     return;
                 }
-                (session, deliver_rx)
-            }
-            Err(pkt) => {
-                if let Err(err) = frame_writer.send(pkt).await {
-                    error!("handle connect write connect ack: {err}");
-                }
-                return;
-            }
-        };
+            };
 
         debug!("{session}");
 
