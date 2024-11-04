@@ -10,10 +10,10 @@ use nanoid::nanoid;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
-    debug, info,
+    debug,
     protocols::ProtocolSessionState,
     server::state::{AddClientReceipt, DeliverMessage, GlobalState},
-    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore},
+    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
 };
 
 use super::{session::Session, EventLoop};
@@ -26,6 +26,7 @@ where
 {
     pub async fn handle_connect<'a>(
         packet: &ConnectPacket,
+        storage: &'a Storage<S>,
         global: &'a GlobalState,
     ) -> Result<(ConnackPacket, Session, AsyncReceiver<DeliverMessage>), ConnackPacket> {
         debug!(
@@ -121,7 +122,8 @@ protocol level : {:?}
         let receipt = global.add_client(session.client_id(), deliver_tx).await;
         let session_present = match receipt {
             AddClientReceipt::Present(state) => {
-                if !session.clean_session() {
+                let subscriptions = state.subscriptions();
+                let present = if !session.clean_session() {
                     match state {
                         ProtocolSessionState::V4(session_state) => {
                             session.copy_state(session_state);
@@ -131,12 +133,23 @@ protocol level : {:?}
                         ProtocolSessionState::V5(_) => false,
                     }
                 } else {
-                    info!(
+                    debug!(
                         "packet id#{} session removed due to reconnect with clean session",
                         packet.client_identifier(),
                     );
                     false
+                };
+                if !present {
+                    for topic_filter in subscriptions {
+                        if let Err(err) = storage
+                            .unsubscribe(session.client_id(), &topic_filter)
+                            .await
+                        {
+                            debug!("handle connect unsubscribe old topic failed: {err}");
+                        }
+                    }
                 }
+                present
             }
             AddClientReceipt::New => false,
         };

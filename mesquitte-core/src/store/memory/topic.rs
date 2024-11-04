@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, sync::Arc};
 
 use foldhash::HashMap;
 use mqtt_codec_kit::common::{
@@ -11,52 +11,20 @@ use crate::store::topic::{TopicContent, TopicStore};
 
 #[derive(Debug, Default)]
 pub struct TopicMemoryStore {
-    inner: RwLock<TopicNode>,
+    root: Arc<RwLock<TopicNode>>,
 }
 
 impl TopicStore for TopicMemoryStore {
     async fn match_topic(&self, topic_name: &TopicName) -> io::Result<Vec<TopicContent>> {
-        self.inner.match_topic(topic_name).await
-    }
-
-    async fn subscribe(
-        &self,
-        client_id: &str,
-        topic_filter: &TopicFilter,
-        qos: QualityOfService,
-    ) -> io::Result<()> {
-        self.inner.subscribe(client_id, topic_filter, qos).await
-    }
-
-    async fn unsubscribe(&self, client_id: &str, topic_filter: &TopicFilter) -> io::Result<bool> {
-        self.inner.unsubscribe(client_id, topic_filter).await
-    }
-}
-
-#[derive(Debug, Default)]
-struct TopicNode {
-    children: HashMap<String, Self>,
-    topic_content: TopicContent,
-}
-
-impl TopicNode {
-    fn match_topic(&self, topic_slice: &[&str]) -> Vec<TopicContent> {
-        let mut contents = Vec::new();
-        if topic_slice.is_empty() {
-            contents.push(self.topic_content.clone());
-            return contents;
+        if topic_name.starts_with(MATCH_DOLLAR_STR) {
+            return Ok(Vec::new());
         }
 
-        for key in [topic_slice[0], MATCH_ONE_STR, MATCH_ALL_STR].iter() {
-            if let Some(child) = self.children.get(*key) {
-                contents.extend(child.match_topic(&topic_slice[1..]));
-            }
-        }
-        contents
+        let topic_levels: Vec<&str> = topic_name.split(LEVEL_SEP).collect();
+        let contents = self.root.read().match_topic(&topic_levels);
+        Ok(contents)
     }
-}
 
-impl TopicStore for RwLock<TopicNode> {
     async fn subscribe(
         &self,
         client_id: &str,
@@ -71,69 +39,143 @@ impl TopicStore for RwLock<TopicNode> {
             None => (None, topic_filter.split(LEVEL_SEP).collect()),
         };
 
-        let mut lock = self.write();
-        let mut node = &mut *lock;
-
-        let topic_filter = levels.join("/");
-        for lv in levels.into_iter() {
-            node = node.children.entry(lv.to_string()).or_default();
-        }
-        node.topic_content.topic_filter = Some(topic_filter);
-
-        match group {
-            Some(g) => {
-                node.topic_content
-                    .shared_clients
-                    .entry(g.to_string())
+        let mut current_node = self.root.clone();
+        for lv in &levels {
+            let temp = {
+                current_node
+                    .write()
+                    .children
+                    .entry(lv.to_string())
                     .or_default()
-                    .insert(client_id.to_string(), qos);
-                Ok(())
-            }
-            None => {
-                node.topic_content
-                    .clients
-                    .insert(client_id.to_string(), qos);
-                Ok(())
-            }
+                    .clone()
+            };
+            current_node = temp;
         }
+
+        let mut node_write_guard = current_node.write();
+        node_write_guard.topic_content.topic_filter = Some(levels.join("/"));
+        let clients = match group {
+            Some(g) => node_write_guard
+                .topic_content
+                .shared_clients
+                .entry(g.to_string())
+                .or_default(),
+            None => &mut node_write_guard.topic_content.clients,
+        };
+        clients.insert(client_id.to_string(), qos);
+        Ok(())
     }
 
-    async fn unsubscribe(&self, client_id: &str, filter: &TopicFilter) -> io::Result<bool> {
-        let mut lock = self.write();
-        let mut node = &mut *lock;
-        let (group, levels) = match filter.shared_info() {
+    async fn unsubscribe(&self, client_id: &str, topic_filter: &TopicFilter) -> io::Result<bool> {
+        let (group, levels) = match topic_filter.shared_info() {
             Some((group, topic)) => (Some(group), topic.split(LEVEL_SEP)),
-            None => (None, filter.split(LEVEL_SEP)),
+            None => (None, topic_filter.split(LEVEL_SEP)),
         };
 
+        let mut current_node = self.root.clone();
+        let mut parent_stack = Vec::new();
         for lv in levels {
-            if let Some(child) = node.children.get_mut(lv) {
-                node = child;
-            } else {
-                return Ok(false);
-            }
+            let temp = {
+                if let Some(child) = current_node.read().children.get(lv) {
+                    child.clone()
+                } else {
+                    return Ok(false);
+                }
+            };
+            parent_stack.push((current_node.clone(), lv.to_string()));
+            current_node = temp;
         }
+
         match group {
             Some(group) => {
-                if let Some(shared_clients) = node.topic_content.shared_clients.get_mut(group) {
+                if let Some(shared_clients) = current_node
+                    .write()
+                    .topic_content
+                    .shared_clients
+                    .get_mut(group)
+                {
                     shared_clients.retain(|k, _| k != client_id);
                     if shared_clients.is_empty() {
-                        node.topic_content.shared_clients.remove(group);
+                        shared_clients.remove(group);
                     }
                 }
             }
-            None => node.topic_content.clients.retain(|k, _| k != client_id),
+            None => current_node
+                .write()
+                .topic_content
+                .clients
+                .retain(|k, _| k != client_id),
         };
+
+        let need_cleanup = {
+            let c = current_node.read();
+            c.children.is_empty() && c.topic_content.is_empty()
+        };
+        if need_cleanup {
+            while let Some((parent, level)) = parent_stack.pop() {
+                let mut parent_write_guard = parent.write();
+                parent_write_guard.children.remove(&level);
+
+                if !parent_write_guard.children.is_empty()
+                    || !parent_write_guard.topic_content.clients.is_empty()
+                    || !parent_write_guard.topic_content.shared_clients.is_empty()
+                {
+                    break;
+                }
+            }
+        }
         Ok(true)
     }
+}
 
-    async fn match_topic(&self, topic_name: &TopicName) -> io::Result<Vec<TopicContent>> {
-        if topic_name.starts_with(MATCH_DOLLAR_STR) {
-            return Ok(Vec::new());
+#[derive(Debug, Default)]
+struct TopicNode {
+    children: HashMap<String, Arc<RwLock<TopicNode>>>,
+    topic_content: TopicContent,
+}
+
+impl TopicContent {
+    fn is_empty(&self) -> bool {
+        self.clients.is_empty() && self.shared_clients.is_empty()
+    }
+}
+
+impl TopicNode {
+    fn match_topic(&self, topic_slice: &[&str]) -> Vec<TopicContent> {
+        let mut contents = Vec::new();
+        if topic_slice.is_empty() {
+            if !self.topic_content.is_empty() {
+                contents.push(self.topic_content.clone());
+            }
+
+            if let Some(child) = self.children.get(MATCH_ALL_STR) {
+                contents.extend(child.read().collect_all_contents());
+            }
+            return contents;
         }
 
-        let lock = self.read();
-        let topic_levels: Vec<&str> = topic_name.split(LEVEL_SEP).collect();
-        Ok(lock.match_topic(&topic_levels))
+        // Exact match
+        if let Some(child) = self.children.get(topic_slice[0]) {
+            contents.extend(child.read().match_topic(&topic_slice[1..]));
+        }
+
+        // Single-level wildcard '+'
+        if let Some(child) = self.children.get(MATCH_ONE_STR) {
+            contents.extend(child.read().match_topic(&topic_slice[1..]));
+        }
+
+        if let Some(child) = self.children.get(MATCH_ALL_STR) {
+            contents.extend(child.read().collect_all_contents());
+        }
+        contents
+    }
+
+    fn collect_all_contents(&self) -> Vec<TopicContent> {
+        let mut contents = Vec::new();
+        contents.push(self.topic_content.clone());
+        for child in self.children.values() {
+            contents.extend(child.read().collect_all_contents());
+        }
+        contents
     }
 }
