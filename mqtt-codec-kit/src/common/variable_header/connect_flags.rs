@@ -18,8 +18,8 @@ pub struct ConnectFlags {
 }
 
 impl ConnectFlags {
-    pub fn empty() -> ConnectFlags {
-        ConnectFlags {
+    pub fn empty() -> Self {
+        Self {
             username: false,
             password: false,
             will_retain: false,
@@ -52,13 +52,13 @@ impl Decodable for ConnectFlags {
     type Error = ConnectFlagsError;
     type Cond = ();
 
-    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<ConnectFlags, ConnectFlagsError> {
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
         let code = reader.read_u8()?;
         if code & 1 != 0 {
             return Err(ConnectFlagsError::InvalidReservedFlag);
         }
 
-        Ok(ConnectFlags {
+        Ok(Self {
             username: (code & 0b1000_0000) != 0,
             password: (code & 0b0100_0000) != 0,
             will_retain: (code & 0b0010_0000) != 0,

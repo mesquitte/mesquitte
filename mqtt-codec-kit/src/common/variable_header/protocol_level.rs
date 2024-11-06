@@ -46,11 +46,8 @@ impl Decodable for ProtocolLevel {
     type Error = ProtocolLevelError;
     type Cond = ();
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        _rest: (),
-    ) -> Result<ProtocolLevel, ProtocolLevelError> {
-        reader.read_u8().map(ProtocolLevel::try_from)?
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
+        reader.read_u8().map(Self::try_from)?
     }
 }
 

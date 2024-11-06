@@ -22,7 +22,7 @@ impl Decodable for KeepAlive {
     type Error = io::Error;
     type Cond = ();
 
-    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<KeepAlive, io::Error> {
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
         reader
             .read_u16::<BigEndian>()
             .map(KeepAlive)

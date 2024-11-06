@@ -254,7 +254,7 @@ impl Decodable for PublishProperties {
             }
         }
 
-        Ok(PublishProperties {
+        Ok(Self {
             total_length,
             payload_format_indicator,
             message_expiry_interval,

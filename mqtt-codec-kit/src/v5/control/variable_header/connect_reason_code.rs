@@ -77,28 +77,28 @@ impl TryFrom<u8> for ConnectReasonCode {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            SUCCESS => Ok(Self::Success),
-            UNSPECIFIED_ERROR => Ok(Self::UnspecifiedError),
-            MALFORMED_PACKET => Ok(Self::MalformedPacket),
-            PROTOCOL_ERROR => Ok(Self::ProtocolError),
-            IMPLEMENTATION_SPECIFIC_ERROR => Ok(Self::ImplementationSpecificError),
-            UNSUPPORTED_PROTOCOL_VERSION => Ok(Self::UnsupportedProtocolVersion),
-            CLIENT_IDENTIFIER_NOT_VALID => Ok(Self::ClientIdentifierNotValid),
-            BAD_USERNAME_OR_PASSWORD => Ok(Self::BadUsernameOrPassword),
-            NOT_AUTHORIZED => Ok(Self::NotAuthorized),
-            SERVER_UNAVAILABLE => Ok(Self::ServerUnavailable),
-            SERVER_BUSY => Ok(Self::ServerBusy),
-            BANNED => Ok(Self::Banned),
-            BAD_AUTHENTICATION_METHOD => Ok(Self::BadAuthenticationMethod),
-            TOPIC_NAME_INVALID => Ok(Self::TopicNameInvalid),
-            PACKET_TOO_LARGE => Ok(Self::PacketTooLarge),
-            QUOTA_EXCEEDED => Ok(Self::QuotaExceeded),
-            PAYLOAD_FORMAT_INVALID => Ok(Self::PayloadFormatInvalid),
-            RETAIN_NOT_SUPPORTED => Ok(Self::RetainNotSupported),
-            QOS_NOT_SUPPORTED => Ok(Self::QoSNotSupported),
-            USE_ANOTHER_SERVER => Ok(Self::UseAnotherServer),
-            SERVER_MOVED => Ok(Self::ServerMoved),
-            CONNECTION_RATE_EXCEEDED => Ok(Self::ConnectionRateExceeded),
+            SUCCESS => Ok(ConnectReasonCode::Success),
+            UNSPECIFIED_ERROR => Ok(ConnectReasonCode::UnspecifiedError),
+            MALFORMED_PACKET => Ok(ConnectReasonCode::MalformedPacket),
+            PROTOCOL_ERROR => Ok(ConnectReasonCode::ProtocolError),
+            IMPLEMENTATION_SPECIFIC_ERROR => Ok(ConnectReasonCode::ImplementationSpecificError),
+            UNSUPPORTED_PROTOCOL_VERSION => Ok(ConnectReasonCode::UnsupportedProtocolVersion),
+            CLIENT_IDENTIFIER_NOT_VALID => Ok(ConnectReasonCode::ClientIdentifierNotValid),
+            BAD_USERNAME_OR_PASSWORD => Ok(ConnectReasonCode::BadUsernameOrPassword),
+            NOT_AUTHORIZED => Ok(ConnectReasonCode::NotAuthorized),
+            SERVER_UNAVAILABLE => Ok(ConnectReasonCode::ServerUnavailable),
+            SERVER_BUSY => Ok(ConnectReasonCode::ServerBusy),
+            BANNED => Ok(ConnectReasonCode::Banned),
+            BAD_AUTHENTICATION_METHOD => Ok(ConnectReasonCode::BadAuthenticationMethod),
+            TOPIC_NAME_INVALID => Ok(ConnectReasonCode::TopicNameInvalid),
+            PACKET_TOO_LARGE => Ok(ConnectReasonCode::PacketTooLarge),
+            QUOTA_EXCEEDED => Ok(ConnectReasonCode::QuotaExceeded),
+            PAYLOAD_FORMAT_INVALID => Ok(ConnectReasonCode::PayloadFormatInvalid),
+            RETAIN_NOT_SUPPORTED => Ok(ConnectReasonCode::RetainNotSupported),
+            QOS_NOT_SUPPORTED => Ok(ConnectReasonCode::QoSNotSupported),
+            USE_ANOTHER_SERVER => Ok(ConnectReasonCode::UseAnotherServer),
+            SERVER_MOVED => Ok(ConnectReasonCode::ServerMoved),
+            CONNECTION_RATE_EXCEEDED => Ok(ConnectReasonCode::ConnectionRateExceeded),
             v => Err(VariableHeaderError::InvalidConnectReasonCode(v)),
         }
     }
@@ -118,13 +118,7 @@ impl Decodable for ConnectReasonCode {
     type Error = VariableHeaderError;
     type Cond = ();
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        _rest: (),
-    ) -> Result<ConnectReasonCode, VariableHeaderError> {
-        reader
-            .read_u8()
-            .map(ConnectReasonCode::try_from)?
-            .map_err(From::from)
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
+        reader.read_u8().map(Self::try_from)?.map_err(From::from)
     }
 }

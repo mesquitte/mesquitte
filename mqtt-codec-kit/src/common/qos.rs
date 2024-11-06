@@ -27,7 +27,7 @@ pub enum QoSWithPacketIdentifier {
 }
 
 impl QoSWithPacketIdentifier {
-    pub fn new(qos: QualityOfService, id: u16) -> QoSWithPacketIdentifier {
+    pub fn new(qos: QualityOfService, id: u16) -> Self {
         match (qos, id) {
             (QualityOfService::Level0, _) => QoSWithPacketIdentifier::Level0,
             (QualityOfService::Level1, id) => QoSWithPacketIdentifier::Level1(id),

@@ -26,7 +26,7 @@ pub struct PubackPacket {
 }
 
 impl PubackPacket {
-    pub fn new(pkid: u16, reason_code: PubackReasonCode) -> PubackPacket {
+    pub fn new(pkid: u16, reason_code: PubackReasonCode) -> Self {
         let mut fixed_header = FixedHeader::new(
             PacketType::with_default(ControlType::PublishAcknowledgement),
             0,
@@ -38,7 +38,7 @@ impl PubackPacket {
             3
         };
 
-        PubackPacket {
+        Self {
             fixed_header,
             packet_identifier: PacketIdentifier(pkid),
             reason_code,
@@ -128,7 +128,7 @@ impl DecodablePacket for PubackPacket {
             (reason_code, properties)
         };
 
-        Ok(PubackPacket {
+        Ok(Self {
             fixed_header,
             packet_identifier,
             reason_code,

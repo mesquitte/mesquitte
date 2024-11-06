@@ -51,15 +51,15 @@ impl TryFrom<u8> for PubackReasonCode {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            SUCCESS => Ok(Self::Success),
-            NO_MATCHING_SUBSCRIBERS => Ok(Self::NoMatchingSubscribers),
-            UNSPECIFIED_ERROR => Ok(Self::UnspecifiedError),
-            IMPLEMENTATION_SPECIFIC_ERROR => Ok(Self::ImplementationSpecificError),
-            NOT_AUTHORIZED => Ok(Self::NotAuthorized),
-            TOPIC_NAME_INVALID => Ok(Self::TopicNameInvalid),
-            PACKET_IDENTIFIER_IN_USE => Ok(Self::PacketIdentifierInUse),
-            QUOTA_EXCEEDED => Ok(Self::QuotaExceeded),
-            PAYLOAD_FORMAT_INVALID => Ok(Self::PayloadFormatInvalid),
+            SUCCESS => Ok(PubackReasonCode::Success),
+            NO_MATCHING_SUBSCRIBERS => Ok(PubackReasonCode::NoMatchingSubscribers),
+            UNSPECIFIED_ERROR => Ok(PubackReasonCode::UnspecifiedError),
+            IMPLEMENTATION_SPECIFIC_ERROR => Ok(PubackReasonCode::ImplementationSpecificError),
+            NOT_AUTHORIZED => Ok(PubackReasonCode::NotAuthorized),
+            TOPIC_NAME_INVALID => Ok(PubackReasonCode::TopicNameInvalid),
+            PACKET_IDENTIFIER_IN_USE => Ok(PubackReasonCode::PacketIdentifierInUse),
+            QUOTA_EXCEEDED => Ok(PubackReasonCode::QuotaExceeded),
+            PAYLOAD_FORMAT_INVALID => Ok(PubackReasonCode::PayloadFormatInvalid),
             v => Err(VariableHeaderError::InvalidPubackReasonCode(v)),
         }
     }
@@ -79,13 +79,7 @@ impl Decodable for PubackReasonCode {
     type Error = VariableHeaderError;
     type Cond = ();
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        _rest: (),
-    ) -> Result<PubackReasonCode, VariableHeaderError> {
-        reader
-            .read_u8()
-            .map(PubackReasonCode::try_from)?
-            .map_err(From::from)
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
+        reader.read_u8().map(Self::try_from)?.map_err(From::from)
     }
 }

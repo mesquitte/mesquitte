@@ -26,12 +26,12 @@ pub struct TopicName(String);
 impl TopicName {
     /// Creates a new topic name from string
     /// Return error if the string is not a valid topic name
-    pub fn new<S: Into<String>>(topic_name: S) -> Result<TopicName, TopicNameError> {
+    pub fn new<S: Into<String>>(topic_name: S) -> Result<Self, TopicNameError> {
         let topic_name = topic_name.into();
         if is_invalid_topic_name(&topic_name) {
             Err(TopicNameError(topic_name))
         } else {
-            Ok(TopicName(topic_name))
+            Ok(Self(topic_name))
         }
     }
 
@@ -43,13 +43,13 @@ impl TopicName {
     /// [MQTT v3.1.1](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718106)
     /// [MQTT v5.0](https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901241)
     /// Creating a name from raw string may cause errors
-    pub unsafe fn new_unchecked(topic_name: String) -> TopicName {
-        TopicName(topic_name)
+    pub unsafe fn new_unchecked(topic_name: String) -> Self {
+        Self(topic_name)
     }
 }
 
 impl From<TopicName> for String {
-    fn from(topic_name: TopicName) -> String {
+    fn from(topic_name: TopicName) -> Self {
         topic_name.0
     }
 }
@@ -65,7 +65,7 @@ impl FromStr for TopicName {
 impl Deref for TopicName {
     type Target = TopicNameRef;
 
-    fn deref(&self) -> &TopicNameRef {
+    fn deref(&self) -> &Self::Target {
         unsafe { TopicNameRef::new_unchecked(&self.0) }
     }
 }
@@ -102,9 +102,9 @@ impl Decodable for TopicName {
     type Error = TopicNameDecodeError;
     type Cond = ();
 
-    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<TopicName, TopicNameDecodeError> {
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
         let topic_name = String::decode(reader)?;
-        Ok(TopicName::new(topic_name)?)
+        Ok(Self::new(topic_name)?)
     }
 }
 
@@ -128,12 +128,12 @@ pub struct TopicNameRef(str);
 impl TopicNameRef {
     /// Creates a new topic name from string
     /// Return error if the string is not a valid topic name
-    pub fn new<S: AsRef<str> + ?Sized>(topic_name: &S) -> Result<&TopicNameRef, TopicNameError> {
+    pub fn new<S: AsRef<str> + ?Sized>(topic_name: &S) -> Result<&Self, TopicNameError> {
         let topic_name = topic_name.as_ref();
         if is_invalid_topic_name(topic_name) {
             Err(TopicNameError(topic_name.to_owned()))
         } else {
-            Ok(unsafe { &*(topic_name as *const str as *const TopicNameRef) })
+            Ok(unsafe { &*(topic_name as *const str as *const Self) })
         }
     }
 
@@ -141,12 +141,12 @@ impl TopicNameRef {
     /// Return error if the string is not a valid topic name
     pub fn new_mut<S: AsMut<str> + ?Sized>(
         topic_name: &mut S,
-    ) -> Result<&mut TopicNameRef, TopicNameError> {
+    ) -> Result<&mut Self, TopicNameError> {
         let topic_name = topic_name.as_mut();
         if is_invalid_topic_name(topic_name) {
             Err(TopicNameError(topic_name.to_owned()))
         } else {
-            Ok(unsafe { &mut *(topic_name as *mut str as *mut TopicNameRef) })
+            Ok(unsafe { &mut *(topic_name as *mut str as *mut Self) })
         }
     }
 
@@ -158,9 +158,9 @@ impl TopicNameRef {
     /// [MQTT v3.1.1](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718106)
     /// [MQTT v5.0](https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901241)
     /// Creating a name from raw string may cause errors
-    pub unsafe fn new_unchecked<S: AsRef<str> + ?Sized>(topic_name: &S) -> &TopicNameRef {
+    pub unsafe fn new_unchecked<S: AsRef<str> + ?Sized>(topic_name: &S) -> &Self {
         let topic_name = topic_name.as_ref();
-        &*(topic_name as *const str as *const TopicNameRef)
+        &*(topic_name as *const str as *const Self)
     }
 
     /// Creates a new topic name from string without validation
@@ -171,11 +171,9 @@ impl TopicNameRef {
     /// [MQTT v3.1.1](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718106)
     /// [MQTT v5.0](https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901241)
     /// Creating a name from raw string may cause errors
-    pub unsafe fn new_mut_unchecked<S: AsMut<str> + ?Sized>(
-        topic_name: &mut S,
-    ) -> &mut TopicNameRef {
+    pub unsafe fn new_mut_unchecked<S: AsMut<str> + ?Sized>(topic_name: &mut S) -> &mut Self {
         let topic_name = topic_name.as_mut();
-        &mut *(topic_name as *mut str as *mut TopicNameRef)
+        &mut *(topic_name as *mut str as *mut Self)
     }
 
     /// Check if this topic name is only for server.
@@ -189,7 +187,7 @@ impl TopicNameRef {
 impl Deref for TopicNameRef {
     type Target = str;
 
-    fn deref(&self) -> &str {
+    fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
@@ -217,9 +215,9 @@ impl Encodable for TopicNameRef {
 pub struct TopicNameHeader(TopicName);
 
 impl TopicNameHeader {
-    pub fn new(topic_name: String) -> Result<TopicNameHeader, TopicNameDecodeError> {
+    pub fn new(topic_name: String) -> Result<Self, TopicNameDecodeError> {
         match TopicName::new(topic_name) {
-            Ok(h) => Ok(TopicNameHeader(h)),
+            Ok(h) => Ok(Self(h)),
             Err(err) => Err(TopicNameDecodeError::InvalidTopicName(err)),
         }
     }
@@ -245,11 +243,8 @@ impl Decodable for TopicNameHeader {
     type Error = TopicNameDecodeError;
     type Cond = ();
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        _rest: (),
-    ) -> Result<TopicNameHeader, TopicNameDecodeError> {
-        TopicNameHeader::new(Decodable::decode(reader)?)
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
+        Self::new(Decodable::decode(reader)?)
     }
 }
 

@@ -20,8 +20,8 @@ pub struct PubrecPacket {
 encodable_packet!(PubrecPacket(packet_identifier));
 
 impl PubrecPacket {
-    pub fn new(pkid: u16) -> PubrecPacket {
-        PubrecPacket {
+    pub fn new(pkid: u16) -> Self {
+        Self {
             fixed_header: FixedHeader::new(
                 PacketType::with_default(ControlType::PublishReceived),
                 2,
@@ -46,7 +46,7 @@ impl DecodablePacket for PubrecPacket {
 
     fn decode_packet<R: Read>(reader: &mut R, fixed_header: Self::F) -> Result<Self, Self::Error> {
         let packet_identifier: PacketIdentifier = PacketIdentifier::decode(reader)?;
-        Ok(PubrecPacket {
+        Ok(Self {
             fixed_header,
             packet_identifier,
         })

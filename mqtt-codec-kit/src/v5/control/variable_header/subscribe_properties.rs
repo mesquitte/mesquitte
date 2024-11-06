@@ -116,7 +116,7 @@ impl Decodable for SubscribeProperties {
             }
         }
 
-        Ok(SubscribeProperties {
+        Ok(Self {
             total_length,
             identifier: id,
             user_properties,

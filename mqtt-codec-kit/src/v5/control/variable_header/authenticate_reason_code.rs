@@ -39,9 +39,9 @@ impl TryFrom<u8> for AuthenticateReasonCode {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            SUCCESS => Ok(Self::Success),
-            CONTINUE_AUTHENTICATION => Ok(Self::ContinueAuthentication),
-            RE_AUTHENTICATE => Ok(Self::ReAuthenticate),
+            SUCCESS => Ok(AuthenticateReasonCode::Success),
+            CONTINUE_AUTHENTICATION => Ok(AuthenticateReasonCode::ContinueAuthentication),
+            RE_AUTHENTICATE => Ok(AuthenticateReasonCode::ReAuthenticate),
             v => Err(VariableHeaderError::InvalidAuthenticateReasonCode(v)),
         }
     }
@@ -61,13 +61,7 @@ impl Decodable for AuthenticateReasonCode {
     type Error = VariableHeaderError;
     type Cond = ();
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        _rest: (),
-    ) -> Result<AuthenticateReasonCode, VariableHeaderError> {
-        reader
-            .read_u8()
-            .map(AuthenticateReasonCode::try_from)?
-            .map_err(From::from)
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
+        reader.read_u8().map(Self::try_from)?.map_err(From::from)
     }
 }

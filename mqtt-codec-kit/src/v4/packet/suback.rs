@@ -63,8 +63,8 @@ pub struct SubackPacket {
 encodable_packet!(SubackPacket(packet_identifier, payload));
 
 impl SubackPacket {
-    pub fn new(pkid: u16, return_codes: Vec<SubscribeReturnCode>) -> SubackPacket {
-        let mut pkt = SubackPacket {
+    pub fn new(pkid: u16, return_codes: Vec<SubscribeReturnCode>) -> Self {
+        let mut pkt = Self {
             fixed_header: FixedHeader::new(
                 PacketType::with_default(ControlType::SubscribeAcknowledgement),
                 0,
@@ -101,7 +101,7 @@ impl DecodablePacket for SubackPacket {
             fixed_header.remaining_length - packet_identifier.encoded_length(),
         )
         .map_err(PacketError::PayloadError)?;
-        Ok(SubackPacket {
+        Ok(Self {
             fixed_header,
             packet_identifier,
             payload,
@@ -115,8 +115,8 @@ struct SubackPacketPayload {
 }
 
 impl SubackPacketPayload {
-    pub fn new(codes: Vec<SubscribeReturnCode>) -> SubackPacketPayload {
-        SubackPacketPayload {
+    pub fn new(codes: Vec<SubscribeReturnCode>) -> Self {
+        Self {
             return_codes: codes,
         }
     }
@@ -140,10 +140,7 @@ impl Decodable for SubackPacketPayload {
     type Error = SubackPacketError;
     type Cond = u32;
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        payload_len: u32,
-    ) -> Result<SubackPacketPayload, SubackPacketError> {
+    fn decode_with<R: Read>(reader: &mut R, payload_len: u32) -> Result<Self, Self::Error> {
         let mut codes = Vec::new();
 
         for _ in 0..payload_len {
@@ -158,7 +155,7 @@ impl Decodable for SubackPacketPayload {
             codes.push(return_code);
         }
 
-        Ok(SubackPacketPayload::new(codes))
+        Ok(Self::new(codes))
     }
 }
 

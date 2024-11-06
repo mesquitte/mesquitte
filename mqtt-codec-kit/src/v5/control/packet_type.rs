@@ -71,7 +71,7 @@ impl PacketType {
     /// ControlType as defined by the [MQTT spec].
     ///
     /// [MQTT spec]: http://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Table_2.1_-
-    pub fn new(t: ControlType, flags: u8) -> Result<PacketType, InvalidFlag> {
+    pub fn new(t: ControlType, flags: u8) -> Result<Self, InvalidFlag> {
         let flags_ok = match t {
             ControlType::Publish => {
                 let qos = (flags & 0b0110) >> 1;
@@ -80,19 +80,19 @@ impl PacketType {
             _ => t.default_flags() == flags,
         };
         if flags_ok {
-            Ok(PacketType::new_unchecked(t, flags))
+            Ok(Self::new_unchecked(t, flags))
         } else {
             Err(InvalidFlag(t, flags))
         }
     }
 
     #[inline]
-    fn new_unchecked(t: ControlType, flags: u8) -> PacketType {
+    fn new_unchecked(t: ControlType, flags: u8) -> Self {
         let byte = (t as u8) << 4 | (flags & 0x0F);
         #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: just constructed from a valid ControlType
-            PacketType(byte)
+            Self(byte)
         }
     }
 
@@ -100,13 +100,13 @@ impl PacketType {
     ///
     /// <http://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Table_2.1_->
     #[inline]
-    pub fn with_default(t: ControlType) -> PacketType {
+    pub fn with_default(t: ControlType) -> Self {
         let flags = t.default_flags();
-        PacketType::new_unchecked(t, flags)
+        Self::new_unchecked(t, flags)
     }
 
-    pub(crate) fn publish(qos: QualityOfService) -> PacketType {
-        PacketType::new_unchecked(ControlType::Publish, (qos as u8) << 1)
+    pub(crate) fn publish(qos: QualityOfService) -> Self {
+        Self::new_unchecked(ControlType::Publish, (qos as u8) << 1)
     }
 
     #[inline]

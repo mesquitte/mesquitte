@@ -81,8 +81,8 @@ pub enum VariableHeaderError {
 impl From<TopicNameDecodeError> for VariableHeaderError {
     fn from(err: TopicNameDecodeError) -> VariableHeaderError {
         match err {
-            TopicNameDecodeError::IoError(e) => Self::IoError(e),
-            TopicNameDecodeError::InvalidTopicName(e) => Self::TopicNameError(e),
+            TopicNameDecodeError::IoError(e) => VariableHeaderError::IoError(e),
+            TopicNameDecodeError::InvalidTopicName(e) => VariableHeaderError::TopicNameError(e),
         }
     }
 }

@@ -64,7 +64,7 @@ impl DecodablePacket for AuthPacket {
         fixed_header: Self::F,
     ) -> Result<Self, Self::Error> {
         let auth = if fixed_header.remaining_length == 0 {
-            AuthPacket {
+            Self {
                 fixed_header,
                 reason_code: AuthenticateReasonCode::Success,
                 properties: None,
@@ -73,7 +73,7 @@ impl DecodablePacket for AuthPacket {
             let reason_code = AuthenticateReasonCode::decode(reader)?;
             let properties =
                 AuthProperties::decode(reader).map_err(VariableHeaderError::PropertyTypeError)?;
-            AuthPacket {
+            Self {
                 fixed_header,
                 reason_code,
                 properties: Some(properties),

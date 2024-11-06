@@ -19,16 +19,16 @@ pub struct PingreqPacket {
 encodable_packet!(PingreqPacket());
 
 impl PingreqPacket {
-    pub fn new() -> PingreqPacket {
-        PingreqPacket {
+    pub fn new() -> Self {
+        Self {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::PingRequest), 0),
         }
     }
 }
 
 impl Default for PingreqPacket {
-    fn default() -> PingreqPacket {
-        PingreqPacket::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -38,7 +38,7 @@ impl DecodablePacket for PingreqPacket {
     type Error = PacketError<Self>;
 
     fn decode_packet<R: Read>(_reader: &mut R, fixed_header: Self::F) -> Result<Self, Self::Error> {
-        Ok(PingreqPacket { fixed_header })
+        Ok(Self { fixed_header })
     }
 }
 

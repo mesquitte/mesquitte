@@ -11,8 +11,8 @@ pub struct ConnackFlags {
 }
 
 impl ConnackFlags {
-    pub fn empty() -> ConnackFlags {
-        ConnackFlags {
+    pub fn empty() -> Self {
+        Self {
             session_present: false,
         }
     }
@@ -33,16 +33,13 @@ impl Decodable for ConnackFlags {
     type Error = ConnectAckFlagsError;
     type Cond = ();
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        _rest: (),
-    ) -> Result<ConnackFlags, ConnectAckFlagsError> {
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
         let code = reader.read_u8()?;
         if code & !1 != 0 {
             return Err(ConnectAckFlagsError::InvalidReservedFlag);
         }
 
-        Ok(ConnackFlags {
+        Ok(Self {
             session_present: code == 1,
         })
     }

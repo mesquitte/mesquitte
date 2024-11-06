@@ -41,11 +41,11 @@ encodable_packet!(ConnectPacket(
 ));
 
 impl ConnectPacket {
-    pub fn new<C>(client_identifier: C) -> ConnectPacket
+    pub fn new<C>(client_identifier: C) -> Self
     where
         C: Into<String>,
     {
-        ConnectPacket::with_level("MQTT", client_identifier, SPEC_5_0)
+        Self::with_level("MQTT", client_identifier, SPEC_5_0)
             .expect("SPEC_5_0 should always be valid")
     }
 
@@ -53,13 +53,13 @@ impl ConnectPacket {
         protoname: P,
         client_identifier: C,
         level: u8,
-    ) -> Result<ConnectPacket, VariableHeaderError>
+    ) -> Result<Self, VariableHeaderError>
     where
         P: Into<String>,
         C: Into<String>,
     {
         let protocol_level = ProtocolLevel::try_from(level)?;
-        let mut pkt = ConnectPacket {
+        let mut pkt = Self {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::Connect), 0),
             protocol_name: ProtocolName(protoname.into()),
             protocol_level,
@@ -212,7 +212,7 @@ impl DecodablePacket for ConnectPacket {
         let payload: ConnectPayload =
             Decodable::decode_with(reader, Some(flags)).map_err(PacketError::PayloadError)?;
 
-        Ok(ConnectPacket {
+        Ok(Self {
             fixed_header,
             protocol_name: protoname,
             protocol_level,
@@ -522,8 +522,8 @@ struct ConnectPayload {
 }
 
 impl ConnectPayload {
-    pub fn new(client_identifier: String) -> ConnectPayload {
-        ConnectPayload {
+    pub fn new(client_identifier: String) -> Self {
+        Self {
             client_identifier,
             last_will: None,
             username: None,
@@ -574,7 +574,7 @@ impl Decodable for ConnectPayload {
     fn decode_with<R: Read>(
         reader: &mut R,
         flags: Option<ConnectFlags>,
-    ) -> Result<ConnectPayload, ConnectPacketError> {
+    ) -> Result<Self, Self::Error> {
         let mut need_will = false;
         let mut need_username = false;
         let mut need_password = false;
@@ -627,7 +627,7 @@ impl Decodable for ConnectPayload {
             None
         };
 
-        Ok(ConnectPayload {
+        Ok(Self {
             client_identifier: identifier,
             last_will,
             username,
@@ -923,7 +923,7 @@ impl Decodable for LastWillProperties {
             }
         }
 
-        Ok(LastWillProperties {
+        Ok(Self {
             total_length,
             delay_interval,
             payload_format_indicator,

@@ -37,8 +37,8 @@ impl TryFrom<u8> for PubrelReasonCode {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            SUCCESS => Ok(Self::Success),
-            PACKET_IDENTIFIER_NOT_FOUND => Ok(Self::PacketIdentifierNotFound),
+            SUCCESS => Ok(PubrelReasonCode::Success),
+            PACKET_IDENTIFIER_NOT_FOUND => Ok(PubrelReasonCode::PacketIdentifierNotFound),
             v => Err(VariableHeaderError::InvalidPubrelReasonCode(v)),
         }
     }
@@ -58,13 +58,7 @@ impl Decodable for PubrelReasonCode {
     type Error = VariableHeaderError;
     type Cond = ();
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        _rest: (),
-    ) -> Result<PubrelReasonCode, VariableHeaderError> {
-        reader
-            .read_u8()
-            .map(PubrelReasonCode::try_from)?
-            .map_err(From::from)
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
+        reader.read_u8().map(Self::try_from)?.map_err(From::from)
     }
 }

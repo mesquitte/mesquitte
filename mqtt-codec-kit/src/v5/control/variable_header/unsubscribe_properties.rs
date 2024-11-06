@@ -93,7 +93,7 @@ impl Decodable for UnsubscribeProperties {
             }
         }
 
-        Ok(UnsubscribeProperties {
+        Ok(Self {
             total_length,
             user_properties,
         })

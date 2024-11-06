@@ -19,16 +19,16 @@ pub struct PingrespPacket {
 encodable_packet!(PingrespPacket());
 
 impl PingrespPacket {
-    pub fn new() -> PingrespPacket {
-        PingrespPacket {
+    pub fn new() -> Self {
+        Self {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::PingResponse), 0),
         }
     }
 }
 
 impl Default for PingrespPacket {
-    fn default() -> PingrespPacket {
-        PingrespPacket::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -38,7 +38,7 @@ impl DecodablePacket for PingrespPacket {
     type Error = PacketError<Self>;
 
     fn decode_packet<R: Read>(_reader: &mut R, fixed_header: Self::F) -> Result<Self, Self::Error> {
-        Ok(PingrespPacket { fixed_header })
+        Ok(Self { fixed_header })
     }
 }
 

@@ -25,7 +25,7 @@ pub struct DisconnectPacket {
 }
 
 impl DisconnectPacket {
-    pub fn new(reason_code: DisconnectReasonCode) -> DisconnectPacket {
+    pub fn new(reason_code: DisconnectReasonCode) -> Self {
         let mut fixed_header =
             FixedHeader::new(PacketType::with_default(ControlType::Disconnect), 0);
 
@@ -36,7 +36,7 @@ impl DisconnectPacket {
             1
         };
 
-        DisconnectPacket {
+        Self {
             fixed_header,
             reason_code,
             properties: DisconnectProperties::default(),
@@ -63,8 +63,8 @@ impl DisconnectPacket {
 }
 
 impl Default for DisconnectPacket {
-    fn default() -> DisconnectPacket {
-        DisconnectPacket::new(DisconnectReasonCode::NormalDisconnection)
+    fn default() -> Self {
+        Self::new(DisconnectReasonCode::NormalDisconnection)
     }
 }
 
@@ -120,7 +120,7 @@ impl DecodablePacket for DisconnectPacket {
             (reason_code, properties)
         };
 
-        Ok(DisconnectPacket {
+        Ok(Self {
             fixed_header,
             reason_code,
             properties,

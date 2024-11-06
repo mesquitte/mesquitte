@@ -30,8 +30,8 @@ pub struct SubscribePacket {
 encodable_packet!(SubscribePacket(packet_identifier, payload));
 
 impl SubscribePacket {
-    pub fn new(pkid: u16, subscribes: Vec<(TopicFilter, QualityOfService)>) -> SubscribePacket {
-        let mut pkt = SubscribePacket {
+    pub fn new(pkid: u16, subscribes: Vec<(TopicFilter, QualityOfService)>) -> Self {
+        let mut pkt = Self {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::Subscribe), 0),
             packet_identifier: PacketIdentifier(pkid),
             payload: SubscribePacketPayload::new(subscribes),
@@ -65,7 +65,7 @@ impl DecodablePacket for SubscribePacket {
             fixed_header.remaining_length - packet_identifier.encoded_length(),
         )
         .map_err(PacketError::PayloadError)?;
-        Ok(SubscribePacket {
+        Ok(Self {
             fixed_header,
             packet_identifier,
             payload,
@@ -80,8 +80,8 @@ struct SubscribePacketPayload {
 }
 
 impl SubscribePacketPayload {
-    pub fn new(subs: Vec<(TopicFilter, QualityOfService)>) -> SubscribePacketPayload {
-        SubscribePacketPayload { subscribes: subs }
+    pub fn new(subs: Vec<(TopicFilter, QualityOfService)>) -> Self {
+        Self { subscribes: subs }
     }
 }
 
@@ -106,10 +106,7 @@ impl Decodable for SubscribePacketPayload {
     type Error = SubscribePacketError;
     type Cond = u32;
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        mut payload_len: u32,
-    ) -> Result<SubscribePacketPayload, SubscribePacketError> {
+    fn decode_with<R: Read>(reader: &mut R, mut payload_len: u32) -> Result<Self, Self::Error> {
         let mut subs = Vec::new();
 
         while payload_len > 0 {
@@ -125,7 +122,7 @@ impl Decodable for SubscribePacketPayload {
             subs.push((filter, qos));
         }
 
-        Ok(SubscribePacketPayload::new(subs))
+        Ok(Self::new(subs))
     }
 }
 

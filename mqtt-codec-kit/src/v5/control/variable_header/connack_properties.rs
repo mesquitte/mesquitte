@@ -455,7 +455,7 @@ impl Decodable for ConnackProperties {
             }
         }
 
-        Ok(ConnackProperties {
+        Ok(Self {
             total_length,
             session_expiry_interval,
             receive_maximum: receive_max,

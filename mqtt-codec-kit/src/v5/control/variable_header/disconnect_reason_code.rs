@@ -126,35 +126,41 @@ impl TryFrom<u8> for DisconnectReasonCode {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            NORMAL_DISCONNECTION => Ok(Self::NormalDisconnection),
-            DISCONNECT_WITH_WILL_MESSAGE => Ok(Self::DisconnectWithWillMessage),
-            UNSPECIFIED_ERROR => Ok(Self::UnspecifiedError),
-            MALFORMED_PACKET => Ok(Self::MalformedPacket),
-            PROTOCOL_ERROR => Ok(Self::ProtocolError),
-            IMPLEMENTATION_SPECIFIC_ERROR => Ok(Self::ImplementationSpecificError),
-            NOT_AUTHORIZED => Ok(Self::NotAuthorized),
-            SERVER_BUSY => Ok(Self::ServerBusy),
-            SERVER_SHUTTING_DOWN => Ok(Self::ServerShuttingDown),
-            KEEP_ALIVE_TIMEOUT => Ok(Self::KeepAliveTimeout),
-            SESSION_TAKEN_OVER => Ok(Self::SessionTakenOver),
-            TOPIC_FILTER_INVALID => Ok(Self::TopicFilterInvalid),
-            TOPIC_NAME_INVALID => Ok(Self::TopicNameInvalid),
-            RECEIVE_MAXIMUM_EXCEEDED => Ok(Self::ReceiveMaximumExceeded),
-            TOPIC_ALIAS_INVALID => Ok(Self::TopicAliasInvalid),
-            PACKET_TOO_LARGE => Ok(Self::PacketTooLarge),
-            MESSAGE_RATE_TOO_HIGH => Ok(Self::MessageRateTooHigh),
-            QUOTA_EXCEEDED => Ok(Self::QuotaExceeded),
-            ADMINISTRATIVE_ACTION => Ok(Self::AdministrativeAction),
-            PAYLOAD_FORMAT_INVALID => Ok(Self::PayloadFormatInvalid),
-            RETAIN_NOT_SUPPORTED => Ok(Self::RetainNotSupported),
-            QOS_NOT_SUPPORTED => Ok(Self::QoSNotSupported),
-            USE_ANOTHER_SERVER => Ok(Self::UseAnotherServer),
-            SERVER_MOVED => Ok(Self::ServerMoved),
-            SHARED_SUBSCRIPTION_NOT_SUPPORTED => Ok(Self::SharedSubscriptionNotSupported),
-            CONNECTION_RATE_EXCEEDED => Ok(Self::ConnectionRateExceeded),
-            MAXIMUM_CONNECT_TIME => Ok(Self::MaximumConnectTime),
-            SUBSCRIPTION_IDENTIFIERS_NOT_SUPPORTED => Ok(Self::SubscriptionIdentifiersNotSupported),
-            WILDCARD_SUBSCRIPTIONS_NOT_SUPPORTED => Ok(Self::WildcardSubscriptionsNotSupported),
+            NORMAL_DISCONNECTION => Ok(DisconnectReasonCode::NormalDisconnection),
+            DISCONNECT_WITH_WILL_MESSAGE => Ok(DisconnectReasonCode::DisconnectWithWillMessage),
+            UNSPECIFIED_ERROR => Ok(DisconnectReasonCode::UnspecifiedError),
+            MALFORMED_PACKET => Ok(DisconnectReasonCode::MalformedPacket),
+            PROTOCOL_ERROR => Ok(DisconnectReasonCode::ProtocolError),
+            IMPLEMENTATION_SPECIFIC_ERROR => Ok(DisconnectReasonCode::ImplementationSpecificError),
+            NOT_AUTHORIZED => Ok(DisconnectReasonCode::NotAuthorized),
+            SERVER_BUSY => Ok(DisconnectReasonCode::ServerBusy),
+            SERVER_SHUTTING_DOWN => Ok(DisconnectReasonCode::ServerShuttingDown),
+            KEEP_ALIVE_TIMEOUT => Ok(DisconnectReasonCode::KeepAliveTimeout),
+            SESSION_TAKEN_OVER => Ok(DisconnectReasonCode::SessionTakenOver),
+            TOPIC_FILTER_INVALID => Ok(DisconnectReasonCode::TopicFilterInvalid),
+            TOPIC_NAME_INVALID => Ok(DisconnectReasonCode::TopicNameInvalid),
+            RECEIVE_MAXIMUM_EXCEEDED => Ok(DisconnectReasonCode::ReceiveMaximumExceeded),
+            TOPIC_ALIAS_INVALID => Ok(DisconnectReasonCode::TopicAliasInvalid),
+            PACKET_TOO_LARGE => Ok(DisconnectReasonCode::PacketTooLarge),
+            MESSAGE_RATE_TOO_HIGH => Ok(DisconnectReasonCode::MessageRateTooHigh),
+            QUOTA_EXCEEDED => Ok(DisconnectReasonCode::QuotaExceeded),
+            ADMINISTRATIVE_ACTION => Ok(DisconnectReasonCode::AdministrativeAction),
+            PAYLOAD_FORMAT_INVALID => Ok(DisconnectReasonCode::PayloadFormatInvalid),
+            RETAIN_NOT_SUPPORTED => Ok(DisconnectReasonCode::RetainNotSupported),
+            QOS_NOT_SUPPORTED => Ok(DisconnectReasonCode::QoSNotSupported),
+            USE_ANOTHER_SERVER => Ok(DisconnectReasonCode::UseAnotherServer),
+            SERVER_MOVED => Ok(DisconnectReasonCode::ServerMoved),
+            SHARED_SUBSCRIPTION_NOT_SUPPORTED => {
+                Ok(DisconnectReasonCode::SharedSubscriptionNotSupported)
+            }
+            CONNECTION_RATE_EXCEEDED => Ok(DisconnectReasonCode::ConnectionRateExceeded),
+            MAXIMUM_CONNECT_TIME => Ok(DisconnectReasonCode::MaximumConnectTime),
+            SUBSCRIPTION_IDENTIFIERS_NOT_SUPPORTED => {
+                Ok(DisconnectReasonCode::SubscriptionIdentifiersNotSupported)
+            }
+            WILDCARD_SUBSCRIPTIONS_NOT_SUPPORTED => {
+                Ok(DisconnectReasonCode::WildcardSubscriptionsNotSupported)
+            }
             v => Err(VariableHeaderError::InvalidDisconnectReasonCode(v)),
         }
     }
@@ -174,13 +180,7 @@ impl Decodable for DisconnectReasonCode {
     type Error = VariableHeaderError;
     type Cond = ();
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        _rest: (),
-    ) -> Result<DisconnectReasonCode, VariableHeaderError> {
-        reader
-            .read_u8()
-            .map(DisconnectReasonCode::try_from)?
-            .map_err(From::from)
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
+        reader.read_u8().map(Self::try_from)?.map_err(From::from)
     }
 }
