@@ -163,7 +163,7 @@ impl Decodable for AuthProperties {
             }
         }
 
-        Ok(AuthProperties {
+        Ok(Self {
             total_length,
             reason_string,
             user_properties,

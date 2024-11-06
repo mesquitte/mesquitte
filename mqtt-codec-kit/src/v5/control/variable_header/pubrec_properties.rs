@@ -116,7 +116,7 @@ impl Decodable for PubrecProperties {
             }
         }
 
-        Ok(PubrecProperties {
+        Ok(Self {
             total_length,
             reason_string,
             user_properties,

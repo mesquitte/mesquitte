@@ -25,8 +25,8 @@ pub struct UnsubackPacket {
 encodable_packet!(UnsubackPacket(packet_identifier, properties, payload));
 
 impl UnsubackPacket {
-    pub fn new(pkid: u16, reason_codes: Vec<UnsubscribeReasonCode>) -> UnsubackPacket {
-        let mut pkt = UnsubackPacket {
+    pub fn new(pkid: u16, reason_codes: Vec<UnsubscribeReasonCode>) -> Self {
+        let mut pkt = Self {
             fixed_header: FixedHeader::new(
                 PacketType::with_default(ControlType::UnsubscribeAcknowledgement),
                 0,
@@ -86,7 +86,7 @@ impl DecodablePacket for UnsubackPacket {
             UnsubackPacketPayload::default()
         };
 
-        Ok(UnsubackPacket {
+        Ok(Self {
             fixed_header,
             packet_identifier,
             properties,
@@ -124,17 +124,14 @@ impl Decodable for UnsubackPacketPayload {
     type Error = UnsubackPacketError;
     type Cond = u32;
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        payload_len: u32,
-    ) -> Result<UnsubackPacketPayload, UnsubackPacketError> {
+    fn decode_with<R: Read>(reader: &mut R, payload_len: u32) -> Result<Self, Self::Error> {
         let mut unsubscribes = Vec::new();
 
         for _ in 0..payload_len {
             unsubscribes.push(reader.read_u8()?.try_into()?);
         }
 
-        Ok(UnsubackPacketPayload::new(unsubscribes))
+        Ok(Self::new(unsubscribes))
     }
 }
 
@@ -176,13 +173,13 @@ impl TryFrom<u8> for UnsubscribeReasonCode {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            SUCCESS => Ok(Self::Success),
-            NO_SUBSCRIPTION_EXISTED => Ok(Self::NoSubscriptionExisted),
-            UNSPECIFIED_ERROR => Ok(Self::UnspecifiedError),
-            IMPLEMENTATION_SPECIFIC_ERROR => Ok(Self::ImplementationSpecificError),
-            NOT_AUTHORIZED => Ok(Self::NotAuthorized),
-            TOPIC_FILTER_INVALID => Ok(Self::TopicFilterInvalid),
-            PACKET_IDENTIFIER_IN_USE => Ok(Self::PacketIdentifierInUse),
+            SUCCESS => Ok(UnsubscribeReasonCode::Success),
+            NO_SUBSCRIPTION_EXISTED => Ok(UnsubscribeReasonCode::NoSubscriptionExisted),
+            UNSPECIFIED_ERROR => Ok(UnsubscribeReasonCode::UnspecifiedError),
+            IMPLEMENTATION_SPECIFIC_ERROR => Ok(UnsubscribeReasonCode::ImplementationSpecificError),
+            NOT_AUTHORIZED => Ok(UnsubscribeReasonCode::NotAuthorized),
+            TOPIC_FILTER_INVALID => Ok(UnsubscribeReasonCode::TopicFilterInvalid),
+            PACKET_IDENTIFIER_IN_USE => Ok(UnsubscribeReasonCode::PacketIdentifierInUse),
             v => Err(UnsubackPacketError::InvalidUnsubscribeReasonCode(v)),
         }
     }

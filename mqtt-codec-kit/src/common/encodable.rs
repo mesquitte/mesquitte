@@ -114,7 +114,7 @@ impl Decodable for Vec<u8> {
     type Error = io::Error;
     type Cond = Option<u32>;
 
-    fn decode_with<R: Read>(reader: &mut R, length: Option<u32>) -> Result<Vec<u8>, io::Error> {
+    fn decode_with<R: Read>(reader: &mut R, length: Option<u32>) -> Result<Self, Self::Error> {
         match length {
             Some(length) => {
                 let mut buf = Vec::with_capacity(length as usize);
@@ -134,7 +134,7 @@ impl Decodable for () {
     type Error = Infallible;
     type Cond = ();
 
-    fn decode_with<R: Read>(_: &mut R, _: ()) -> Result<(), Self::Error> {
+    fn decode_with<R: Read>(_: &mut R, _: ()) -> Result<Self, Self::Error> {
         Ok(())
     }
 }
@@ -161,11 +161,11 @@ impl Decodable for VarBytes {
     type Error = io::Error;
     type Cond = ();
 
-    fn decode_with<R: Read>(reader: &mut R, _: ()) -> Result<VarBytes, io::Error> {
+    fn decode_with<R: Read>(reader: &mut R, _: ()) -> Result<Self, Self::Error> {
         let length = reader.read_u16::<BigEndian>()?;
         let mut buf = Vec::with_capacity(length as usize);
         reader.take(length.into()).read_to_end(&mut buf)?;
-        Ok(VarBytes(buf))
+        Ok(Self(buf))
     }
 }
 

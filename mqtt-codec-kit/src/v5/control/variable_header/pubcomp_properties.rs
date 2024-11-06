@@ -116,7 +116,7 @@ impl Decodable for PubcompProperties {
             }
         }
 
-        Ok(PubcompProperties {
+        Ok(Self {
             total_length,
             reason_string,
             user_properties,

@@ -31,8 +31,8 @@ pub struct SubscribePacket {
 encodable_packet!(SubscribePacket(packet_identifier, properties, payload));
 
 impl SubscribePacket {
-    pub fn new(pkid: u16, subscribes: Vec<(TopicFilter, SubscribeOptions)>) -> SubscribePacket {
-        let mut pkt = SubscribePacket {
+    pub fn new(pkid: u16, subscribes: Vec<(TopicFilter, SubscribeOptions)>) -> Self {
+        let mut pkt = Self {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::Subscribe), 0),
             packet_identifier: PacketIdentifier(pkid),
             properties: SubscribeProperties::default(),
@@ -81,7 +81,7 @@ impl DecodablePacket for SubscribePacket {
         )
         .map_err(PacketError::PayloadError)?;
 
-        Ok(SubscribePacket {
+        Ok(Self {
             fixed_header,
             packet_identifier,
             properties,
@@ -97,8 +97,8 @@ struct SubscribePayload {
 }
 
 impl SubscribePayload {
-    pub fn new(subs: Vec<(TopicFilter, SubscribeOptions)>) -> SubscribePayload {
-        SubscribePayload { subscribes: subs }
+    pub fn new(subs: Vec<(TopicFilter, SubscribeOptions)>) -> Self {
+        Self { subscribes: subs }
     }
 }
 
@@ -123,10 +123,7 @@ impl Decodable for SubscribePayload {
     type Error = SubscribePacketError;
     type Cond = u32;
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        mut payload_len: u32,
-    ) -> Result<SubscribePayload, SubscribePacketError> {
+    fn decode_with<R: Read>(reader: &mut R, mut payload_len: u32) -> Result<Self, Self::Error> {
         let mut subs = Vec::new();
 
         while payload_len > 0 {
@@ -137,7 +134,7 @@ impl Decodable for SubscribePayload {
             subs.push((filter, option));
         }
 
-        Ok(SubscribePayload::new(subs))
+        Ok(Self::new(subs))
     }
 }
 
@@ -269,9 +266,9 @@ impl TryFrom<u8> for RetainHandling {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0 => Ok(Self::SendAtSubscribe),
-            1 => Ok(Self::SendAtSubscribeIfNotExist),
-            2 => Ok(Self::DoNotSend),
+            0 => Ok(RetainHandling::SendAtSubscribe),
+            1 => Ok(RetainHandling::SendAtSubscribeIfNotExist),
+            2 => Ok(RetainHandling::DoNotSend),
             _ => Err(SubscribePacketError::InvalidRetainHandling),
         }
     }

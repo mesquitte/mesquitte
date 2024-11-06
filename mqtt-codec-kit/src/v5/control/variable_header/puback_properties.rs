@@ -116,7 +116,7 @@ impl Decodable for PubackProperties {
             }
         }
 
-        Ok(PubackProperties {
+        Ok(Self {
             total_length,
             reason_string,
             user_properties,

@@ -30,9 +30,9 @@ impl PublishPacket {
         topic_name: TopicName,
         qos: QoSWithPacketIdentifier,
         payload: P,
-    ) -> PublishPacket {
+    ) -> Self {
         let (qos, pkid) = qos.split();
-        let mut pkt = PublishPacket {
+        let mut pkt = Self {
             fixed_header: FixedHeader::new(PacketType::publish(qos), 0),
             topic_name,
             packet_identifier: pkid.map(PacketIdentifier),
@@ -128,7 +128,7 @@ impl DecodablePacket for PublishPacket {
 
         let payload = Vec::<u8>::decode_with(reader, Some(payload_len))?;
 
-        Ok(PublishPacket {
+        Ok(Self {
             fixed_header,
             topic_name,
             packet_identifier,
@@ -150,10 +150,10 @@ impl<'a> PublishPacketRef<'a> {
         topic_name: &'a TopicNameRef,
         qos: QoSWithPacketIdentifier,
         payload: &'a [u8],
-    ) -> PublishPacketRef<'a> {
+    ) -> Self {
         let (qos, pkid) = qos.split();
 
-        let mut pk = PublishPacketRef {
+        let mut pk = Self {
             fixed_header: FixedHeader::new(PacketType::publish(qos), 0),
             topic_name,
             packet_identifier: pkid.map(PacketIdentifier),

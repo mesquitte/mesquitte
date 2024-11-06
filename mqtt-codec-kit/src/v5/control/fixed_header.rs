@@ -36,7 +36,7 @@ pub struct FixedHeader {
 impl FixedHeader {
     pub fn new(packet_type: PacketType, remaining_length: u32) -> FixedHeader {
         debug_assert!(remaining_length <= 0x0FFF_FFFF);
-        FixedHeader {
+        Self {
             packet_type,
             remaining_length,
         }
@@ -118,7 +118,7 @@ impl Decodable for FixedHeader {
     type Error = FixedHeaderError;
     type Cond = ();
 
-    fn decode_with<R: Read>(rdr: &mut R, _rest: ()) -> Result<FixedHeader, FixedHeaderError> {
+    fn decode_with<R: Read>(rdr: &mut R, _rest: ()) -> Result<Self, Self::Error> {
         let type_val = rdr.read_u8()?;
         let remaining_len = {
             let mut cur = 0u32;
@@ -139,7 +139,7 @@ impl Decodable for FixedHeader {
         };
 
         match PacketType::try_from(type_val) {
-            Ok(packet_type) => Ok(FixedHeader::new(packet_type, remaining_len)),
+            Ok(packet_type) => Ok(Self::new(packet_type, remaining_len)),
             Err(PacketTypeError::ReservedType(ty, _)) => {
                 Err(FixedHeaderError::ReservedType(ty, remaining_len))
             }

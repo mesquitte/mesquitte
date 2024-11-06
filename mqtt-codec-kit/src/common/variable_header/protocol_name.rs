@@ -34,7 +34,7 @@ impl Decodable for ProtocolName {
     type Error = io::Error;
     type Cond = ();
 
-    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<ProtocolName, io::Error> {
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
         Ok(ProtocolName(Decodable::decode(reader)?))
     }
 }

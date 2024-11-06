@@ -116,7 +116,7 @@ impl Decodable for SubackProperties {
             }
         }
 
-        Ok(SubackProperties {
+        Ok(Self {
             total_length,
             reason_string,
             user_properties,

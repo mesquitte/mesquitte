@@ -75,13 +75,7 @@ impl Decodable for ConnectReturnCode {
     type Error = VariableHeaderError;
     type Cond = ();
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        _rest: (),
-    ) -> Result<ConnectReturnCode, VariableHeaderError> {
-        reader
-            .read_u8()
-            .map(ConnectReturnCode::from)
-            .map_err(From::from)
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
+        reader.read_u8().map(Self::from).map_err(From::from)
     }
 }

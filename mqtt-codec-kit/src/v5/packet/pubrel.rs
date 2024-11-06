@@ -26,7 +26,7 @@ pub struct PubrelPacket {
 }
 
 impl PubrelPacket {
-    pub fn new(pkid: u16, reason_code: PubrelReasonCode) -> PubrelPacket {
+    pub fn new(pkid: u16, reason_code: PubrelReasonCode) -> Self {
         let mut fixed_header =
             FixedHeader::new(PacketType::with_default(ControlType::PublishRelease), 0);
 
@@ -36,7 +36,7 @@ impl PubrelPacket {
             3
         };
 
-        PubrelPacket {
+        Self {
             fixed_header,
             packet_identifier: PacketIdentifier(pkid),
             reason_code,
@@ -126,7 +126,7 @@ impl DecodablePacket for PubrelPacket {
             (reason_code, properties)
         };
 
-        Ok(PubrelPacket {
+        Ok(Self {
             fixed_header,
             packet_identifier,
             reason_code,

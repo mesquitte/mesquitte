@@ -37,8 +37,8 @@ impl TryFrom<u8> for PubcompReasonCode {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            SUCCESS => Ok(Self::Success),
-            PACKET_IDENTIFIER_NOT_FOUND => Ok(Self::PacketIdentifierNotFound),
+            SUCCESS => Ok(PubcompReasonCode::Success),
+            PACKET_IDENTIFIER_NOT_FOUND => Ok(PubcompReasonCode::PacketIdentifierNotFound),
             v => Err(VariableHeaderError::InvalidPubcompReasonCode(v)),
         }
     }
@@ -58,13 +58,7 @@ impl Decodable for PubcompReasonCode {
     type Error = VariableHeaderError;
     type Cond = ();
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        _rest: (),
-    ) -> Result<PubcompReasonCode, VariableHeaderError> {
-        reader
-            .read_u8()
-            .map(PubcompReasonCode::try_from)?
-            .map_err(From::from)
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
+        reader.read_u8().map(Self::try_from)?.map_err(From::from)
     }
 }

@@ -24,8 +24,8 @@ pub struct ConnackPacket {
 encodable_packet!(ConnackPacket(flags, return_code));
 
 impl ConnackPacket {
-    pub fn new(session_present: bool, return_code: ConnectReturnCode) -> ConnackPacket {
-        ConnackPacket {
+    pub fn new(session_present: bool, return_code: ConnectReturnCode) -> Self {
+        Self {
             fixed_header: FixedHeader::new(
                 PacketType::with_default(ControlType::ConnectAcknowledgement),
                 2,
@@ -56,7 +56,7 @@ impl DecodablePacket for ConnackPacket {
         })?;
         let return_code: ConnectReturnCode = Decodable::decode(reader)?;
 
-        Ok(ConnackPacket {
+        Ok(Self {
             fixed_header,
             flags,
             return_code,

@@ -20,8 +20,8 @@ pub struct PubcompPacket {
 encodable_packet!(PubcompPacket(packet_identifier));
 
 impl PubcompPacket {
-    pub fn new(pkid: u16) -> PubcompPacket {
-        PubcompPacket {
+    pub fn new(pkid: u16) -> Self {
+        Self {
             fixed_header: FixedHeader::new(
                 PacketType::with_default(ControlType::PublishComplete),
                 2,
@@ -46,7 +46,7 @@ impl DecodablePacket for PubcompPacket {
 
     fn decode_packet<R: Read>(reader: &mut R, fixed_header: Self::F) -> Result<Self, Self::Error> {
         let packet_identifier: PacketIdentifier = PacketIdentifier::decode(reader)?;
-        Ok(PubcompPacket {
+        Ok(Self {
             fixed_header,
             packet_identifier,
         })

@@ -79,12 +79,12 @@ pub struct TopicFilter(String);
 impl TopicFilter {
     /// Creates a new topic filter from string
     /// Return error if it is not a valid topic filter
-    pub fn new<S: Into<String>>(topic: S) -> Result<TopicFilter, TopicFilterError> {
+    pub fn new<S: Into<String>>(topic: S) -> Result<Self, TopicFilterError> {
         let topic = topic.into();
         if is_invalid_topic_filter(&topic) {
             Err(TopicFilterError(topic))
         } else {
-            Ok(TopicFilter(topic))
+            Ok(Self(topic))
         }
     }
 
@@ -94,8 +94,8 @@ impl TopicFilter {
     ///
     /// Topic filters' syntax is defined in [MQTT specification](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718106).
     /// Creating a filter from raw string may cause errors
-    pub unsafe fn new_unchecked<S: Into<String>>(topic: S) -> TopicFilter {
-        TopicFilter(topic.into())
+    pub unsafe fn new_unchecked<S: Into<String>>(topic: S) -> Self {
+        Self(topic.into())
     }
 
     pub fn is_shared(&self) -> bool {
@@ -121,7 +121,7 @@ impl TopicFilter {
 }
 
 impl From<TopicFilter> for String {
-    fn from(topic: TopicFilter) -> String {
+    fn from(topic: TopicFilter) -> Self {
         topic.0
     }
 }
@@ -140,19 +140,16 @@ impl Decodable for TopicFilter {
     type Error = TopicFilterDecodeError;
     type Cond = ();
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        _rest: (),
-    ) -> Result<TopicFilter, TopicFilterDecodeError> {
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
         let topic_filter = String::decode(reader)?;
-        Ok(TopicFilter::new(topic_filter)?)
+        Ok(Self::new(topic_filter)?)
     }
 }
 
 impl Deref for TopicFilter {
     type Target = TopicFilterRef;
 
-    fn deref(&self) -> &TopicFilterRef {
+    fn deref(&self) -> &Self::Target {
         unsafe { TopicFilterRef::new_unchecked(&self.0) }
     }
 }
@@ -165,12 +162,12 @@ pub struct TopicFilterRef(str);
 impl TopicFilterRef {
     /// Creates a new topic filter from string
     /// Return error if it is not a valid topic filter
-    pub fn new<S: AsRef<str> + ?Sized>(topic: &S) -> Result<&TopicFilterRef, TopicFilterError> {
+    pub fn new<S: AsRef<str> + ?Sized>(topic: &S) -> Result<&Self, TopicFilterError> {
         let topic = topic.as_ref();
         if is_invalid_topic_filter(topic) {
             Err(TopicFilterError(topic.to_owned()))
         } else {
-            Ok(unsafe { &*(topic as *const str as *const TopicFilterRef) })
+            Ok(unsafe { &*(topic as *const str as *const Self) })
         }
     }
 
@@ -180,9 +177,9 @@ impl TopicFilterRef {
     ///
     /// Topic filters' syntax is defined in [MQTT specification](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718106).
     /// Creating a filter from raw string may cause errors
-    pub unsafe fn new_unchecked<S: AsRef<str> + ?Sized>(topic: &S) -> &TopicFilterRef {
+    pub unsafe fn new_unchecked<S: AsRef<str> + ?Sized>(topic: &S) -> &Self {
         let topic = topic.as_ref();
-        &*(topic as *const str as *const TopicFilterRef)
+        &*(topic as *const str as *const Self)
     }
 
     /// Get a matcher
@@ -194,7 +191,7 @@ impl TopicFilterRef {
 impl Deref for TopicFilterRef {
     type Target = str;
 
-    fn deref(&self) -> &str {
+    fn deref(&self) -> &Self::Target {
         &self.0
     }
 }

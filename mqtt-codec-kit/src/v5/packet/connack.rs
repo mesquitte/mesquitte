@@ -25,8 +25,8 @@ pub struct ConnackPacket {
 encodable_packet!(ConnackPacket(flags, reason_code, properties));
 
 impl ConnackPacket {
-    pub fn new(session_present: bool, reason_code: ConnectReasonCode) -> ConnackPacket {
-        ConnackPacket {
+    pub fn new(session_present: bool, reason_code: ConnectReasonCode) -> Self {
+        Self {
             fixed_header: FixedHeader::new(
                 PacketType::with_default(ControlType::ConnectAcknowledgement),
                 3,
@@ -69,7 +69,7 @@ impl DecodablePacket for ConnackPacket {
         let properties: ConnackProperties =
             Decodable::decode(reader).map_err(VariableHeaderError::PropertyTypeError)?;
 
-        Ok(ConnackPacket {
+        Ok(Self {
             fixed_header,
             flags,
             reason_code,

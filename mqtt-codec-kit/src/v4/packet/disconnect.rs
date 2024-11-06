@@ -19,16 +19,16 @@ pub struct DisconnectPacket {
 encodable_packet!(DisconnectPacket());
 
 impl DisconnectPacket {
-    pub fn new() -> DisconnectPacket {
-        DisconnectPacket {
+    pub fn new() -> Self {
+        Self {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::Disconnect), 0),
         }
     }
 }
 
 impl Default for DisconnectPacket {
-    fn default() -> DisconnectPacket {
-        DisconnectPacket::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -38,7 +38,7 @@ impl DecodablePacket for DisconnectPacket {
     type Error = PacketError<Self>;
 
     fn decode_packet<R: Read>(_reader: &mut R, fixed_header: Self::F) -> Result<Self, Self::Error> {
-        Ok(DisconnectPacket { fixed_header })
+        Ok(Self { fixed_header })
     }
 }
 

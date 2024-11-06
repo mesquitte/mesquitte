@@ -25,8 +25,8 @@ pub struct SubackPacket {
 encodable_packet!(SubackPacket(packet_identifier, properties, payload));
 
 impl SubackPacket {
-    pub fn new(pkid: u16, reason_codes: Vec<SubscribeReasonCode>) -> SubackPacket {
-        let mut pkt = SubackPacket {
+    pub fn new(pkid: u16, reason_codes: Vec<SubscribeReasonCode>) -> Self {
+        let mut pkt = Self {
             fixed_header: FixedHeader::new(
                 PacketType::with_default(ControlType::SubscribeAcknowledgement),
                 0,
@@ -78,7 +78,7 @@ impl DecodablePacket for SubackPacket {
         )
         .map_err(PacketError::PayloadError)?;
 
-        Ok(SubackPacket {
+        Ok(Self {
             fixed_header,
             packet_identifier,
             properties,
@@ -93,8 +93,8 @@ struct SubackPacketPayload {
 }
 
 impl SubackPacketPayload {
-    pub fn new(reason_codes: Vec<SubscribeReasonCode>) -> SubackPacketPayload {
-        SubackPacketPayload { reason_codes }
+    pub fn new(reason_codes: Vec<SubscribeReasonCode>) -> Self {
+        Self { reason_codes }
     }
 }
 
@@ -116,17 +116,14 @@ impl Decodable for SubackPacketPayload {
     type Error = SubackPacketError;
     type Cond = u32;
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        payload_len: u32,
-    ) -> Result<SubackPacketPayload, SubackPacketError> {
+    fn decode_with<R: Read>(reader: &mut R, payload_len: u32) -> Result<Self, Self::Error> {
         let mut subs = Vec::new();
 
         for _ in 0..payload_len {
             subs.push(reader.read_u8()?.try_into()?);
         }
 
-        Ok(SubackPacketPayload::new(subs))
+        Ok(Self::new(subs))
     }
 }
 
@@ -184,18 +181,24 @@ impl TryFrom<u8> for SubscribeReasonCode {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            GRANTED_QOS_0 => Ok(Self::GrantedQos0),
-            GRANTED_QOS_1 => Ok(Self::GrantedQos1),
-            GRANTED_QOS_2 => Ok(Self::GrantedQos2),
-            UNSPECIFIED_ERROR => Ok(Self::UnspecifiedError),
-            IMPLEMENTATION_SPECIFIC_ERROR => Ok(Self::ImplementationSpecificError),
-            NOT_AUTHORIZED => Ok(Self::NotAuthorized),
-            TOPIC_FILTER_INVALID => Ok(Self::TopicFilterInvalid),
-            PACKET_IDENTIFIER_IN_USE => Ok(Self::PacketIdentifierInUse),
-            QUOTA_EXCEEDED => Ok(Self::QuotaExceeded),
-            SHARED_SUBSCRIPTION_NOT_SUPPORTED => Ok(Self::SharedSubscriptionNotSupported),
-            SUBSCRIPTION_IDENTIFIERS_NOT_SUPPORTED => Ok(Self::SubscriptionIdentifiersNotSupported),
-            WILDCARD_SUBSCRIPTIONS_NOT_SUPPORTED => Ok(Self::WildcardSubscriptionsNotSupported),
+            GRANTED_QOS_0 => Ok(SubscribeReasonCode::GrantedQos0),
+            GRANTED_QOS_1 => Ok(SubscribeReasonCode::GrantedQos1),
+            GRANTED_QOS_2 => Ok(SubscribeReasonCode::GrantedQos2),
+            UNSPECIFIED_ERROR => Ok(SubscribeReasonCode::UnspecifiedError),
+            IMPLEMENTATION_SPECIFIC_ERROR => Ok(SubscribeReasonCode::ImplementationSpecificError),
+            NOT_AUTHORIZED => Ok(SubscribeReasonCode::NotAuthorized),
+            TOPIC_FILTER_INVALID => Ok(SubscribeReasonCode::TopicFilterInvalid),
+            PACKET_IDENTIFIER_IN_USE => Ok(SubscribeReasonCode::PacketIdentifierInUse),
+            QUOTA_EXCEEDED => Ok(SubscribeReasonCode::QuotaExceeded),
+            SHARED_SUBSCRIPTION_NOT_SUPPORTED => {
+                Ok(SubscribeReasonCode::SharedSubscriptionNotSupported)
+            }
+            SUBSCRIPTION_IDENTIFIERS_NOT_SUPPORTED => {
+                Ok(SubscribeReasonCode::SubscriptionIdentifiersNotSupported)
+            }
+            WILDCARD_SUBSCRIPTIONS_NOT_SUPPORTED => {
+                Ok(SubscribeReasonCode::WildcardSubscriptionsNotSupported)
+            }
             v => Err(SubackPacketError::InvalidSubscribeReasonCode(v)),
         }
     }
@@ -215,14 +218,8 @@ impl Decodable for SubscribeReasonCode {
     type Error = SubackPacketError;
     type Cond = ();
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        _rest: (),
-    ) -> Result<SubscribeReasonCode, SubackPacketError> {
-        reader
-            .read_u8()
-            .map(SubscribeReasonCode::try_from)?
-            .map_err(From::from)
+    fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
+        reader.read_u8().map(Self::try_from)?.map_err(From::from)
     }
 }
 

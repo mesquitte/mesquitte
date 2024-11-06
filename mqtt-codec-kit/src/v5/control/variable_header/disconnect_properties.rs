@@ -167,7 +167,7 @@ impl Decodable for DisconnectProperties {
             }
         }
 
-        Ok(DisconnectProperties {
+        Ok(Self {
             total_length,
             session_expiry_interval,
             reason_string,
