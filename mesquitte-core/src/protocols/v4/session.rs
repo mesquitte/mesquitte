@@ -19,20 +19,18 @@ pub struct Session {
     last_will: Option<LastWill>,
     subscriptions: HashSet<TopicFilter>,
 
-    assigned_client_id: bool,
     client_disconnected: bool,
     server_disconnected: bool,
 }
 
 impl Session {
-    pub fn new(client_id: &str, assigned_client_id: bool) -> Self {
+    pub fn new(client_id: &str) -> Self {
         Self {
             connected_at: Instant::now(),
             last_packet_at: Instant::now(),
             server_packet_id: 1,
 
             client_id: client_id.to_string(),
-            assigned_client_id,
             username: None,
             keep_alive: 0,
             clean_session: true,
@@ -165,13 +163,8 @@ impl fmt::Display for Session {
             r#"client# {} session:
                 connect at : {:?}
              clean session : {}
-                keep alive : {}
-        assigned client id : {}"#,
-            self.client_id,
-            self.connected_at,
-            self.clean_session,
-            self.keep_alive,
-            self.assigned_client_id
+                keep alive : {}"#,
+            self.client_id, self.connected_at, self.clean_session, self.keep_alive,
         )
     }
 }
