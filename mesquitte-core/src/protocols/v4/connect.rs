@@ -70,14 +70,13 @@ protocol level : {:?}
         }
 
         // TODO: handle auth
-
-        let (assigned_client_id, client_id) = if packet.client_identifier().is_empty() {
-            (true, nanoid!())
+        let client_id = if packet.client_identifier().is_empty() {
+            nanoid!()
         } else {
-            (false, packet.client_identifier().to_string())
+            packet.client_identifier().to_string()
         };
 
-        let mut session = Session::new(&client_id, assigned_client_id);
+        let mut session = Session::new(&client_id);
         session.set_clean_session(packet.clean_session());
         session.set_username(packet.username().map(|name| name.to_owned()));
         session.set_keep_alive(packet.keep_alive());

@@ -293,7 +293,7 @@ macro_rules! impl_variable_packet {
         pub enum VariablePacketError {
             #[error(transparent)]
             FixedHeaderError(#[from] FixedHeaderError),
-            #[error("reserved packet type ({0}), [u8, ..{}]", .1.len())]
+            #[error("reserved packet type ({0}), [u8, ..{n}]", n = .1.len())]
             ReservedPacket(u8, Vec<u8>),
             #[error(transparent)]
             IoError(#[from] io::Error),
