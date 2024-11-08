@@ -5,7 +5,11 @@ use kanal::{bounded_async, AsyncSender};
 use mqtt_codec_kit::common::{QualityOfService, TopicFilter};
 use tokio::time;
 
-use crate::{protocols::ProtocolSessionState, store::message::PublishMessage, warn};
+use crate::{
+    protocols::ProtocolSessionState,
+    store::{message::PublishMessage, Storage},
+    warn,
+};
 
 pub enum AddClientReceipt {
     Present(ProtocolSessionState),
@@ -32,8 +36,7 @@ pub enum DeliverMessage {
     Kick(KickReason),
 }
 
-#[derive(Default)]
-pub struct GlobalState {
+pub struct GlobalState<S> {
     // TODO: metrics?
     // TODO: config content
     // max qos
@@ -52,10 +55,18 @@ pub struct GlobalState {
     // max keep alive
     // min keep alive
     // config: Arc<Config>,
+    pub storage: Storage<S>,
     clients: DashMap<String, AsyncSender<DeliverMessage>, foldhash::fast::RandomState>,
 }
 
-impl GlobalState {
+impl<S> GlobalState<S> {
+    pub fn new(storage: Storage<S>) -> Self {
+        Self {
+            storage,
+            clients: DashMap::default(),
+        }
+    }
+
     pub async fn add_client(
         &self,
         client_id: &str,
