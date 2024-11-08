@@ -8,7 +8,7 @@ use tungstenite::{handshake::server::ErrorResponse, http};
 use crate::{
     info,
     server::{config::ServerConfig, process_client, state::GlobalState, Error},
-    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
+    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore},
 };
 #[cfg(feature = "wss")]
 use crate::{server::rustls::rustls_acceptor, warn};
@@ -17,24 +17,15 @@ use super::ws_stream::WsByteStream;
 
 pub struct WsServer<S: 'static> {
     config: ServerConfig,
-    global: &'static GlobalState,
-    storage: &'static Storage<S>,
+    global: &'static GlobalState<S>,
 }
 
 impl<S> WsServer<S>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    pub async fn new(
-        config: ServerConfig,
-        global: &'static GlobalState,
-        storage: &'static Storage<S>,
-    ) -> Result<Self, Error> {
-        Ok(Self {
-            config,
-            global,
-            storage,
-        })
+    pub async fn new(config: ServerConfig, global: &'static GlobalState<S>) -> Result<Self, Error> {
+        Ok(Self { config, global })
     }
 
     #[cfg(feature = "ws")]
@@ -60,8 +51,7 @@ where
                         accept_hdr_async(TokioAdapter::new(stream), ws_callback).await?,
                     );
                     tokio::spawn(async move {
-                        process_client(ws_stream, self.config.version, self.global, self.storage)
-                            .await?;
+                        process_client(ws_stream, self.config.version, self.global).await?;
                         Ok::<(), Error>(())
                     });
                 }
@@ -105,13 +95,7 @@ where
                                 accept_hdr_async(TokioAdapter::new(stream), ws_callback).await?,
                             );
                             tokio::spawn(async move {
-                                process_client(
-                                    ws_stream,
-                                    self.config.version,
-                                    self.global,
-                                    self.storage,
-                                )
-                                .await?;
+                                process_client(ws_stream, self.config.version, self.global).await?;
                                 Ok::<(), Error>(())
                             });
                         }

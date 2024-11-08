@@ -50,7 +50,7 @@ rustls-pemfile = "2.2"
 s2n-quic = "1"
 serde = "1.0"
 tarpc = "0.35"
-tempfile = "3.13"
+tempfile = "3.14"
 thiserror = "2.0"
 tokio = "1.41"
 tokio-rustls = { version = "0.26", default-features = false }

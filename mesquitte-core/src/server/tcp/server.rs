@@ -5,31 +5,22 @@ use tokio::net::TcpSocket;
 use crate::{
     info,
     server::{config::ServerConfig, process_client, state::GlobalState, Error},
-    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
+    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore},
 };
 #[cfg(feature = "mqtts")]
 use crate::{server::rustls::rustls_acceptor, warn};
 
 pub struct TcpServer<S: 'static> {
     config: ServerConfig,
-    global: &'static GlobalState,
-    storage: &'static Storage<S>,
+    global: &'static GlobalState<S>,
 }
 
 impl<S> TcpServer<S>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    pub async fn new(
-        config: ServerConfig,
-        global: &'static GlobalState,
-        storage: &'static Storage<S>,
-    ) -> Result<Self, Error> {
-        Ok(Self {
-            config,
-            global,
-            storage,
-        })
+    pub async fn new(config: ServerConfig, global: &'static GlobalState<S>) -> Result<Self, Error> {
+        Ok(Self { config, global })
     }
 
     #[cfg(feature = "mqtt")]
@@ -52,8 +43,7 @@ where
             let task = tokio::spawn(async move {
                 while let Ok((stream, _addr)) = listener.accept().await {
                     tokio::spawn(async move {
-                        process_client(stream, self.config.version, self.global, self.storage)
-                            .await?;
+                        process_client(stream, self.config.version, self.global).await?;
                         Ok::<(), Error>(())
                     });
                 }
@@ -94,13 +84,7 @@ where
                     match acceptor.accept(stream).await {
                         Ok(stream) => {
                             tokio::spawn(async move {
-                                process_client(
-                                    stream,
-                                    self.config.version,
-                                    self.global,
-                                    self.storage,
-                                )
-                                .await?;
+                                process_client(stream, self.config.version, self.global).await?;
                                 Ok::<(), Error>(())
                             });
                         }

@@ -5,29 +5,20 @@ use s2n_quic::Server;
 use crate::{
     info,
     server::{config::ServerConfig, process_client, state::GlobalState, Error},
-    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
+    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore},
 };
 
 pub struct QuicServer<S: 'static> {
     config: ServerConfig,
-    global: &'static GlobalState,
-    storage: &'static Storage<S>,
+    global: &'static GlobalState<S>,
 }
 
 impl<S> QuicServer<S>
 where
     S: MessageStore + RetainMessageStore + TopicStore,
 {
-    pub fn new(
-        config: ServerConfig,
-        global: &'static GlobalState,
-        storage: &'static Storage<S>,
-    ) -> Result<Self, Error> {
-        Ok(QuicServer {
-            config,
-            global,
-            storage,
-        })
+    pub fn new(config: ServerConfig, global: &'static GlobalState<S>) -> Result<Self, Error> {
+        Ok(QuicServer { config, global })
     }
 
     pub async fn serve(self) -> Result<(), Error> {
@@ -60,14 +51,7 @@ where
                     tokio::spawn(async move {
                         while let Ok(Some(stream)) = connection.accept_bidirectional_stream().await
                         {
-                            match process_client(
-                                stream,
-                                self.config.version,
-                                self.global,
-                                self.storage,
-                            )
-                            .await
-                            {
+                            match process_client(stream, self.config.version, self.global).await {
                                 Ok(v) => v,
                                 Err(e) => return Err(e),
                             }

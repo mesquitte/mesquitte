@@ -9,7 +9,7 @@ use crate::protocols::v4;
 #[cfg(feature = "v5")]
 use crate::protocols::v5;
 use crate::{
-    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
+    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore},
     warn,
 };
 
@@ -68,11 +68,10 @@ pub enum Error {
 async fn process_client<S, T>(
     stream: S,
     level: ProtocolLevel,
-    global: &'static GlobalState,
-    storage: &'static Storage<T>,
+    global: &'static GlobalState<T>,
 ) -> Result<(), Error>
 where
-    S: AsyncRead + AsyncWrite + Send + 'static,
+    S: AsyncRead + AsyncWrite + Send + Sync + 'static,
     T: MessageStore + RetainMessageStore + TopicStore,
 {
     let (rd, wr) = split(stream);
@@ -83,7 +82,7 @@ where
                 return Err(Error::UnsupportProtocol("v4".to_string()));
             }
             #[cfg(feature = "v4")]
-            v4::EventLoop::new(rd, wr, global, storage).run().await;
+            v4::EventLoop::new(rd, wr, global).run().await;
         }
         ProtocolLevel::Version50 => {
             if cfg!(feature = "v4") && !cfg!(feature = "v5") {
