@@ -232,7 +232,7 @@ impl Decodable for SubscribeOptions {
             0 => QualityOfService::Level0,
             1 => QualityOfService::Level1,
             2 => QualityOfService::Level2,
-            _ => QualityOfService::Level0,
+            _ => return Err(SubscribePacketError::InvalidQualityOfService),
         };
 
         Ok(Self {
@@ -252,8 +252,8 @@ pub enum RetainHandling {
 }
 
 impl From<RetainHandling> for u8 {
-    fn from(val: RetainHandling) -> Self {
-        match val {
+    fn from(value: RetainHandling) -> Self {
+        match value {
             RetainHandling::SendAtSubscribe => 0,
             RetainHandling::SendAtSubscribeIfNotExist => 1,
             RetainHandling::DoNotSend => 2,
@@ -289,10 +289,10 @@ pub enum SubscribePacketError {
 }
 
 impl From<TopicFilterDecodeError> for SubscribePacketError {
-    fn from(e: TopicFilterDecodeError) -> Self {
-        match e {
-            TopicFilterDecodeError::IoError(e) => e.into(),
-            TopicFilterDecodeError::InvalidTopicFilter(e) => e.into(),
+    fn from(err: TopicFilterDecodeError) -> Self {
+        match err {
+            TopicFilterDecodeError::IoError(err) => err.into(),
+            TopicFilterDecodeError::InvalidTopicFilter(err) => err.into(),
         }
     }
 }
