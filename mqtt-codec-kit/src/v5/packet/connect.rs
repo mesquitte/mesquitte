@@ -113,6 +113,7 @@ impl ConnectPacket {
         }
     }
 
+    /// If the provided parameter is not valid, it will be set to the default value: QualityOfService::Level0.
     pub fn set_will_qos(&mut self, will_qos: u8) {
         let qos = match will_qos {
             0 => QualityOfService::Level0,
@@ -593,7 +594,7 @@ impl Decodable for ConnectPayload {
             0 => QualityOfService::Level0,
             1 => QualityOfService::Level1,
             2 => QualityOfService::Level2,
-            _ => QualityOfService::Level0,
+            _ => return Err(ConnectPacketError::InvalidQualityOfService),
         };
 
         let identifier = String::decode(reader)?;
@@ -642,6 +643,8 @@ pub enum ConnectPacketError {
     IoError(#[from] io::Error),
     TopicNameError(#[from] TopicNameError),
     PropertyTypeError(#[from] PropertyTypeError),
+    #[error("invalid quality of service")]
+    InvalidQualityOfService,
 }
 
 // LastWill
@@ -700,12 +703,11 @@ impl Encodable for LastWill {
     }
 
     fn encoded_length(&self) -> u32 {
-        let mut len = 0;
-
-        len += self.properties.encoded_length();
-        len += 2 + self.topic.encoded_length() + 2 + self.message.encoded_length();
-
-        len
+        self.properties.encoded_length()
+            + 2
+            + self.topic.encoded_length()
+            + 2
+            + self.message.encoded_length()
     }
 }
 

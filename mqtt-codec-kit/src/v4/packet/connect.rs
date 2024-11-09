@@ -108,6 +108,7 @@ impl ConnectPacket {
         }
     }
 
+    /// If the provided parameter is not valid, it will be set to the default value: QualityOfService::Level0.
     pub fn set_will_qos(&mut self, will_qos: u8) {
         let qos = match will_qos {
             0 => QualityOfService::Level0,
@@ -146,6 +147,7 @@ impl ConnectPacket {
         self.flags.will_retain
     }
 
+    /// If the provided parameter is not valid, it will be set to the default value: QualityOfService::Level0.
     pub fn will_qos(&self) -> QualityOfService {
         match self.flags.will_qos {
             0 => QualityOfService::Level0,
@@ -191,7 +193,7 @@ impl DecodablePacket for ConnectPacket {
         let protoname: ProtocolName = Decodable::decode(reader)?;
         let protocol_level: ProtocolLevel =
             Decodable::decode(reader).map_err(VariableHeaderError::InvalidProtocolLevel)?;
-        let flags: ConnectFlags = Decodable::decode(reader).map_err(|e| match e {
+        let flags: ConnectFlags = Decodable::decode(reader).map_err(|err| match err {
             ConnectFlagsError::IoError(err) => VariableHeaderError::IoError(err),
             ConnectFlagsError::InvalidReservedFlag => VariableHeaderError::InvalidReservedFlag,
         })?;
@@ -296,14 +298,14 @@ impl Decodable for ConnectPacketPayload {
             0 => QualityOfService::Level0,
             1 => QualityOfService::Level1,
             2 => QualityOfService::Level2,
-            _ => QualityOfService::Level0,
+            _ => return Err(ConnectPacketError::InvalidQualityOfService),
         };
 
         let ident = String::decode(reader)?;
         let will = if need_will {
-            let topic = TopicName::decode(reader).map_err(|e| match e {
-                TopicNameDecodeError::IoError(e) => ConnectPacketError::from(e),
-                TopicNameDecodeError::InvalidTopicName(e) => e.into(),
+            let topic = TopicName::decode(reader).map_err(|err| match err {
+                TopicNameDecodeError::IoError(err) => ConnectPacketError::from(err),
+                TopicNameDecodeError::InvalidTopicName(err) => err.into(),
             })?;
             let msg = VarBytes::decode(reader)?;
             Some(LastWill {
@@ -340,6 +342,8 @@ impl Decodable for ConnectPacketPayload {
 pub enum ConnectPacketError {
     IoError(#[from] io::Error),
     TopicNameError(#[from] TopicNameError),
+    #[error("invalid quality of service")]
+    InvalidQualityOfService,
 }
 
 // LastWill
@@ -387,11 +391,7 @@ impl Encodable for LastWill {
     }
 
     fn encoded_length(&self) -> u32 {
-        let mut len = 0;
-
-        len += 2 + self.topic.encoded_length() + 2 + self.message.encoded_length();
-
-        len
+        2 + self.topic.encoded_length() + 2 + self.message.encoded_length()
     }
 }
 
