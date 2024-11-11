@@ -68,6 +68,8 @@ where
             let half_interval = Duration::from_millis(self.session.keep_alive() as u64 * 500);
             let mut keep_alive_tick = interval_at(Instant::now() + half_interval, half_interval);
             let keep_alive_timeout = half_interval * 3;
+            let interval = Duration::from_millis(500);
+            let mut tick = interval_at(Instant::now() + interval, interval);
             loop {
                 tokio::select! {
                     packet = self.reader.next() => match packet {
@@ -98,6 +100,12 @@ where
                         Err(err) => {
                             warn!("deliver receive channel: {err}");
                             break;
+                        }
+                    },
+                    _ = tick.tick() => {
+                        match self.handle_pending_messages(false).await {
+                            Ok(_) => {},
+                            Err(_) => break,
                         }
                     },
                     _ = keep_alive_tick.tick() => {
@@ -668,5 +676,44 @@ where
             }
         }
         Ok(())
+    }
+
+    async fn handle_pending_messages(&mut self, all: bool) -> Result<(), Error> {
+        let ret = if all {
+            self.global
+                .storage
+                .get_all_pending_messages(self.session.client_id())
+                .await
+        } else {
+            self.global
+                .storage
+                .try_get_pending_messages(self.session.client_id())
+                .await
+        };
+
+        match ret {
+            Ok(Some(messages)) => {
+                for (packet_id, pending_message) in messages {
+                    match pending_message.pubrec_at() {
+                        Some(_) => {
+                            self.write_tx
+                                .send(WritePacket::VariablePacket(
+                                    PubrelPacket::new(packet_id).into(),
+                                ))
+                                .await?;
+                        }
+                        None => {
+                            let pkt: PublishPacket = pending_message.into();
+                            self.write_tx
+                                .send(WritePacket::VariablePacket(pkt.into()))
+                                .await?;
+                        }
+                    }
+                }
+                Ok(())
+            }
+            Ok(None) => Ok(()),
+            Err(err) => Err(Error::Io(err)),
+        }
     }
 }
