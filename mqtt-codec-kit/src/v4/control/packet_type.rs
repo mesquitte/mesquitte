@@ -1,5 +1,7 @@
 //! Packet types
 
+use std::fmt::Display;
+
 use crate::common::QualityOfService;
 
 /// Packet type
@@ -174,6 +176,27 @@ fn get_control_type(val: u8) -> Option<ControlType> {
     Some(typ)
 }
 
+impl Display for PacketType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.control_type() {
+            ControlType::Connect => write!(f, "CONNECT"),
+            ControlType::ConnectAcknowledgement => write!(f, "CONNACK"),
+            ControlType::Publish => write!(f, "PUBLISH"),
+            ControlType::PublishAcknowledgement => write!(f, "PUBACK"),
+            ControlType::PublishReceived => write!(f, "PUBREC"),
+            ControlType::PublishRelease => write!(f, "PUBREL"),
+            ControlType::PublishComplete => write!(f, "PUBCOMP"),
+            ControlType::Subscribe => write!(f, "SUBSCRIBE"),
+            ControlType::SubscribeAcknowledgement => write!(f, "SUBACK"),
+            ControlType::Unsubscribe => write!(f, "UNSUBSCRIBE"),
+            ControlType::UnsubscribeAcknowledgement => write!(f, "UNSUBACK"),
+            ControlType::PingRequest => write!(f, "PINGREQ"),
+            ControlType::PingResponse => write!(f, "PINGRESP"),
+            ControlType::Disconnect => write!(f, "DISCONNECT"),
+        }
+    }
+}
+
 /// Parsing packet type errors
 #[derive(Debug, thiserror::Error)]
 pub enum PacketTypeError {
@@ -202,4 +225,54 @@ mod value {
     pub const PINGREQ: u8 = 12;
     pub const PINGRESP: u8 = 13;
     pub const DISCONNECT: u8 = 14;
+}
+
+#[cfg(test)]
+mod test {
+    use crate::v4::control::{ControlType, PacketType};
+
+    #[test]
+    fn test_display_packet_type() {
+        let connect = PacketType::with_default(ControlType::Connect);
+        assert_eq!(connect.to_string(), "CONNECT");
+
+        let connack = PacketType::with_default(ControlType::ConnectAcknowledgement);
+        assert_eq!(connack.to_string(), "CONNACK");
+
+        let publish = PacketType::with_default(ControlType::Publish);
+        assert_eq!(publish.to_string(), "PUBLISH");
+
+        let puback = PacketType::with_default(ControlType::PublishAcknowledgement);
+        assert_eq!(puback.to_string(), "PUBACK");
+
+        let pubrec = PacketType::with_default(ControlType::PublishReceived);
+        assert_eq!(pubrec.to_string(), "PUBREC");
+
+        let pubrel = PacketType::with_default(ControlType::PublishRelease);
+        assert_eq!(pubrel.to_string(), "PUBREL");
+
+        let pubcomp = PacketType::with_default(ControlType::PublishComplete);
+        assert_eq!(pubcomp.to_string(), "PUBCOMP");
+
+        let subscribe = PacketType::with_default(ControlType::Subscribe);
+        assert_eq!(subscribe.to_string(), "SUBSCRIBE");
+
+        let suback = PacketType::with_default(ControlType::SubscribeAcknowledgement);
+        assert_eq!(suback.to_string(), "SUBACK");
+
+        let unsubscribe = PacketType::with_default(ControlType::Unsubscribe);
+        assert_eq!(unsubscribe.to_string(), "UNSUBSCRIBE");
+
+        let unsuback = PacketType::with_default(ControlType::UnsubscribeAcknowledgement);
+        assert_eq!(unsuback.to_string(), "UNSUBACK");
+
+        let pingreq = PacketType::with_default(ControlType::PingRequest);
+        assert_eq!(pingreq.to_string(), "PINGREQ");
+
+        let pingresp = PacketType::with_default(ControlType::PingResponse);
+        assert_eq!(pingresp.to_string(), "PINGRESP");
+
+        let disconnect = PacketType::with_default(ControlType::Disconnect);
+        assert_eq!(disconnect.to_string(), "DISCONNECT");
+    }
 }

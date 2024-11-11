@@ -1,4 +1,7 @@
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
@@ -67,6 +70,16 @@ impl Decodable for ConnectFlags {
             clean_session: (code & 0b0000_0010) != 0,
             reserved: (code & 0b0000_0001) != 0,
         })
+    }
+}
+
+impl Display for ConnectFlags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{username: {}, password: {}, will_retain: {}, will_qos: {}, will_flag: {}, clean_session: {}, reserved: {}}}",
+            self.username, self.password, self.will_retain, self.will_qos, self.will_flag, self.clean_session, self.reserved
+        )
     }
 }
 

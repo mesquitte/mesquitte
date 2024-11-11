@@ -1,4 +1,7 @@
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use crate::common::{Decodable, Encodable};
 
@@ -36,5 +39,11 @@ impl Decodable for ProtocolName {
 
     fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
         Ok(ProtocolName(Decodable::decode(reader)?))
+    }
+}
+
+impl Display for ProtocolName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }

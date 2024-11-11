@@ -1,6 +1,6 @@
 //! CONNACK
 
-use std::io::Read;
+use std::{fmt::Display, io::Read};
 
 use crate::{
     common::{packet::DecodablePacket, ConnackFlags, ConnectAckFlagsError, Decodable},
@@ -78,6 +78,16 @@ impl DecodablePacket for ConnackPacket {
     }
 }
 
+impl Display for ConnackPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, flags: {}, reason_code: {}, properties: {}}}",
+            self.fixed_header, self.flags, self.reason_code, self.properties
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
@@ -122,7 +132,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_connack_packet_basic() {
+    fn test_connack_packet_basic() {
         let packet = ConnackPacket::new(false, ConnectReasonCode::ClientIdentifierNotValid);
 
         let mut buf = Vec::new();
@@ -132,5 +142,21 @@ mod test {
         let decoded = ConnackPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_connack_packet() {
+        let mut packet = ConnackPacket::new(true, ConnectReasonCode::Success);
+
+        let mut properties = ConnackProperties::default();
+        properties.add_user_property("foo", "bar");
+        properties.set_topic_alias_max(Some(10));
+
+        packet.set_properties(properties);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: CONNACK, remaining_length: 17}, flags: {session_present: true}, reason_code: 0, properties: {session_expiry_interval: None, receive_maximum: None, max_qos: None, retain_available: None, max_packet_size: None, assigned_client_identifier: None, topic_alias_max: 10, reason_string: None, user_properties: [(foo, bar)], wildcard_subscription_available: None, subscription_identifiers_available: None, shared_subscription_available: None, server_keep_alive: None, response_information: None, server_reference: None, authentication_method: None, authentication_data: None}}"
+        );
     }
 }

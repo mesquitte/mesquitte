@@ -1,6 +1,6 @@
 //! PUBACK
 
-use std::io::Read;
+use std::{fmt::Display, io::Read};
 
 use crate::{
     common::{packet::DecodablePacket, Decodable, PacketIdentifier},
@@ -53,6 +53,16 @@ impl DecodablePacket for PubackPacket {
     }
 }
 
+impl Display for PubackPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}}}",
+            self.fixed_header, self.packet_identifier
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
@@ -62,7 +72,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_puback_packet_encode_hex() {
+    fn test_puback_packet_encode_hex() {
         let packet = PubackPacket::new(40306);
 
         let expected = b"\x40\x02\x9d\x72";
@@ -74,7 +84,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_puback_packet_decode_hex() {
+    fn test_puback_packet_decode_hex() {
         let encoded_data = b"\x40\x02\x9d\x73";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -86,7 +96,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_puback_packet_basic() {
+    fn test_puback_packet_basic() {
         let packet = PubackPacket::new(10001);
 
         let mut buf = Vec::new();
@@ -96,5 +106,15 @@ mod test {
         let decoded = PubackPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_puback_packet() {
+        let packet = PubackPacket::new(123);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: PUBACK, remaining_length: 2}, packet_identifier: 123}"
+        );
     }
 }

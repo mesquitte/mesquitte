@@ -1,6 +1,9 @@
 //! Unsubscribe Properties
 
-use std::io::{self, Write};
+use std::{
+    fmt::Display,
+    io::{self, Write},
+};
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
@@ -97,5 +100,19 @@ impl Decodable for UnsubscribeProperties {
             total_length,
             user_properties,
         })
+    }
+}
+
+impl Display for UnsubscribeProperties {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{user_properties: [")?;
+        let mut iter = self.user_properties.iter();
+        if let Some(first) = iter.next() {
+            write!(f, "({}, {})", first.0, first.1)?;
+            for property in iter {
+                write!(f, ", ({}, {})", property.0, property.1)?;
+            }
+        }
+        write!(f, "]}}")
     }
 }

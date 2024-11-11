@@ -1,6 +1,9 @@
 //! Fixed header in MQTT
 
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
 #[cfg(all(feature = "v4", feature = "parse"))]
@@ -148,6 +151,16 @@ impl Decodable for FixedHeader {
     }
 }
 
+impl Display for FixedHeader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{packet_type: {}, remaining_length: {}}}",
+            self.packet_type, self.remaining_length
+        )
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum FixedHeaderError {
     #[error("malformed remaining length")]
@@ -179,7 +192,7 @@ mod test {
     }
 
     #[test]
-    fn test_decode_fixed_header() {
+    fn test_decod_fixed_header() {
         let stream = b"\x10\xc1\x02";
         let mut cursor = Cursor::new(&stream[..]);
         let header = FixedHeader::decode(&mut cursor).unwrap();
@@ -196,5 +209,15 @@ mod test {
         let stream = b"\x10\x80\x80\x80\x80\x02";
         let mut cursor = Cursor::new(&stream[..]);
         FixedHeader::decode(&mut cursor).unwrap();
+    }
+
+    #[test]
+    fn test_display_fixed_header() {
+        let header = FixedHeader::new(PacketType::with_default(ControlType::Connect), 321);
+
+        assert_eq!(
+            header.to_string(),
+            "{packet_type: CONNECT, remaining_length: 321}"
+        );
     }
 }

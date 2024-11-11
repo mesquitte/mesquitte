@@ -1,6 +1,9 @@
 //! Disconnect Properties
 
-use std::io::{self, Write};
+use std::{
+    fmt::Display,
+    io::{self, Write},
+};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -174,5 +177,35 @@ impl Decodable for DisconnectProperties {
             user_properties,
             server_reference,
         })
+    }
+}
+
+impl Display for DisconnectProperties {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{")?;
+        match &self.session_expiry_interval {
+            Some(session_expiry_interval) => {
+                write!(f, "session_expiry_interval: {}", session_expiry_interval)?
+            }
+            None => write!(f, "session_expiry_interval: None")?,
+        };
+        match &self.reason_string {
+            Some(reason_string) => write!(f, ", reason_string: {}", reason_string)?,
+            None => write!(f, ", reason_string: None")?,
+        };
+        write!(f, ", user_properties: [")?;
+        let mut iter = self.user_properties.iter();
+        if let Some(first) = iter.next() {
+            write!(f, "({}, {})", first.0, first.1)?;
+            for property in iter {
+                write!(f, ", ({}, {})", property.0, property.1)?;
+            }
+        }
+        write!(f, "]")?;
+        match &self.server_reference {
+            Some(server_reference) => write!(f, ", server_reference: {}", server_reference)?,
+            None => write!(f, ", server_reference: None")?,
+        };
+        write!(f, "}}")
     }
 }

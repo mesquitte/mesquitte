@@ -1,6 +1,7 @@
 //! SUBSCRIBE
 
 use std::{
+    fmt::Display,
     io::{self, Read, Write},
     string::FromUtf8Error,
 };
@@ -25,7 +26,7 @@ pub struct SubscribePacket {
     fixed_header: FixedHeader,
     packet_identifier: PacketIdentifier,
     properties: SubscribeProperties,
-    payload: SubscribePayload,
+    payload: SubscribePacketPayload,
 }
 
 encodable_packet!(SubscribePacket(packet_identifier, properties, payload));
@@ -36,7 +37,7 @@ impl SubscribePacket {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::Subscribe), 0),
             packet_identifier: PacketIdentifier(pkid),
             properties: SubscribeProperties::default(),
-            payload: SubscribePayload::new(subscribes),
+            payload: SubscribePacketPayload::new(subscribes),
         };
         pkt.fix_header_remaining_len();
         pkt
@@ -73,7 +74,7 @@ impl DecodablePacket for SubscribePacket {
         let packet_identifier: PacketIdentifier = PacketIdentifier::decode(reader)?;
         let properties: SubscribeProperties =
             SubscribeProperties::decode(reader).map_err(VariableHeaderError::PropertyTypeError)?;
-        let payload: SubscribePayload = SubscribePayload::decode_with(
+        let payload: SubscribePacketPayload = SubscribePacketPayload::decode_with(
             reader,
             fixed_header.remaining_length
                 - packet_identifier.encoded_length()
@@ -90,19 +91,29 @@ impl DecodablePacket for SubscribePacket {
     }
 }
 
+impl Display for SubscribePacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}, properties: {}, payload: {}}}",
+            self.fixed_header, self.packet_identifier, self.properties, self.payload
+        )
+    }
+}
+
 /// Payload of subscribe packet
 #[derive(Debug, Eq, PartialEq, Clone)]
-struct SubscribePayload {
+struct SubscribePacketPayload {
     subscribes: Vec<(TopicFilter, SubscribeOptions)>,
 }
 
-impl SubscribePayload {
+impl SubscribePacketPayload {
     pub fn new(subs: Vec<(TopicFilter, SubscribeOptions)>) -> Self {
         Self { subscribes: subs }
     }
 }
 
-impl Encodable for SubscribePayload {
+impl Encodable for SubscribePacketPayload {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
         for (filter, option) in self.subscribes.iter() {
             filter.encode(writer)?;
@@ -119,7 +130,7 @@ impl Encodable for SubscribePayload {
     }
 }
 
-impl Decodable for SubscribePayload {
+impl Decodable for SubscribePacketPayload {
     type Error = SubscribePacketError;
     type Cond = u32;
 
@@ -135,6 +146,20 @@ impl Decodable for SubscribePayload {
         }
 
         Ok(Self::new(subs))
+    }
+}
+
+impl Display for SubscribePacketPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{subscribes: [")?;
+        let mut iter = self.subscribes.iter();
+        if let Some(first) = iter.next() {
+            write!(f, "({}, {})", first.0, first.1)?;
+            for subscribe in iter {
+                write!(f, ", ({}, {})", subscribe.0, subscribe.1)?;
+            }
+        }
+        write!(f, "]}}")
     }
 }
 
@@ -244,6 +269,16 @@ impl Decodable for SubscribeOptions {
     }
 }
 
+impl Display for SubscribeOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{qos: {}, no_local: {}, retain_as_published: {}, retain_handling: {}}}",
+            self.qos, self.no_local, self.retain_as_published, self.retain_handling
+        )
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum RetainHandling {
     SendAtSubscribe,
@@ -261,6 +296,12 @@ impl From<RetainHandling> for u8 {
     }
 }
 
+impl From<&RetainHandling> for u8 {
+    fn from(value: &RetainHandling) -> Self {
+        (*value).into()
+    }
+}
+
 impl TryFrom<u8> for RetainHandling {
     type Error = SubscribePacketError;
 
@@ -271,6 +312,13 @@ impl TryFrom<u8> for RetainHandling {
             2 => Ok(RetainHandling::DoNotSend),
             _ => Err(SubscribePacketError::InvalidRetainHandling),
         }
+    }
+}
+
+impl Display for RetainHandling {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value: u8 = self.into();
+        write!(f, "{}", value)
     }
 }
 
@@ -328,7 +376,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_subscribe_packet_decode_hex() {
+    fn test_subscribe_packet_decode_hex() {
         let encoded_data = b"\x82\x0f\xf7\x1a\x00\x00\x03\x62\x2f\x63\x00\x00\x03\x62\x2f\x64\x00";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -350,7 +398,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_subscribe_packet_basic() {
+    fn test_subscribe_packet_basic() {
         let subscribes = vec![
             (
                 TopicFilter::new("a/b".to_string()).unwrap(),
@@ -370,5 +418,25 @@ mod test {
         let decoded = SubscribePacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_subscribe_packet() {
+        let subscriptions = vec![
+            (
+                TopicFilter::new("test/topic/1").unwrap(),
+                SubscribeOptions::default(),
+            ),
+            (
+                TopicFilter::new("test/topic/2").unwrap(),
+                SubscribeOptions::default(),
+            ),
+        ];
+        let packet = SubscribePacket::new(2345, subscriptions);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: SUBSCRIBE, remaining_length: 33}, packet_identifier: 2345, properties: {identifier: None, user_properties: []}, payload: {subscribes: [(test/topic/1, {qos: 0, no_local: false, retain_as_published: false, retain_handling: 0}), (test/topic/2, {qos: 0, no_local: false, retain_as_published: false, retain_handling: 0})]}}"
+        );
     }
 }

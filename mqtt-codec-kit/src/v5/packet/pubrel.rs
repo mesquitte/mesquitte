@@ -1,6 +1,9 @@
 //! PUBREL
 
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use crate::{
     common::{
@@ -135,6 +138,16 @@ impl DecodablePacket for PubrelPacket {
     }
 }
 
+impl Display for PubrelPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}, reason_code: {}, properties: {}}}",
+            self.fixed_header, self.packet_identifier, self.reason_code, self.properties
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
@@ -144,7 +157,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_pubrel_packet_encode_hex() {
+    fn test_pubrel_packet_encode_hex() {
         let packet = PubrelPacket::new(48059, PubrelReasonCode::Success);
 
         let expected = b"\x62\x02\xbb\xbb";
@@ -156,7 +169,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_pubrel_packet_decode_hex() {
+    fn test_pubrel_packet_decode_hex() {
         let encoded_data = b"\x62\x02\xbb\xbb";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -168,7 +181,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_pubrel_packet_basic() {
+    fn test_pubrel_packet_basic() {
         let packet = PubrelPacket::new_success(10001);
 
         let mut buf = Vec::new();
@@ -181,7 +194,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_pubrel_packet_with_reason() {
+    fn test_pubrel_packet_with_reason() {
         let packet = PubrelPacket::new(10001, PubrelReasonCode::PacketIdentifierNotFound);
 
         let mut buf = Vec::new();
@@ -194,7 +207,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_pubrel_packet_with_properties() {
+    fn test_pubrel_packet_with_properties() {
         let mut packet = PubrelPacket::new(10001, PubrelReasonCode::PacketIdentifierNotFound);
 
         let mut properties = PubrelProperties::default();
@@ -210,5 +223,15 @@ mod test {
         let decoded = PubrelPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_pubrel_packet() {
+        let packet = PubrelPacket::new(123, PubrelReasonCode::PacketIdentifierNotFound);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: PUBREL, remaining_length: 3}, packet_identifier: 123, reason_code: 146, properties: {reason_string: None, user_properties: []}}"
+        );
     }
 }

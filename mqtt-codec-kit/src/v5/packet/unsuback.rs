@@ -1,6 +1,9 @@
 //! UNSUBACK
 
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
@@ -95,6 +98,16 @@ impl DecodablePacket for UnsubackPacket {
     }
 }
 
+impl Display for UnsubackPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}, properties: {}, payload: {}}}",
+            self.fixed_header, self.packet_identifier, self.properties, self.payload
+        )
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
 struct UnsubackPacketPayload {
     reason_codes: Vec<UnsubscribeReasonCode>,
@@ -132,6 +145,20 @@ impl Decodable for UnsubackPacketPayload {
         }
 
         Ok(Self::new(unsubscribes))
+    }
+}
+
+impl Display for UnsubackPacketPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{reason_codes: [")?;
+        let mut iter = self.reason_codes.iter();
+        if let Some(first) = iter.next() {
+            write!(f, "{}", first)?;
+            for code in iter {
+                write!(f, ", {}", code)?;
+            }
+        }
+        write!(f, "]}}")
     }
 }
 
@@ -210,6 +237,13 @@ impl Decodable for UnsubscribeReasonCode {
     }
 }
 
+impl Display for UnsubscribeReasonCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let code: u8 = self.into();
+        write!(f, "{}", code)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum UnsubackPacketError {
     #[error(transparent)]
@@ -227,7 +261,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_unsuback_packet_encode_hex() {
+    fn test_unsuback_packet_encode_hex() {
         let packet = UnsubackPacket::new(63256, vec![UnsubscribeReasonCode::Success]);
 
         let expected = b"\xb0\x04\xf7\x18\x00\x00";
@@ -239,7 +273,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_unsuback_packet_decode_hex() {
+    fn test_unsuback_packet_decode_hex() {
         let encoded_data = b"\xb0\x04\xf7\x19\x00\x00";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -251,7 +285,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_unsuback_packet_basic() {
+    fn test_unsuback_packet_basic() {
         let unsubscribes = vec![UnsubscribeReasonCode::Success];
 
         let packet = UnsubackPacket::new(10001, unsubscribes);
@@ -266,7 +300,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_unsuback_packet_with_properties() {
+    fn test_unsuback_packet_with_properties() {
         let unsubscribes = vec![UnsubscribeReasonCode::Success];
 
         let mut properties = UnsubackProperties::default();
@@ -282,5 +316,15 @@ mod test {
         let decoded = UnsubackPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_unsuback_packet() {
+        let packet = UnsubackPacket::new(123, vec![UnsubscribeReasonCode::NoSubscriptionExisted]);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: UNSUBACK, remaining_length: 4}, packet_identifier: 123, properties: {reason_string: None, user_properties: []}, payload: {reason_codes: [17]}}"
+        );
     }
 }

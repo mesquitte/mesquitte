@@ -1,6 +1,9 @@
 //! PUBLISH
 
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use crate::{
     common::{
@@ -137,6 +140,38 @@ impl DecodablePacket for PublishPacket {
     }
 }
 
+impl Display for PublishPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, topic_name: {}",
+            self.fixed_header, self.topic_name
+        )?;
+        match self.packet_identifier {
+            Some(packet_identifier) => write!(f, ", packet_identifier: {}", packet_identifier)?,
+            None => write!(f, ", packet_identifier: None")?,
+        };
+
+        match std::str::from_utf8(&self.payload) {
+            Ok(s) if s.chars().all(|c| c.is_ascii_graphic() || c == ' ') => {
+                write!(f, ", payload: {}", s)?;
+            }
+            _ => {
+                write!(f, ", payload: [")?;
+                let mut iter = self.payload.iter();
+                if let Some(first) = iter.next() {
+                    write!(f, "{}", first)?;
+                    for byte in iter {
+                        write!(f, ", {}", byte)?;
+                    }
+                }
+                write!(f, "]")?;
+            }
+        };
+        write!(f, "}}")
+    }
+}
+
 /// `PUBLISH` packet by reference, for encoding only
 pub struct PublishPacketRef<'a> {
     fixed_header: FixedHeader,
@@ -200,7 +235,7 @@ mod test {
     use crate::common::{Decodable, Encodable};
 
     #[test]
-    pub fn test_publish_packet_encode_hex() {
+    fn test_publish_packet_encode_hex() {
         let mut packet = PublishPacket::new(
             TopicName::new("a/b").unwrap(),
             QoSWithPacketIdentifier::Level1(40306),
@@ -218,7 +253,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_publish_packet_decode_hex() {
+    fn test_publish_packet_decode_hex() {
         let encoded_data = b"\x30\x1c\x00\x03\x61\x2f\x62\x7b\x22\x6d\x73\x67\x22\x3a\x22\x68\x65\x6c\x6c\x6f\x2c\x20\x77\x6f\x72\x6c\x64\x21\x22\x7d";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -248,5 +283,33 @@ mod test {
         let decoded = PublishPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_readable_publish_packet() {
+        let packet = PublishPacket::new(
+            TopicName::new("a/b".to_owned()).unwrap(),
+            QoSWithPacketIdentifier::Level2(10),
+            b"Hello world!".to_vec(),
+        );
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: PUBLISH, remaining_length: 19}, topic_name: a/b, packet_identifier: 10, payload: Hello world!}"
+        );
+    }
+
+    #[test]
+    fn test_display_non_readable_publish_packet() {
+        let packet = PublishPacket::new(
+            TopicName::new("a/b".to_owned()).unwrap(),
+            QoSWithPacketIdentifier::Level2(10),
+            vec![1, 2, 3, 4],
+        );
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: PUBLISH, remaining_length: 11}, topic_name: a/b, packet_identifier: 10, payload: [1, 2, 3, 4]}"
+        );
     }
 }

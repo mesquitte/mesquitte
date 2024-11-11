@@ -1,6 +1,7 @@
 //! Topic filter
 
 use std::{
+    fmt::Display,
     io::{self, Read, Write},
     ops::Deref,
 };
@@ -151,6 +152,12 @@ impl Deref for TopicFilter {
 
     fn deref(&self) -> &Self::Target {
         unsafe { TopicFilterRef::new_unchecked(&self.0) }
+    }
+}
+
+impl Display for TopicFilter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

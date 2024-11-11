@@ -1,6 +1,9 @@
 //! SUBACK
 
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
@@ -87,6 +90,16 @@ impl DecodablePacket for SubackPacket {
     }
 }
 
+impl Display for SubackPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}, properties: {}, payload: {}}}",
+            self.fixed_header, self.packet_identifier, self.properties, self.payload
+        )
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct SubackPacketPayload {
     reason_codes: Vec<SubscribeReasonCode>,
@@ -124,6 +137,20 @@ impl Decodable for SubackPacketPayload {
         }
 
         Ok(Self::new(subs))
+    }
+}
+
+impl Display for SubackPacketPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{reason_codes: [")?;
+        let mut iter = self.reason_codes.iter();
+        if let Some(first) = iter.next() {
+            write!(f, "{}", first)?;
+            for code in iter {
+                write!(f, ", {}", code)?;
+            }
+        }
+        write!(f, "]}}")
     }
 }
 
@@ -223,6 +250,13 @@ impl Decodable for SubscribeReasonCode {
     }
 }
 
+impl Display for SubscribeReasonCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let code: u8 = self.into();
+        write!(f, "{}", code)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SubackPacketError {
     #[error(transparent)]
@@ -240,7 +274,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_suback_packet_encode_hex() {
+    fn test_suback_packet_encode_hex() {
         let packet = SubackPacket::new(63254, vec![SubscribeReasonCode::GrantedQos0]);
 
         let expected = b"\x90\x04\xf7\x16\x00\x00";
@@ -252,7 +286,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_suback_packet_decode_hex() {
+    fn test_suback_packet_decode_hex() {
         let encoded_data = b"\x90\x04\xf7\x17\x00\x00";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -264,7 +298,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_suback_packet_basic() {
+    fn test_suback_packet_basic() {
         let subscribes = vec![SubscribeReasonCode::GrantedQos0];
 
         let packet = SubackPacket::new(10001, subscribes);
@@ -279,7 +313,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_suback_packet_qos1() {
+    fn test_suback_packet_qos1() {
         let subscribes = vec![SubscribeReasonCode::GrantedQos1];
 
         let packet = SubackPacket::new(10001, subscribes);
@@ -294,7 +328,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_suback_packet_qos2() {
+    fn test_suback_packet_qos2() {
         let subscribes = vec![SubscribeReasonCode::GrantedQos2];
 
         let packet = SubackPacket::new(10001, subscribes);
@@ -306,5 +340,16 @@ mod test {
         let decoded = SubackPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_suback_packet() {
+        let reason_codes = vec![SubscribeReasonCode::GrantedQos1];
+        let packet = SubackPacket::new(123, reason_codes);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: SUBACK, remaining_length: 4}, packet_identifier: 123, properties: {reason_string: None, user_properties: []}, payload: {reason_codes: [1]}}"
+        );
     }
 }

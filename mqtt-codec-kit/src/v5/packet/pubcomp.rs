@@ -1,6 +1,9 @@
 //! PUBCOMP
 
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use crate::{
     common::{
@@ -135,6 +138,16 @@ impl DecodablePacket for PubcompPacket {
     }
 }
 
+impl Display for PubcompPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}, reason_code: {}, properties: {}}}",
+            self.fixed_header, self.packet_identifier, self.reason_code, self.properties
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
@@ -144,7 +157,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_pubcomp_packet_encode_hex() {
+    fn test_pubcomp_packet_encode_hex() {
         let packet = PubcompPacket::new(48059, PubcompReasonCode::Success);
 
         let expected = b"\x70\x02\xbb\xbb";
@@ -156,7 +169,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_pubcomp_packet_decode_hex() {
+    fn test_pubcomp_packet_decode_hex() {
         let encoded_data = b"\x70\x02\xbb\xbb";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -168,7 +181,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_pubcomp_packet_basic() {
+    fn test_pubcomp_packet_basic() {
         let packet = PubcompPacket::new_success(10001);
 
         let mut buf = Vec::new();
@@ -181,7 +194,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_pubcomp_packet_with_reason() {
+    fn test_pubcomp_packet_with_reason() {
         let packet = PubcompPacket::new(10001, PubcompReasonCode::PacketIdentifierNotFound);
 
         let mut buf = Vec::new();
@@ -194,7 +207,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_pubcomp_packet_with_properties() {
+    fn test_pubcomp_packet_with_properties() {
         let mut packet = PubcompPacket::new(10001, PubcompReasonCode::PacketIdentifierNotFound);
 
         let mut properties = PubcompProperties::default();
@@ -210,5 +223,15 @@ mod test {
         let decoded = PubcompPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_pubcomp_packet() {
+        let packet = PubcompPacket::new(123, PubcompReasonCode::PacketIdentifierNotFound);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: PUBCOMP, remaining_length: 3}, packet_identifier: 123, reason_code: 146, properties: {reason_string: None, user_properties: []}}"
+        );
     }
 }

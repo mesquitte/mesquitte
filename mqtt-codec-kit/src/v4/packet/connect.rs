@@ -1,6 +1,9 @@
 //! CONNECT
 
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use crate::{
     common::{
@@ -212,6 +215,16 @@ impl DecodablePacket for ConnectPacket {
     }
 }
 
+impl Display for ConnectPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, protocol_name: {}, protocol_level: {}, flags: {}, keepalive: {}, payload: {}}}",
+            self.fixed_header, self.protocol_name, self.protocol_level, self.flags, self.keep_alive, self.payload
+        )
+    }
+}
+
 /// Payloads for connect packet
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct ConnectPacketPayload {
@@ -337,6 +350,25 @@ impl Decodable for ConnectPacketPayload {
     }
 }
 
+impl Display for ConnectPacketPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{client_identifier: {}", self.client_identifier)?;
+        match &self.last_will {
+            Some(last_will) => write!(f, ", last_will: {}", last_will),
+            None => write!(f, ", last_will: None"),
+        }?;
+        match &self.username {
+            Some(username) => write!(f, ", username: {}", username),
+            None => write!(f, ", username: None"),
+        }?;
+        match &self.password {
+            Some(password) => write!(f, ", password: {}", password),
+            None => write!(f, ", password: None"),
+        }?;
+        write!(f, "}}")
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub enum ConnectPacketError {
@@ -395,6 +427,16 @@ impl Encodable for LastWill {
     }
 }
 
+impl Display for LastWill {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{topic: {}, message: {}, qos: {}, retain: {}}}",
+            self.topic, self.message, self.qos, self.retain
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -405,7 +447,7 @@ mod test {
 
     #[test]
     fn test_connect_packet_encode_basic() {
-        let packet = ConnectPacket::new("12345".to_owned());
+        let packet = ConnectPacket::new("12345");
         let expected = b"\x10\x11\x00\x04MQTT\x04\x00\x00\x00\x00\x0512345";
 
         let mut buf = Vec::new();
@@ -421,13 +463,13 @@ mod test {
         let mut buf = Cursor::new(&encoded_data[..]);
         let packet = ConnectPacket::decode(&mut buf).unwrap();
 
-        let expected = ConnectPacket::new("12345".to_owned());
+        let expected = ConnectPacket::new("12345");
         assert_eq!(expected, packet);
     }
 
     #[test]
     fn test_connect_packet_username() {
-        let mut packet = ConnectPacket::new("12345".to_owned());
+        let mut packet = ConnectPacket::new("12345");
         packet.set_username(Some("mqtt_player".to_owned()));
 
         let mut buf = Vec::new();
@@ -437,5 +479,37 @@ mod test {
         let decoded_packet = ConnectPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded_packet);
+    }
+
+    #[test]
+    fn test_display_readable_connect_packet() {
+        let mut packet = ConnectPacket::new("test");
+        packet.set_username(Some("test".to_owned()));
+
+        let will_message = LastWill::new("test/topic", b"hello".to_vec()).unwrap();
+
+        packet.set_will(Some(will_message));
+        packet.set_will_qos(1);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: CONNECT, remaining_length: 45}, protocol_name: MQTT, protocol_level: 4, flags: {username: true, password: false, will_retain: false, will_qos: 1, will_flag: true, clean_session: false, reserved: false}, keepalive: 0, payload: {client_identifier: test, last_will: {topic: test/topic, message: hello, qos: 1, retain: false}, username: test, password: None}}"
+        );
+    }
+
+    #[test]
+    fn test_display_non_readable_connect_packet() {
+        let mut packet = ConnectPacket::new("test");
+        packet.set_username(Some("test".to_owned()));
+
+        let will_message = LastWill::new("test/topic", vec![1, 2, 3]).unwrap();
+
+        packet.set_will(Some(will_message));
+        packet.set_will_qos(1);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: CONNECT, remaining_length: 43}, protocol_name: MQTT, protocol_level: 4, flags: {username: true, password: false, will_retain: false, will_qos: 1, will_flag: true, clean_session: false, reserved: false}, keepalive: 0, payload: {client_identifier: test, last_will: {topic: test/topic, message: [1, 2, 3], qos: 1, retain: false}, username: test, password: None}}"
+        );
     }
 }
