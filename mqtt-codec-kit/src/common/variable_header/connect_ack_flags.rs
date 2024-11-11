@@ -1,4 +1,7 @@
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
@@ -42,6 +45,12 @@ impl Decodable for ConnackFlags {
         Ok(Self {
             session_present: code == 1,
         })
+    }
+}
+
+impl Display for ConnackFlags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{session_present: {}}}", self.session_present)
     }
 }
 

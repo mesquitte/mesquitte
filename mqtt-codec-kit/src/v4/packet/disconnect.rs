@@ -1,6 +1,6 @@
 //! DISCONNECT
 
-use std::io::Read;
+use std::{fmt::Display, io::Read};
 
 use crate::{
     common::packet::DecodablePacket,
@@ -42,6 +42,12 @@ impl DecodablePacket for DisconnectPacket {
     }
 }
 
+impl Display for DisconnectPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{fixed_header: {}}}", self.fixed_header)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
@@ -51,7 +57,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_disconnect_packet_encode_hex() {
+    fn test_disconnect_packet_encode_hex() {
         let packet = DisconnectPacket::new();
 
         let expected = b"\xe0\x00";
@@ -63,7 +69,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_disconnect_packet_decode_hex() {
+    fn test_disconnect_packet_decode_hex() {
         let encoded_data = b"\xe0\x00";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -75,7 +81,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_disconnect_packet_basic() {
+    fn test_disconnect_packet_basic() {
         let packet = DisconnectPacket::new();
 
         let mut buf = Vec::new();
@@ -85,5 +91,15 @@ mod test {
         let decoded = DisconnectPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_disconnect_packet() {
+        let packet = DisconnectPacket::new();
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: DISCONNECT, remaining_length: 0}}"
+        );
     }
 }

@@ -1,6 +1,6 @@
 //! UNSUBACK
 
-use std::io::Read;
+use std::{fmt::Display, io::Read};
 
 use crate::{
     common::{packet::DecodablePacket, Decodable, PacketIdentifier},
@@ -53,6 +53,16 @@ impl DecodablePacket for UnsubackPacket {
     }
 }
 
+impl Display for UnsubackPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}}}",
+            self.fixed_header, self.packet_identifier
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
@@ -62,7 +72,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_unsuback_packet_encode_hex() {
+    fn test_unsuback_packet_encode_hex() {
         let packet = UnsubackPacket::new(40304);
 
         let expected = b"\xb0\x02\x9d\x70";
@@ -74,7 +84,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_unsuback_packet_decode_hex() {
+    fn test_unsuback_packet_decode_hex() {
         let encoded_data = b"\xb0\x02\x9d\x71";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -86,7 +96,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_unsuback_packet_basic() {
+    fn test_unsuback_packet_basic() {
         let packet = UnsubackPacket::new(10001);
 
         let mut buf = Vec::new();
@@ -96,5 +106,15 @@ mod test {
         let decoded = UnsubackPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_unsuback_packet() {
+        let packet = UnsubackPacket::new(123);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: UNSUBACK, remaining_length: 2}, packet_identifier: 123}"
+        );
     }
 }

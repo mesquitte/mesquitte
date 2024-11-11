@@ -1,6 +1,9 @@
 //! PUBREC
 
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use crate::{
     common::{
@@ -135,6 +138,16 @@ impl DecodablePacket for PubrecPacket {
     }
 }
 
+impl Display for PubrecPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}, reason_code: {}, properties: {}}}",
+            self.fixed_header, self.packet_identifier, self.reason_code, self.properties
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
@@ -144,7 +157,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_pubrec_packet_encode_hex() {
+    fn test_pubrec_packet_encode_hex() {
         let packet = PubrecPacket::new(48059, PubrecReasonCode::Success);
 
         let expected = b"\x50\x02\xbb\xbb";
@@ -156,7 +169,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_pubrec_packet_decode_hex() {
+    fn test_pubrec_packet_decode_hex() {
         let encoded_data = b"\x50\x02\xbb\xbb";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -168,7 +181,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_pubrec_packet_basic() {
+    fn test_pubrec_packet_basic() {
         let packet = PubrecPacket::new_success(10001);
 
         let mut buf = Vec::new();
@@ -181,7 +194,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_pubrec_packet_with_reason() {
+    fn test_pubrec_packet_with_reason() {
         let packet = PubrecPacket::new(10001, PubrecReasonCode::NotAuthorized);
 
         let mut buf = Vec::new();
@@ -194,7 +207,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_pubrec_packet_with_properties() {
+    fn test_pubrec_packet_with_properties() {
         let mut packet = PubrecPacket::new(10001, PubrecReasonCode::NotAuthorized);
 
         let mut properties = PubrecProperties::default();
@@ -210,5 +223,15 @@ mod test {
         let decoded = PubrecPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_pubrec_packet() {
+        let packet = PubrecPacket::new(123, PubrecReasonCode::PayloadFormatInvalid);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: PUBREC, remaining_length: 3}, packet_identifier: 123, reason_code: 153, properties: {reason_string: None, user_properties: []}}"
+        );
     }
 }

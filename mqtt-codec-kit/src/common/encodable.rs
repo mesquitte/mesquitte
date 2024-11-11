@@ -1,6 +1,7 @@
 use std::{
     convert::Infallible,
     error::Error,
+    fmt::Display,
     io::{self, Read, Write},
     marker::Sized,
     slice,
@@ -166,6 +167,27 @@ impl Decodable for VarBytes {
         let mut buf = Vec::with_capacity(length as usize);
         reader.take(length.into()).read_to_end(&mut buf)?;
         Ok(Self(buf))
+    }
+}
+
+impl Display for VarBytes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match std::str::from_utf8(&self.0) {
+            Ok(s) if s.chars().all(|c| c.is_ascii_graphic() || c == ' ') => {
+                write!(f, "{}", s)
+            }
+            _ => {
+                write!(f, "[")?;
+                let mut iter = self.0.iter();
+                if let Some(first) = iter.next() {
+                    write!(f, "{}", first)?;
+                    for byte in iter {
+                        write!(f, ", {}", byte)?;
+                    }
+                }
+                write!(f, "]")
+            }
+        }
     }
 }
 

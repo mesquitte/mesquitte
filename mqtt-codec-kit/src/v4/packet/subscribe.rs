@@ -1,6 +1,7 @@
 //! SUBSCRIBE
 
 use std::{
+    fmt::Display,
     io::{self, Read, Write},
     string::FromUtf8Error,
 };
@@ -73,6 +74,16 @@ impl DecodablePacket for SubscribePacket {
     }
 }
 
+impl Display for SubscribePacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}, payload: {}}}",
+            self.fixed_header, self.packet_identifier, self.payload
+        )
+    }
+}
+
 /// Payload of subscribe packet
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct SubscribePacketPayload {
@@ -123,6 +134,20 @@ impl Decodable for SubscribePacketPayload {
         }
 
         Ok(Self::new(subs))
+    }
+}
+
+impl Display for SubscribePacketPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{subscribes: [")?;
+        let mut iter = self.subscribes.iter();
+        if let Some(first) = iter.next() {
+            write!(f, "({}, {})", first.0, first.1)?;
+            for subscribe in iter {
+                write!(f, ", ({}, {})", subscribe.0, subscribe.1)?;
+            }
+        }
+        write!(f, "]}}")
     }
 }
 
@@ -178,7 +203,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_subscribe_packet_decode_hex() {
+    fn test_subscribe_packet_decode_hex() {
         let encoded_data = b"\x82\x0e\x9d\x6f\x00\x03\x61\x2f\x62\x01\x00\x03\x61\x2f\x63\x01";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -200,7 +225,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_subscribe_packet_basic() {
+    fn test_subscribe_packet_basic() {
         let subscribes = vec![
             (
                 TopicFilter::new("a/b".to_string()).unwrap(),
@@ -220,5 +245,25 @@ mod test {
         let decoded = SubscribePacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_subscribe_packet() {
+        let subscriptions = vec![
+            (
+                TopicFilter::new("test/topic/1").unwrap(),
+                QualityOfService::Level2,
+            ),
+            (
+                TopicFilter::new("test/topic/2").unwrap(),
+                QualityOfService::Level1,
+            ),
+        ];
+        let packet = SubscribePacket::new(2345, subscriptions);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: SUBSCRIBE, remaining_length: 32}, packet_identifier: 2345, payload: {subscribes: [(test/topic/1, 2), (test/topic/2, 1)]}}"
+        );
     }
 }

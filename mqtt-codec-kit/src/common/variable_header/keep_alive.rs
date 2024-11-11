@@ -1,4 +1,7 @@
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -27,5 +30,11 @@ impl Decodable for KeepAlive {
             .read_u16::<BigEndian>()
             .map(KeepAlive)
             .map_err(From::from)
+    }
+}
+
+impl Display for KeepAlive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }

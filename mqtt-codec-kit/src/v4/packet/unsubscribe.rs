@@ -1,6 +1,7 @@
 //! UNSUBSCRIBE
 
 use std::{
+    fmt::Display,
     io::{self, Read, Write},
     string::FromUtf8Error,
 };
@@ -71,6 +72,16 @@ impl DecodablePacket for UnsubscribePacket {
     }
 }
 
+impl Display for UnsubscribePacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}, payload: {}}}",
+            self.fixed_header, self.packet_identifier, self.payload
+        )
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct UnsubscribePacketPayload {
     topic_filters: Vec<TopicFilter>,
@@ -115,6 +126,20 @@ impl Decodable for UnsubscribePacketPayload {
     }
 }
 
+impl Display for UnsubscribePacketPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{topic_filters: [")?;
+        let mut iter = self.topic_filters.iter();
+        if let Some(first) = iter.next() {
+            write!(f, "{}", first)?;
+            for topic_filter in iter {
+                write!(f, ", {}", topic_filter)?;
+            }
+        }
+        write!(f, "]}}")
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub enum UnsubscribePacketError {
@@ -141,7 +166,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_unsubscribe_packet_encode_hex() {
+    fn test_unsubscribe_packet_encode_hex() {
         let packet = UnsubscribePacket::new(40304, vec![TopicFilter::new("a/b").unwrap()]);
 
         let expected = b"\xa2\x07\x9d\x70\x00\x03\x61\x2f\x62";
@@ -153,7 +178,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_unsubscribe_packet_decode_hex() {
+    fn test_unsubscribe_packet_decode_hex() {
         let encoded_data = b"\xa2\x07\x9d\x71\x00\x03\x61\x2f\x63";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -165,7 +190,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_unsubscribe_packet_basic() {
+    fn test_unsubscribe_packet_basic() {
         let subscribes = vec![
             TopicFilter::new("a/b".to_string()).unwrap(),
             TopicFilter::new("a/c".to_string()).unwrap(),
@@ -179,5 +204,19 @@ mod test {
         let decoded = UnsubscribePacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_unsubscribe_packet() {
+        let topics = vec![
+            TopicFilter::new("test/topic/1").unwrap(),
+            TopicFilter::new("test/topic/2").unwrap(),
+        ];
+        let packet = UnsubscribePacket::new(2345, topics);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: UNSUBSCRIBE, remaining_length: 30}, packet_identifier: 2345, payload: {topic_filters: [test/topic/1, test/topic/2]}}"
+        );
     }
 }

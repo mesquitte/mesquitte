@@ -2,6 +2,7 @@
 
 use std::{
     borrow::{Borrow, BorrowMut},
+    fmt::Display,
     io::{self, Read, Write},
     ops::{Deref, DerefMut},
     str::FromStr,
@@ -105,6 +106,12 @@ impl Decodable for TopicName {
     fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
         let topic_name = String::decode(reader)?;
         Ok(Self::new(topic_name)?)
+    }
+}
+
+impl Display for TopicName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

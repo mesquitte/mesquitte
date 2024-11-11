@@ -1,6 +1,9 @@
 //! DISCONNECT
 
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use crate::{
     common::{
@@ -128,6 +131,16 @@ impl DecodablePacket for DisconnectPacket {
     }
 }
 
+impl Display for DisconnectPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, reason_code: {}, properties: {}}}",
+            self.fixed_header, self.reason_code, self.properties
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
@@ -137,7 +150,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_disconnect_packet_encode_hex() {
+    fn test_disconnect_packet_encode_hex() {
         let packet = DisconnectPacket::new(DisconnectReasonCode::NormalDisconnection);
 
         let expected = b"\xe0\x00";
@@ -149,7 +162,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_disconnect_packet_decode_hex() {
+    fn test_disconnect_packet_decode_hex() {
         let encoded_data = b"\xe0\x00";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -161,7 +174,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_disconnect_packet_decode_hex_normal_with_length() {
+    fn test_disconnect_packet_decode_hex_normal_with_length() {
         let encoded_data = b"\xe0\x02\x00\x00";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -179,7 +192,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_disconnect_packet_basic() {
+    fn test_disconnect_packet_basic() {
         let packet = DisconnectPacket::new(DisconnectReasonCode::NormalDisconnection);
 
         let mut buf = Vec::new();
@@ -192,7 +205,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_disconnect_packet_with_reason() {
+    fn test_disconnect_packet_with_reason() {
         let packet = DisconnectPacket::new(DisconnectReasonCode::NotAuthorized);
 
         let mut buf = Vec::new();
@@ -205,7 +218,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_disconnect_packet_normal_with_properties() {
+    fn test_disconnect_packet_normal_with_properties() {
         let mut packet = DisconnectPacket::new(DisconnectReasonCode::NormalDisconnection);
 
         let mut properties = DisconnectProperties::default();
@@ -223,7 +236,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_disconnect_packet_with_properties() {
+    fn test_disconnect_packet_with_properties() {
         let mut packet = DisconnectPacket::new(DisconnectReasonCode::NotAuthorized);
 
         let mut properties = DisconnectProperties::default();
@@ -238,5 +251,15 @@ mod test {
         let decoded = DisconnectPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_disconnect_packet() {
+        let packet = DisconnectPacket::new(DisconnectReasonCode::ServerBusy);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: DISCONNECT, remaining_length: 1}, reason_code: 137, properties: {session_expiry_interval: None, reason_string: None, user_properties: [], server_reference: None}}"
+        );
     }
 }

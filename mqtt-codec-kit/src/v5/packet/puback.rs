@@ -1,6 +1,9 @@
 //! PUBACK
 
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use crate::{
     common::{
@@ -137,6 +140,16 @@ impl DecodablePacket for PubackPacket {
     }
 }
 
+impl Display for PubackPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}, reason_code: {}, properties: {}}}",
+            self.fixed_header, self.packet_identifier, self.reason_code, self.properties
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
@@ -146,7 +159,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_puback_packet_encode_hex() {
+    fn test_puback_packet_encode_hex() {
         let packet = PubackPacket::new(26373, PubackReasonCode::NoMatchingSubscribers);
 
         let expected = b"\x40\x03\x67\x05\x10";
@@ -158,7 +171,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_puback_packet_decode_hex() {
+    fn test_puback_packet_decode_hex() {
         let encoded_data = b"\x40\x02\x89\x05";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -170,7 +183,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_puback_packet_basic() {
+    fn test_puback_packet_basic() {
         let packet = PubackPacket::new_success(10001);
 
         let mut buf = Vec::new();
@@ -183,7 +196,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_puback_packet_with_reason() {
+    fn test_puback_packet_with_reason() {
         let packet = PubackPacket::new(10001, PubackReasonCode::NotAuthorized);
 
         let mut buf = Vec::new();
@@ -196,7 +209,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_puback_packet_with_properties() {
+    fn test_puback_packet_with_properties() {
         let mut packet = PubackPacket::new(10001, PubackReasonCode::NotAuthorized);
 
         let mut properties = PubackProperties::default();
@@ -212,5 +225,15 @@ mod test {
         let decoded = PubackPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_puback_packet() {
+        let packet = PubackPacket::new(123, PubackReasonCode::PacketIdentifierInUse);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: PUBACK, remaining_length: 3}, packet_identifier: 123, reason_code: 145, properties: {reason_string: None, user_properties: []}}"
+        );
     }
 }

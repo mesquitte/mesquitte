@@ -1,6 +1,9 @@
 //! Disconnect Reason Code
 
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
@@ -182,5 +185,12 @@ impl Decodable for DisconnectReasonCode {
 
     fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
         reader.read_u8().map(Self::try_from)?.map_err(From::from)
+    }
+}
+
+impl Display for DisconnectReasonCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let code: u8 = self.into();
+        write!(f, "{}", code)
     }
 }

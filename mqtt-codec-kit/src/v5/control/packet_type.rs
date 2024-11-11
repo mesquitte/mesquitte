@@ -1,5 +1,7 @@
 //! Packet types
 
+use std::fmt::Display;
+
 use crate::common::QualityOfService;
 
 /// Packet type
@@ -175,6 +177,28 @@ fn get_control_type(val: u8) -> Option<ControlType> {
         _ => return None,
     };
     Some(typ)
+}
+
+impl Display for PacketType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.control_type() {
+            ControlType::Connect => write!(f, "CONNECT"),
+            ControlType::ConnectAcknowledgement => write!(f, "CONNACK"),
+            ControlType::Publish => write!(f, "PUBLISH"),
+            ControlType::PublishAcknowledgement => write!(f, "PUBACK"),
+            ControlType::PublishReceived => write!(f, "PUBREC"),
+            ControlType::PublishRelease => write!(f, "PUBREL"),
+            ControlType::PublishComplete => write!(f, "PUBCOMP"),
+            ControlType::Subscribe => write!(f, "SUBSCRIBE"),
+            ControlType::SubscribeAcknowledgement => write!(f, "SUBACK"),
+            ControlType::Unsubscribe => write!(f, "UNSUBSCRIBE"),
+            ControlType::UnsubscribeAcknowledgement => write!(f, "UNSUBACK"),
+            ControlType::PingRequest => write!(f, "PINGREQ"),
+            ControlType::PingResponse => write!(f, "PINGRESP"),
+            ControlType::Disconnect => write!(f, "DISCONNECT"),
+            ControlType::Auth => write!(f, "AUTH"),
+        }
+    }
 }
 
 /// Parsing packet type errors

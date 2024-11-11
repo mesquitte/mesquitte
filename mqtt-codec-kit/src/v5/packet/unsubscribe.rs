@@ -1,6 +1,7 @@
 //! UNSUBSCRIBE
 
 use std::{
+    fmt::Display,
     io::{self, Read, Write},
     string::FromUtf8Error,
 };
@@ -51,7 +52,7 @@ impl UnsubscribePacket {
     }
 
     pub fn subscribes(&self) -> &[TopicFilter] {
-        &self.payload.subscribes[..]
+        &self.payload.topic_filters[..]
     }
 
     pub fn set_packet_identifier(&mut self, pkid: u16) {
@@ -90,20 +91,30 @@ impl DecodablePacket for UnsubscribePacket {
     }
 }
 
+impl Display for UnsubscribePacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}, properties: {}, payload: {}}}",
+            self.fixed_header, self.packet_identifier, self.properties, self.payload
+        )
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct UnsubscribePacketPayload {
-    subscribes: Vec<TopicFilter>,
+    topic_filters: Vec<TopicFilter>,
 }
 
 impl UnsubscribePacketPayload {
-    pub fn new(subs: Vec<TopicFilter>) -> Self {
-        Self { subscribes: subs }
+    pub fn new(topic_filters: Vec<TopicFilter>) -> Self {
+        Self { topic_filters }
     }
 }
 
 impl Encodable for UnsubscribePacketPayload {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        for filter in self.subscribes.iter() {
+        for filter in self.topic_filters.iter() {
             filter.encode(writer)?;
         }
 
@@ -111,7 +122,7 @@ impl Encodable for UnsubscribePacketPayload {
     }
 
     fn encoded_length(&self) -> u32 {
-        self.subscribes
+        self.topic_filters
             .iter()
             .fold(0, |b, a| b + a.encoded_length())
     }
@@ -131,6 +142,20 @@ impl Decodable for UnsubscribePacketPayload {
         }
 
         Ok(Self::new(subs))
+    }
+}
+
+impl Display for UnsubscribePacketPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{topic_filters: [")?;
+        let mut iter = self.topic_filters.iter();
+        if let Some(first) = iter.next() {
+            write!(f, "{}", first)?;
+            for topic_filter in iter {
+                write!(f, ", {}", topic_filter)?;
+            }
+        }
+        write!(f, "]}}")
     }
 }
 
@@ -160,7 +185,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_unsubscribe_packet_encode_hex() {
+    fn test_unsubscribe_packet_encode_hex() {
         let packet = UnsubscribePacket::new(63256, vec![TopicFilter::new("a/b").unwrap()]);
 
         let expected = b"\xa2\x08\xf7\x18\x00\x00\x03\x61\x2f\x62";
@@ -172,7 +197,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_unsubscribe_packet_decode_hex() {
+    fn test_unsubscribe_packet_decode_hex() {
         let encoded_data = b"\xa2\x08\xf7\x19\x00\x00\x03\x61\x2f\x63";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -184,7 +209,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_unsubscribe_packet_basic() {
+    fn test_unsubscribe_packet_basic() {
         let subscribes = vec![
             TopicFilter::new("a/b".to_string()).unwrap(),
             TopicFilter::new("a/c".to_string()).unwrap(),
@@ -198,5 +223,19 @@ mod test {
         let decoded = UnsubscribePacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_unsubscribe_packet() {
+        let topics = vec![
+            TopicFilter::new("test/topic/1").unwrap(),
+            TopicFilter::new("test/topic/2").unwrap(),
+        ];
+        let packet = UnsubscribePacket::new(2345, topics);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: UNSUBSCRIBE, remaining_length: 31}, packet_identifier: 2345, properties: {user_properties: []}, payload: {topic_filters: [test/topic/1, test/topic/2]}}"
+        );
     }
 }

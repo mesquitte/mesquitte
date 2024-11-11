@@ -2,6 +2,7 @@
 
 use std::{
     cmp::Ordering,
+    fmt::Display,
     io::{self, Read, Write},
 };
 
@@ -49,6 +50,12 @@ impl From<QualityOfService> for SubscribeReturnCode {
             QualityOfService::Level1 => SubscribeReturnCode::MaximumQoSLevel1,
             QualityOfService::Level2 => SubscribeReturnCode::MaximumQoSLevel2,
         }
+    }
+}
+
+impl Display for SubscribeReturnCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", *self as u8)
     }
 }
 
@@ -109,6 +116,16 @@ impl DecodablePacket for SubackPacket {
     }
 }
 
+impl Display for SubackPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, packet_identifier: {}, payload: {}}}",
+            self.fixed_header, self.packet_identifier, self.payload
+        )
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct SubackPacketPayload {
     return_codes: Vec<SubscribeReturnCode>,
@@ -159,6 +176,20 @@ impl Decodable for SubackPacketPayload {
     }
 }
 
+impl Display for SubackPacketPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{return_codes: [")?;
+        let mut iter = self.return_codes.iter();
+        if let Some(first) = iter.next() {
+            write!(f, "{}", first)?;
+            for code in iter {
+                write!(f, ", {}", code)?;
+            }
+        }
+        write!(f, "]}}")
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SubackPacketError {
     #[error(transparent)]
@@ -176,7 +207,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_suback_packet_encode_hex() {
+    fn test_suback_packet_encode_hex() {
         let packet = SubackPacket::new(
             40303,
             vec![
@@ -194,7 +225,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_suback_packet_decode_hex() {
+    fn test_suback_packet_decode_hex() {
         let encoded_data = b"\x90\x04\x9d\x6c\x00\x00";
 
         let mut buf = Cursor::new(&encoded_data[..]);
@@ -212,7 +243,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_suback_packet_basic() {
+    fn test_suback_packet_basic() {
         let subscribes = vec![SubscribeReturnCode::MaximumQoSLevel0];
 
         let packet = SubackPacket::new(10001, subscribes);
@@ -224,5 +255,16 @@ mod test {
         let decoded = SubackPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_suback_packet() {
+        let return_codes = vec![SubscribeReturnCode::MaximumQoSLevel1];
+        let packet = SubackPacket::new(123, return_codes);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: SUBACK, remaining_length: 3}, packet_identifier: 123, payload: {return_codes: [1]}}"
+        );
     }
 }

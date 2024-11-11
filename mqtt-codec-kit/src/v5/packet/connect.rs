@@ -1,6 +1,9 @@
 //! CONNECT
 
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Display,
+    io::{self, Read, Write},
+};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -222,6 +225,16 @@ impl DecodablePacket for ConnectPacket {
             properties,
             payload,
         })
+    }
+}
+
+impl Display for ConnectPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, protocol_name: {}, protocol_level: {}, flags: {}, keepalive: {}, properties: {}, payload: {}}}",
+            self.fixed_header, self.protocol_name, self.protocol_level, self.flags, self.keep_alive, self.properties, self.payload
+        )
     }
 }
 
@@ -513,6 +526,24 @@ impl Decodable for ConnectProperties {
     }
 }
 
+impl Display for ConnectProperties {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{")?;
+        match &self.session_expiry_interval {
+            Some(session_expiry_interval) => {
+                write!(f, "session_expiry_interval: {}", session_expiry_interval)?
+            }
+            None => write!(f, "session_expiry_interval: None")?,
+        };
+        match &self.receive_maximum {
+            Some(receive_maximum) => write!(f, ", receive_maximum: {}", receive_maximum)?,
+            None => write!(f, ", receive_maximum: None")?,
+        };
+        // TODO TBD
+        write!(f, "}}")
+    }
+}
+
 /// Payloads for connect packet
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct ConnectPayload {
@@ -637,6 +668,25 @@ impl Decodable for ConnectPayload {
     }
 }
 
+impl Display for ConnectPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{client_identifier: {}", self.client_identifier)?;
+        match &self.last_will {
+            Some(last_will) => write!(f, ", last_will: {}", last_will)?,
+            None => write!(f, ", last_will: None")?,
+        };
+        match &self.username {
+            Some(username) => write!(f, ", username: {}", username)?,
+            None => write!(f, ", username: None")?,
+        };
+        match &self.password {
+            Some(password) => write!(f, ", password: {}", password)?,
+            None => write!(f, ", password: None")?,
+        };
+        write!(f, "}}")
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub enum ConnectPacketError {
@@ -708,6 +758,16 @@ impl Encodable for LastWill {
             + self.topic.encoded_length()
             + 2
             + self.message.encoded_length()
+    }
+}
+
+impl Display for LastWill {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{topic: {}, message: {}, qos: {}, retain: {}, properties: {}}}",
+            self.topic, self.message, self.qos, self.retain, self.properties
+        )
     }
 }
 
@@ -938,6 +998,52 @@ impl Decodable for LastWillProperties {
     }
 }
 
+impl Display for LastWillProperties {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{")?;
+        match &self.delay_interval {
+            Some(delay_interval) => write!(f, "delay_interval: {}", delay_interval)?,
+            None => write!(f, "delay_interval: None")?,
+        };
+        match &self.payload_format_indicator {
+            Some(payload_format_indicator) => write!(
+                f,
+                ", payload_format_indicator: {}",
+                payload_format_indicator
+            )?,
+            None => write!(f, ", payload_format_indicator: None")?,
+        };
+        match &self.message_expiry_interval {
+            Some(message_expiry_interval) => {
+                write!(f, ", message_expiry_interval: {}", message_expiry_interval)?
+            }
+            None => write!(f, ", message_expiry_interval: None")?,
+        };
+        match &self.content_type {
+            Some(content_type) => write!(f, ", content_type: {}", content_type)?,
+            None => write!(f, ", content_type: None")?,
+        };
+        match &self.response_topic {
+            Some(response_topic) => write!(f, ", response_topic: {}", response_topic)?,
+            None => write!(f, ", response_topic: None")?,
+        };
+        match &self.correlation_data {
+            Some(correlation_data) => write!(f, ", correlation_data: {}", correlation_data)?,
+            None => write!(f, ", correlation_data: None")?,
+        };
+        write!(f, ", user_properties: [")?;
+        let mut iter = self.user_properties.iter();
+        if let Some(first) = iter.next() {
+            write!(f, "({}, {})", first.0, first.1)?;
+            for property in iter {
+                write!(f, ", ({}, {})", property.0, property.1)?;
+            }
+        }
+        write!(f, "]")?;
+        write!(f, "}}")
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -1050,5 +1156,37 @@ mod test {
         let decoded_packet = ConnectPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded_packet);
+    }
+
+    #[test]
+    fn test_display_readable_connect_packet() {
+        let mut packet = ConnectPacket::new("test");
+        packet.set_username(Some("test".to_owned()));
+
+        let will_message = LastWill::new("test/topic", b"hello".to_vec()).unwrap();
+
+        packet.set_will(Some(will_message));
+        packet.set_will_qos(1);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: CONNECT, remaining_length: 47}, protocol_name: MQTT, protocol_level: 5, flags: {username: true, password: false, will_retain: false, will_qos: 1, will_flag: true, clean_session: false, reserved: false}, keepalive: 0, properties: {session_expiry_interval: None, receive_maximum: None}, payload: {client_identifier: test, last_will: {topic: test/topic, message: hello, qos: 1, retain: false, properties: {delay_interval: None, payload_format_indicator: None, message_expiry_interval: None, content_type: None, response_topic: None, correlation_data: None, user_properties: []}}, username: test, password: None}}"
+        );
+    }
+
+    #[test]
+    fn test_display_non_readable_connect_packet() {
+        let mut packet = ConnectPacket::new("test");
+        packet.set_username(Some("test".to_owned()));
+
+        let will_message = LastWill::new("test/topic", vec![1, 2, 3]).unwrap();
+
+        packet.set_will(Some(will_message));
+        packet.set_will_qos(1);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: CONNECT, remaining_length: 45}, protocol_name: MQTT, protocol_level: 5, flags: {username: true, password: false, will_retain: false, will_qos: 1, will_flag: true, clean_session: false, reserved: false}, keepalive: 0, properties: {session_expiry_interval: None, receive_maximum: None}, payload: {client_identifier: test, last_will: {topic: test/topic, message: [1, 2, 3], qos: 1, retain: false, properties: {delay_interval: None, payload_format_indicator: None, message_expiry_interval: None, content_type: None, response_topic: None, correlation_data: None, user_properties: []}}, username: test, password: None}}"
+        );
     }
 }

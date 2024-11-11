@@ -1,5 +1,7 @@
 //! QoS (Quality of Services)
 
+use std::fmt::Display;
+
 #[repr(u8)]
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone)]
 pub enum QualityOfService {
@@ -15,6 +17,12 @@ impl From<QoSWithPacketIdentifier> for QualityOfService {
             QoSWithPacketIdentifier::Level1(_) => QualityOfService::Level1,
             QoSWithPacketIdentifier::Level2(_) => QualityOfService::Level2,
         }
+    }
+}
+
+impl Display for QualityOfService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", *self as u8)
     }
 }
 

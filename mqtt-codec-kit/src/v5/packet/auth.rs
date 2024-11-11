@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{
     common::{packet::DecodablePacket, Decodable},
     v5::control::{
@@ -83,6 +85,20 @@ impl DecodablePacket for AuthPacket {
     }
 }
 
+impl Display for AuthPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{fixed_header: {}, reason_code: {}",
+            self.fixed_header, self.reason_code
+        )?;
+        if let Some(properties) = &self.properties {
+            write!(f, ", properties: {}", properties)?;
+        }
+        write!(f, "}}")
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
@@ -92,7 +108,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_auth_packet_basic() {
+    fn test_auth_packet_basic() {
         let packet = AuthPacket::new_success();
 
         let mut buf = Vec::new();
@@ -105,7 +121,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_auth_packet_with_reason() {
+    fn test_auth_packet_with_reason() {
         let packet = AuthPacket::new(AuthenticateReasonCode::ContinueAuthentication);
 
         let mut buf = Vec::new();
@@ -118,7 +134,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_auth_packet_with_properties() {
+    fn test_auth_packet_with_properties() {
         let mut packet = AuthPacket::new(AuthenticateReasonCode::ReAuthenticate);
 
         let mut properties = AuthProperties::default();
@@ -134,5 +150,30 @@ mod test {
         let decoded = AuthPacket::decode(&mut decode_buf).unwrap();
 
         assert_eq!(packet, decoded);
+    }
+
+    #[test]
+    fn test_display_auth_packet() {
+        let packet = AuthPacket::new(AuthenticateReasonCode::ContinueAuthentication);
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: AUTH, remaining_length: 2}, reason_code: 24, properties: {reason_string: None, user_properties: [], authentication_method: None, authentication_data: None}}"
+        );
+    }
+
+    #[test]
+    fn test_display_auth_packet_with_properties() {
+        let mut packet = AuthPacket::new(AuthenticateReasonCode::ContinueAuthentication);
+
+        let mut properties = AuthProperties::default();
+        properties.set_reason_string(Some("Next Stage".to_owned()));
+
+        packet.set_properties(Some(properties));
+
+        assert_eq!(
+            packet.to_string(),
+            "{fixed_header: {packet_type: AUTH, remaining_length: 15}, reason_code: 24, properties: {reason_string: Next Stage, user_properties: [], authentication_method: None, authentication_data: None}}"
+        );
     }
 }
