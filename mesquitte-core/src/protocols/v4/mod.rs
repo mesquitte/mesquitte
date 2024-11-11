@@ -201,7 +201,7 @@ where
 
         debug!("{session}");
 
-        let (write_tx, write_rx) = bounded_async(8);
+        let (write_tx, write_rx) = bounded_async(2024);
         let client_id = session.client_id().to_owned();
         let mut read_task = tokio::spawn(
             ReadLoop::new(frame_reader, session, deliver_rx, write_tx, self.global)

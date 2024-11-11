@@ -64,7 +64,6 @@ axum = { workspace = true, features = [
 backon = { workspace = true, features = ["tokio-sleep"], optional = true }
 bincode = { workspace = true, optional = true }
 byteorder.workspace = true
-crossbeam-channel.workspace = true
 dashmap.workspace = true
 foldhash.workspace = true
 futures.workspace = true
