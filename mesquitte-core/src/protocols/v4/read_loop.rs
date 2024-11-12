@@ -64,12 +64,12 @@ where
     }
 
     pub async fn read_from_client(mut self) {
+        let interval = Duration::from_millis(500);
+        let mut tick = interval_at(Instant::now() + interval, interval);
         if self.session.keep_alive() > 0 {
             let half_interval = Duration::from_millis(self.session.keep_alive() as u64 * 500);
             let mut keep_alive_tick = interval_at(Instant::now() + half_interval, half_interval);
             let keep_alive_timeout = half_interval * 3;
-            let interval = Duration::from_millis(500);
-            let mut tick = interval_at(Instant::now() + interval, interval);
             loop {
                 tokio::select! {
                     packet = self.reader.next() => match packet {
@@ -146,6 +146,12 @@ where
                         Err(err) => {
                             warn!("deliver receive channel: {err}");
                             break;
+                        }
+                    },
+                    _ = tick.tick() => {
+                        match self.handle_pending_messages(false).await {
+                            Ok(_) => {},
+                            Err(_) => break,
                         }
                     },
                 }

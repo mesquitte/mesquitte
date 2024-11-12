@@ -45,50 +45,6 @@ where
         }
     }
 
-    // async fn write_pending_messages(&mut self, all: bool) -> bool {
-    //     let ret = if all {
-    //         self.storage.get_all_pending_messages(&self.client_id).await
-    //     } else {
-    //         self.storage.try_get_pending_messages(&self.client_id).await
-    //     };
-
-    //     match ret {
-    //         Ok(Some(messages)) => {
-    //             for (packet_id, pending_message) in messages {
-    //                 match pending_message.pubrec_at() {
-    //                     Some(_) => {
-    //                         if let Err(err) =
-    //                             self.writer.send(PubrelPacket::new(packet_id).into()).await
-    //                         {
-    //                             warn!(
-    //                                 "client#{} write pubcomp packet failed: {}",
-    //                                 self.client_id, err
-    //                             );
-    //                             return true;
-    //                         }
-    //                     }
-    //                     None => {
-    //                         let pkt: PublishPacket = pending_message.into();
-    //                         if let Err(err) = self.writer.send(pkt.into()).await {
-    //                             warn!(
-    //                                 "client#{} write publish packet failed: {}",
-    //                                 self.client_id, err
-    //                             );
-    //                             return true;
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //             false
-    //         }
-    //         Ok(None) => false,
-    //         Err(err) => {
-    //             warn!("get pending messages failed: {err}");
-    //             true
-    //         }
-    //     }
-    // }
-
     pub async fn write_to_client(&mut self)
     where
         T: AsyncWrite + Unpin,
