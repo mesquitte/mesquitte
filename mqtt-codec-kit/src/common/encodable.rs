@@ -29,7 +29,7 @@ impl<T: Encodable> Encodable for Option<T> {
     }
 }
 
-impl<'a> Encodable for &'a str {
+impl Encodable for &str {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
         assert!(self.as_bytes().len() <= u16::MAX as usize);
 
@@ -43,7 +43,7 @@ impl<'a> Encodable for &'a str {
     }
 }
 
-impl<'a> Encodable for &'a [u8] {
+impl Encodable for &[u8] {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
         writer.write_all(self)
     }
