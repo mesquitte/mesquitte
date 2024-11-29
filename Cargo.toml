@@ -23,10 +23,10 @@ mqtt-codec-kit = { version = "1.0", path = "mqtt-codec-kit", features = [
 
 async-tungstenite = "0.28"
 axum = { version = "0.8.0-alpha.1", default-features = false }
-backon = { version = "1.2", default-features = false }
+backon = { version = "1.3", default-features = false }
 bincode = "1.3"
 byteorder = "1.5"
-bytes = "1.8"
+bytes = "1.9"
 dashmap = "6.1"
 env_logger = "0.11"
 foldhash = "0.1"
