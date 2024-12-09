@@ -33,7 +33,7 @@ foldhash = "0.1"
 futures = "0.3"
 futures-sink = "0.3"
 futures-util = "0.3"
-heed = { version = "0.20", default-features = false }
+heed = { version = "0.21", default-features = false }
 kanal = "0.1.0-pre8"
 maplit = "1.0"
 mobc = "0.8"
