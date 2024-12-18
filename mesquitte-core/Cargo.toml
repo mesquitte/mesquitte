@@ -38,11 +38,11 @@ v4 = ["mqtt-codec-kit/v4"]
 v5 = ["mqtt-codec-kit/v5"]
 mqtt = []
 mqtts = ["rustls"]
-ws = ["async-tungstenite", "tungstenite"]
-wss = ["async-tungstenite", "tungstenite", "rustls"]
+ws = ["tokio-tungstenite", "tungstenite"]
+wss = ["tokio-tungstenite", "tungstenite", "rustls"]
 quic = ["s2n-quic"]
 rustls = [
-    "async-tungstenite?/tokio-rustls-webpki-roots",
+    "tokio-tungstenite?/rustls-tls-webpki-roots",
     "rustls/aws-lc-rs",
     "rustls-pemfile",
     "tokio-rustls/aws-lc-rs",
@@ -53,9 +53,6 @@ heed-storage = ["heed", "tokio/fs"]
 log = ["dep:log"]
 
 [dependencies]
-async-tungstenite = { workspace = true, optional = true, features = [
-    "tokio-runtime",
-] }
 axum = { workspace = true, features = [
     "http1",
     "json",
@@ -64,6 +61,7 @@ axum = { workspace = true, features = [
 backon = { workspace = true, features = ["tokio-sleep"], optional = true }
 bincode = { workspace = true, optional = true }
 byteorder.workspace = true
+bytes.workspace = true
 dashmap.workspace = true
 foldhash.workspace = true
 futures.workspace = true
@@ -113,6 +111,7 @@ tokio = { workspace = true, features = [
     "net",
 ] }
 tokio-rustls = { workspace = true, default-features = false, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
 tokio-util = { workspace = true, features = ["codec"] }
 tungstenite = { workspace = true, optional = true }
 
