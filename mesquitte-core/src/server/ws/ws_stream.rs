@@ -4,6 +4,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use bytes::Bytes;
 use futures::{ready, Sink, Stream};
 use pin_project_lite::pin_project;
 use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, ReadBuf};
@@ -16,7 +17,7 @@ struct State {
 
 enum ReadState {
     Pending,
-    Ready { data: Vec<u8>, amt_read: usize },
+    Ready { data: Bytes, amt_read: usize },
     Terminated,
 }
 
@@ -212,7 +213,7 @@ where
                         }
                     }
                 }
-                if let Err(e) = this.inner.as_mut().start_send(Message::Binary(buf.into())) {
+                if let Err(e) = this.inner.as_mut().start_send(buf.into()) {
                     match e {
                         tungstenite::Error::Io(e) => Poll::Ready(Err(e)),
                         tungstenite::Error::ConnectionClosed => {

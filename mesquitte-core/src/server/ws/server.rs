@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, num::NonZeroUsize};
 
-use async_tungstenite::{accept_hdr_async, tokio::TokioAdapter};
 use tokio::net::TcpSocket;
+use tokio_tungstenite::accept_hdr_async;
 #[cfg(any(feature = "ws", feature = "wss"))]
 use tungstenite::{handshake::server::ErrorResponse, http};
 
@@ -47,9 +47,7 @@ where
             let listener = socket.listen(1024)?;
             let task = tokio::spawn(async move {
                 while let Ok((stream, _addr)) = listener.accept().await {
-                    let ws_stream = WsByteStream::new(
-                        accept_hdr_async(TokioAdapter::new(stream), ws_callback).await?,
-                    );
+                    let ws_stream = WsByteStream::new(accept_hdr_async(stream, ws_callback).await?);
                     tokio::spawn(async move {
                         process_client(ws_stream, self.config.version, self.global).await?;
                         Ok::<(), Error>(())
@@ -91,9 +89,8 @@ where
                 while let Ok((stream, _addr)) = listener.accept().await {
                     match acceptor.accept(stream).await {
                         Ok(stream) => {
-                            let ws_stream = WsByteStream::new(
-                                accept_hdr_async(TokioAdapter::new(stream), ws_callback).await?,
-                            );
+                            let ws_stream =
+                                WsByteStream::new(accept_hdr_async(stream, ws_callback).await?);
                             tokio::spawn(async move {
                                 process_client(ws_stream, self.config.version, self.global).await?;
                                 Ok::<(), Error>(())
