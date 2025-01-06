@@ -42,7 +42,7 @@ parking_lot = "0.12"
 pin-project-lite = "0.2"
 openraft = { version = "0.10", git = "https://github.com/databendlabs/openraft.git", branch = "main" }
 rand = "0.8"
-rust-rocksdb = { version = "0.35", default-features = false }
+rust-rocksdb = { version = "0.36", default-features = false }
 rustls = { version = "0.23", default-features = false }
 rustls-pemfile = "2.2"
 s2n-quic = "1"
