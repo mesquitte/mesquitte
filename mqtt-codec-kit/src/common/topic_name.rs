@@ -13,7 +13,7 @@ use crate::common::{Decodable, Encodable};
 #[inline]
 fn is_invalid_topic_name(topic_name: &str) -> bool {
     topic_name.is_empty()
-        || topic_name.as_bytes().len() > 65535
+        || topic_name.len() > 65535
         || topic_name.chars().any(|ch| ch == '#' || ch == '+')
 }
 

@@ -28,7 +28,7 @@ fn topic_filter_shared_info(topic: &str) -> Option<(&str, &str)> {
 
 #[inline]
 fn is_invalid_topic_filter(topic: &str) -> bool {
-    if topic.is_empty() || topic.as_bytes().len() > 65535 {
+    if topic.is_empty() || topic.len() > 65535 {
         return true;
     }
 
