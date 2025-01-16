@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  MSRV: '1.82'
+  MSRV: '1.84'
 
 jobs:
   build:
