@@ -31,15 +31,15 @@ impl<T: Encodable> Encodable for Option<T> {
 
 impl Encodable for &str {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-        assert!(self.as_bytes().len() <= u16::MAX as usize);
+        assert!(self.len() <= u16::MAX as usize);
 
         writer
-            .write_u16::<BigEndian>(self.as_bytes().len() as u16)
+            .write_u16::<BigEndian>(self.len() as u16)
             .and_then(|_| writer.write_all(self.as_bytes()))
     }
 
     fn encoded_length(&self) -> u32 {
-        2 + self.as_bytes().len() as u32
+        2 + self.len() as u32
     }
 }
 

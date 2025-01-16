@@ -5,16 +5,14 @@ use log::{info, warn};
 use openraft::{
     error::{ReplicationClosed, Unreachable},
     network::{v2::RaftNetworkV2, RPCOption},
-    raft::{
-        AppendEntriesRequest, AppendEntriesResponse, SnapshotResponse, VoteRequest, VoteResponse,
-    },
-    OptionalSend, RaftNetworkFactory, Snapshot, Vote,
+    OptionalSend, RaftNetworkFactory,
 };
 use tarpc::context;
 
 use super::{
     pool::{ClientPool, RPCClientManager},
-    typ, Node, NodeId, TypeConfig,
+    typ::*,
+    Node, NodeId, TypeConfig,
 };
 
 pub struct Connection {
@@ -82,9 +80,9 @@ impl RaftNetworkFactory<TypeConfig> for Network {
 impl RaftNetworkV2<TypeConfig> for Connection {
     async fn append_entries(
         &mut self,
-        req: AppendEntriesRequest<TypeConfig>,
+        req: AppendEntriesRequest,
         _option: RPCOption,
-    ) -> Result<AppendEntriesResponse<TypeConfig>, typ::RPCError> {
+    ) -> Result<AppendEntriesResponse, RPCError> {
         info!("id:{} append entries take client", self.node_id);
         let client = self.take_client().await?;
         let resp = client.append(context::current(), req).await.unwrap();
@@ -93,11 +91,11 @@ impl RaftNetworkV2<TypeConfig> for Connection {
 
     async fn full_snapshot(
         &mut self,
-        vote: Vote<NodeId>,
-        snapshot: Snapshot<TypeConfig>,
+        vote: Vote,
+        snapshot: Snapshot,
         _cancel: impl Future<Output = ReplicationClosed> + OptionalSend + 'static,
         _option: RPCOption,
-    ) -> Result<SnapshotResponse<TypeConfig>, typ::StreamingError> {
+    ) -> Result<SnapshotResponse, StreamingError> {
         info!("id:{} full snapshot take client", self.node_id);
         let client = self.take_client().await?;
         let resp = client
@@ -109,9 +107,9 @@ impl RaftNetworkV2<TypeConfig> for Connection {
 
     async fn vote(
         &mut self,
-        req: VoteRequest<TypeConfig>,
+        req: VoteRequest,
         _option: RPCOption,
-    ) -> Result<VoteResponse<TypeConfig>, typ::RPCError> {
+    ) -> Result<VoteResponse, RPCError> {
         info!("id:{} vote take client", self.node_id);
         let client = self.take_client().await?;
         let resp = client.vote(context::current(), req).await.unwrap();

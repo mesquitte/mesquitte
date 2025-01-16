@@ -32,7 +32,17 @@ path = "tests/raft_test.rs"
 required-features = ["cluster", "heed-storage"]
 
 [features]
-default = ["v4", "mqtt", "mqtts", "ws", "wss", "quic", "log"]
+default = [
+    "v4",
+    "mqtt",
+    "mqtts",
+    "ws",
+    "wss",
+    "quic",
+    "log",
+    "cluster",
+    "heed-storage",
+]
 
 v4 = ["mqtt-codec-kit/v4"]
 v5 = ["mqtt-codec-kit/v5"]
@@ -91,6 +101,7 @@ rust-rocksdb = { workspace = true, features = [
     "io-uring",
     "zstd",
     "zstd-static-linking-only",
+    "bindgen-runtime",
 ], optional = true }
 rustls = { workspace = true, default-features = false, optional = true }
 rustls-pemfile = { workspace = true, optional = true }

@@ -5,15 +5,15 @@ use log::debug;
 use openraft::{
     alias::SnapshotDataOf,
     storage::{RaftStateMachine, Snapshot},
-    Entry, EntryPayload, LogId, RaftLogId as _, RaftSnapshotBuilder, SnapshotMeta, StorageError,
-    StoredMembership,
+    Entry, EntryPayload, LogId, RaftLogId as _, RaftSnapshotBuilder, RaftTypeConfig, SnapshotMeta,
+    StorageError, StoredMembership,
 };
 use parking_lot::RwLock;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
-use crate::cluster::{typ, LogStore, NodeId, TypeConfig};
+use crate::cluster::{typ, LogStore, TypeConfig};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Request {
@@ -42,7 +42,7 @@ pub struct StoredSnapshot {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct StateMachineData {
-    pub last_applied_log: Option<LogId<NodeId>>,
+    pub last_applied_log: Option<LogId<TypeConfig>>,
     pub last_membership: StoredMembership<TypeConfig>,
     pub data: BTreeMap<String, String>,
 }
@@ -126,7 +126,7 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
 
     async fn applied_state(
         &mut self,
-    ) -> Result<(Option<LogId<NodeId>>, StoredMembership<TypeConfig>), StorageError<TypeConfig>>
+    ) -> Result<(Option<LogId<TypeConfig>>, StoredMembership<TypeConfig>), StorageError<TypeConfig>>
     {
         let state_machine = self.sm.read();
         Ok((
@@ -244,7 +244,9 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
     }
 }
 
-pub async fn new<P: AsRef<Path>>(db_path: P) -> (LogStore, Arc<StateMachineStore>) {
+pub async fn new<C: RaftTypeConfig, P: AsRef<Path>>(
+    db_path: P,
+) -> (LogStore<C>, Arc<StateMachineStore>) {
     fs::create_dir_all(db_path.as_ref()).await.unwrap();
     let env = unsafe {
         EnvOpenOptions::new()
@@ -281,10 +283,13 @@ mod tests {
 
     struct HeedBuilder {}
 
-    impl StoreBuilder<TypeConfig, LogStore, Arc<StateMachineStore>, TempDir> for HeedBuilder {
+    impl StoreBuilder<TypeConfig, LogStore<TypeConfig>, Arc<StateMachineStore>, TempDir>
+        for HeedBuilder
+    {
         async fn build(
             &self,
-        ) -> Result<(TempDir, LogStore, Arc<StateMachineStore>), StorageError<TypeConfig>> {
+        ) -> Result<(TempDir, LogStore<TypeConfig>, Arc<StateMachineStore>), StorageError<TypeConfig>>
+        {
             let tmp_dir = tempdir().expect("could not create temp dir");
             let file_path = tmp_dir.path().join("cluster.mdb");
             let (log_store, sm) = super::new(file_path.as_path()).await;

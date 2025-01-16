@@ -4,15 +4,15 @@ use log::debug;
 use openraft::{
     alias::SnapshotDataOf,
     storage::{RaftStateMachine, Snapshot},
-    Entry, EntryPayload, LogId, RaftLogId as _, RaftSnapshotBuilder, SnapshotMeta, StorageError,
-    StoredMembership,
+    Entry, EntryPayload, LogId, RaftLogId as _, RaftSnapshotBuilder, RaftTypeConfig, SnapshotMeta,
+    StorageError, StoredMembership,
 };
 use parking_lot::RwLock;
 use rand::Rng as _;
 use rust_rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use serde::{Deserialize, Serialize};
 
-use crate::cluster::{typ, LogStore, NodeId, TypeConfig};
+use crate::cluster::{typ, LogStore, TypeConfig};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Request {
@@ -41,7 +41,7 @@ pub struct StoredSnapshot {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct StateMachineData {
-    pub last_applied_log: Option<LogId<NodeId>>,
+    pub last_applied_log: Option<LogId<TypeConfig>>,
     pub last_membership: StoredMembership<TypeConfig>,
     pub data: BTreeMap<String, String>,
 }
@@ -121,7 +121,7 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
 
     async fn applied_state(
         &mut self,
-    ) -> Result<(Option<LogId<NodeId>>, StoredMembership<TypeConfig>), StorageError<TypeConfig>>
+    ) -> Result<(Option<LogId<TypeConfig>>, StoredMembership<TypeConfig>), StorageError<TypeConfig>>
     {
         let state_machine = self.sm.read();
         Ok((
@@ -221,7 +221,9 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
     }
 }
 
-pub async fn new<P: AsRef<Path>>(db_path: P) -> (LogStore, Arc<StateMachineStore>) {
+pub async fn new<C: RaftTypeConfig, P: AsRef<Path>>(
+    db_path: P,
+) -> (LogStore<C>, Arc<StateMachineStore>) {
     let mut db_opts = Options::default();
     db_opts.create_missing_column_families(true);
     db_opts.create_if_missing(true);
@@ -248,10 +250,13 @@ mod tests {
 
     struct RocksBuilder {}
 
-    impl StoreBuilder<TypeConfig, LogStore, Arc<StateMachineStore>, TempDir> for RocksBuilder {
+    impl StoreBuilder<TypeConfig, LogStore<TypeConfig>, Arc<StateMachineStore>, TempDir>
+        for RocksBuilder
+    {
         async fn build(
             &self,
-        ) -> Result<(TempDir, LogStore, Arc<StateMachineStore>), StorageError<TypeConfig>> {
+        ) -> Result<(TempDir, LogStore<TypeConfig>, Arc<StateMachineStore>), StorageError<TypeConfig>>
+        {
             let td = TempDir::new().expect("couldn't create temp dir");
             let (log_store, sm) = super::new(td.path()).await;
             Ok((td, log_store, sm))
