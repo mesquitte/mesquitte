@@ -4,8 +4,9 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::debug;
 use openraft::{
     alias::{EntryOf, LogIdOf, VoteOf},
+    entry::RaftEntry as _,
     storage::{IOFlushed, RaftLogStorage},
-    LogState, OptionalSend, RaftLogId, RaftLogReader, RaftTypeConfig, StorageError,
+    LogState, OptionalSend, RaftLogReader, RaftTypeConfig, StorageError,
 };
 use rust_rocksdb::{ColumnFamily, Direction, IteratorMode, DB};
 
@@ -97,7 +98,7 @@ impl<C: RaftTypeConfig> RaftLogReader<C> for LogStore<C> {
             let entry: EntryOf<C> =
                 bincode::deserialize(&val).map_err(|e| StorageError::read_logs(&e))?;
 
-            assert_eq!(id, entry.get_log_id().index());
+            assert_eq!(id, entry.index());
 
             res.push(entry);
         }
@@ -124,7 +125,7 @@ impl<C: RaftTypeConfig> RaftLogStorage<C> for LogStore<C> {
                 let (_log_index, entry_bytes) = res.map_err(|e| StorageError::read_logs(&e))?;
                 let ent = bincode::deserialize::<EntryOf<C>>(&entry_bytes)
                     .map_err(|e| StorageError::read_logs(&e))?;
-                Some(ent.get_log_id().clone())
+                Some(ent.log_id())
             }
         };
 
@@ -159,8 +160,8 @@ impl<C: RaftTypeConfig> RaftLogStorage<C> for LogStore<C> {
     {
         for entry in entries {
             debug!("append entries: {:?}", entry);
-            let id = id_to_bin(entry.get_log_id().index());
-            assert_eq!(bin_to_id(&id), entry.get_log_id().index());
+            let id = id_to_bin(entry.index());
+            assert_eq!(bin_to_id(&id), entry.index());
             self.db
                 .put_cf(
                     self.cf_logs(),

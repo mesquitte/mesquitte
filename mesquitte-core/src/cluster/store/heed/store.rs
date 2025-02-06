@@ -4,9 +4,10 @@ use heed::{byteorder::BE, types::*, Database, Env, EnvOpenOptions};
 use log::debug;
 use openraft::{
     alias::SnapshotDataOf,
+    entry::RaftEntry as _,
     storage::{RaftStateMachine, Snapshot},
-    Entry, EntryPayload, LogId, RaftLogId as _, RaftSnapshotBuilder, RaftTypeConfig, SnapshotMeta,
-    StorageError, StoredMembership,
+    Entry, EntryPayload, LogId, RaftSnapshotBuilder, RaftTypeConfig, SnapshotMeta, StorageError,
+    StoredMembership,
 };
 use parking_lot::RwLock;
 use rand::Rng as _;
@@ -81,7 +82,7 @@ impl RaftSnapshotBuilder<TypeConfig> for Arc<StateMachineStore> {
             last_applied_log = sm.last_applied_log;
             last_membership = sm.last_membership.clone();
         }
-        let snapshot_idx: u64 = rand::thread_rng().gen_range(0..1000);
+        let snapshot_idx: u64 = rand::rng().random_range(0..1000);
         let snapshot_id = if let Some(last) = last_applied_log {
             format!("{}-{}-{}", last.leader_id, last.index, snapshot_idx)
         } else {
@@ -145,7 +146,7 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
 
         for entry in entries_iter {
             debug!("{} replicate to sm", entry.log_id);
-            sm.last_applied_log = Some(*entry.get_log_id());
+            sm.last_applied_log = Some(entry.log_id());
             match entry.payload {
                 EntryPayload::Blank => res.push(Response { value: None }),
                 EntryPayload::Normal(ref req) => match req {

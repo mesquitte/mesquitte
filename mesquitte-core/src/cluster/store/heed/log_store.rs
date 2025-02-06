@@ -4,8 +4,9 @@ use heed::{byteorder::BE, types::*, Database, Env};
 use log::{debug, info};
 use openraft::{
     alias::{EntryOf, LogIdOf, VoteOf},
+    entry::RaftEntry as _,
     storage::{IOFlushed, RaftLogStorage},
-    LogState, OptionalSend, RaftLogId, RaftLogReader, RaftTypeConfig, StorageError,
+    LogState, OptionalSend, RaftLogReader, RaftTypeConfig, StorageError,
 };
 
 #[derive(Debug, Clone)]
@@ -79,7 +80,7 @@ where
             }
             let entry: EntryOf<C> =
                 bincode::deserialize(val).map_err(|e| StorageError::read_logs(&e))?;
-            assert_eq!(id, entry.get_log_id().index());
+            assert_eq!(id, entry.index());
             debug!("log entry: {:?}", entry);
             res.push(entry);
         }
@@ -112,7 +113,7 @@ where
                 let (_log_index, entry_bytes) = res;
                 let ent = bincode::deserialize::<EntryOf<C>>(entry_bytes)
                     .map_err(|e| StorageError::read_logs(&e))?;
-                Some(ent.get_log_id().clone())
+                Some(ent.log_id())
             }
         };
 
@@ -154,7 +155,7 @@ where
                 .map_err(|e| StorageError::write_logs(&e))?;
             db.put(
                 &mut wtxn,
-                &entry.get_log_id().index(),
+                &entry.index(),
                 &bincode::serialize(&entry).map_err(|e| StorageError::write_logs(&e))?,
             )
             .map_err(|e| StorageError::write_logs(&e))?;
