@@ -180,7 +180,7 @@ impl RaftRPC for App {
     ) -> SnapshotResponse<TypeConfig> {
         let snapshot = Snapshot {
             meta: snapshot_meta,
-            snapshot: Box::new(snapshot_data),
+            snapshot: snapshot_data,
         };
         self.raft
             .install_full_snapshot(vote, snapshot)

@@ -37,7 +37,7 @@ pub struct Response {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StoredSnapshot {
     pub meta: SnapshotMeta<TypeConfig>,
-    pub data: Box<typ::SnapshotData>,
+    pub data: typ::SnapshotData,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -62,7 +62,7 @@ impl StateMachineStore {
         let mut state_machine = Arc::new(state_machine);
         let snapshot = state_machine.get_current_snapshot().await.unwrap();
         if let Some(s) = snapshot {
-            let prev: StateMachineData = *s.snapshot;
+            let prev: StateMachineData = s.snapshot;
             let mut sm = state_machine.sm.write();
             *sm = prev;
         }
@@ -96,7 +96,7 @@ impl RaftSnapshotBuilder<TypeConfig> for Arc<StateMachineStore> {
 
         let snapshot = StoredSnapshot {
             meta: meta.clone(),
-            data: Box::new(sm.clone()),
+            data: sm.clone(),
         };
 
         let serialized_snapshot = bincode::serialize(&snapshot)
@@ -112,7 +112,7 @@ impl RaftSnapshotBuilder<TypeConfig> for Arc<StateMachineStore> {
 
         Ok(Snapshot {
             meta,
-            snapshot: Box::new(sm.clone()),
+            snapshot: sm.clone(),
         })
     }
 }
@@ -163,20 +163,20 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
 
     async fn begin_receiving_snapshot(
         &mut self,
-    ) -> Result<Box<SnapshotDataOf<TypeConfig>>, StorageError<TypeConfig>> {
-        Ok(Box::default())
+    ) -> Result<SnapshotDataOf<TypeConfig>, StorageError<TypeConfig>> {
+        Ok(Default::default())
     }
 
     async fn install_snapshot(
         &mut self,
         meta: &SnapshotMeta<TypeConfig>,
-        snapshot: Box<SnapshotDataOf<TypeConfig>>,
+        snapshot: SnapshotDataOf<TypeConfig>,
     ) -> Result<(), StorageError<TypeConfig>> {
         let new_snapshot = StoredSnapshot {
             meta: meta.clone(),
             data: snapshot,
         };
-        let updated_state_machine: StateMachineData = *new_snapshot.data.clone();
+        let updated_state_machine: StateMachineData = new_snapshot.data.clone();
         {
             let mut sm = self.sm.write();
             *sm = updated_state_machine;

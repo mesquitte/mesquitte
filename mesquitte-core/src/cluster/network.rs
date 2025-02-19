@@ -99,7 +99,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
         info!("id:{} full snapshot take client", self.node_id);
         let client = self.take_client().await?;
         let resp = client
-            .snapshot(context::current(), vote, snapshot.meta, *snapshot.snapshot)
+            .snapshot(context::current(), vote, snapshot.meta, snapshot.snapshot)
             .await
             .unwrap();
         Ok(resp)
