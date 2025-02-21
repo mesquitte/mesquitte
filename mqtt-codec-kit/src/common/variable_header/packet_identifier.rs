@@ -26,7 +26,7 @@ impl Decodable for PacketIdentifier {
     type Cond = ();
 
     fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
-        reader.read_u16::<BigEndian>().map(Self).map_err(From::from)
+        reader.read_u16::<BigEndian>().map(Self)
     }
 }
 

@@ -122,7 +122,7 @@ impl Decodable for ConnectReasonCode {
     type Cond = ();
 
     fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
-        reader.read_u8().map(Self::try_from)?.map_err(From::from)
+        reader.read_u8().map(Self::try_from)?
     }
 }
 

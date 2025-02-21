@@ -26,10 +26,7 @@ impl Decodable for KeepAlive {
     type Cond = ();
 
     fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
-        reader
-            .read_u16::<BigEndian>()
-            .map(KeepAlive)
-            .map_err(From::from)
+        reader.read_u16::<BigEndian>().map(KeepAlive)
     }
 }
 

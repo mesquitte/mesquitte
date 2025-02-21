@@ -10,9 +10,9 @@ use byteorder::{ReadBytesExt, WriteBytesExt};
 
 use crate::{
     common::{
+        Decodable, Encodable, PacketIdentifier, QualityOfService, TopicFilter,
         packet::DecodablePacket,
         topic_filter::{TopicFilterDecodeError, TopicFilterError},
-        Decodable, Encodable, PacketIdentifier, QualityOfService, TopicFilter,
     },
     v5::{
         control::{ControlType, FixedHeader, PacketType, SubscribeProperties, VariableHeaderError},
@@ -249,8 +249,8 @@ impl Decodable for SubscribeOptions {
         let options = reader.read_u8()?;
 
         let requested_qos = options & 0b0000_0011;
-        let no_local = (options >> 2 & 0b0000_0001) != 0;
-        let retain_as_published = (options >> 3 & 0b0000_0001) != 0;
+        let no_local = ((options >> 2) & 0b0000_0001) != 0;
+        let retain_as_published = ((options >> 3) & 0b0000_0001) != 0;
         let retain_handling = (options >> 4) & 0b0000_0011;
 
         let qos = match requested_qos {

@@ -10,18 +10,20 @@ use mesquitte_core::{
         ws::server::WsServer,
     },
     store::{
-        memory::{
-            message::MessageMemoryStore, retain::RetainMessageMemoryStore, topic::TopicMemoryStore,
-            MemoryStore,
-        },
         Storage,
+        memory::{
+            MemoryStore, message::MessageMemoryStore, retain::RetainMessageMemoryStore,
+            topic::TopicMemoryStore,
+        },
     },
 };
 use tokio::signal;
 
 #[tokio::main]
 async fn main() {
-    env::set_var("RUST_LOG", "broker=trace,mesquitte_core=trace");
+    unsafe {
+        env::set_var("RUST_LOG", "broker=trace,mesquitte_core=trace");
+    }
     env_logger::init();
 
     let topic_store = TopicMemoryStore::default();

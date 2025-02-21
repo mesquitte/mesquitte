@@ -8,7 +8,7 @@ use std::{
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
 use crate::{
-    common::{packet::DecodablePacket, Decodable, Encodable, PacketIdentifier},
+    common::{Decodable, Encodable, PacketIdentifier, packet::DecodablePacket},
     v5::{
         control::{ControlType, FixedHeader, PacketType, UnsubackProperties, VariableHeaderError},
         packet::PacketError,
@@ -230,10 +230,7 @@ impl Decodable for UnsubscribeReasonCode {
         reader: &mut R,
         _rest: (),
     ) -> Result<UnsubscribeReasonCode, UnsubackPacketError> {
-        reader
-            .read_u8()
-            .map(UnsubscribeReasonCode::try_from)?
-            .map_err(From::from)
+        reader.read_u8().map(UnsubscribeReasonCode::try_from)?
     }
 }
 

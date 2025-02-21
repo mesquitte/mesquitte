@@ -90,7 +90,7 @@ impl PacketType {
 
     #[inline]
     fn new_unchecked(t: ControlType, flags: u8) -> Self {
-        let byte = (t as u8) << 4 | (flags & 0x0F);
+        let byte = ((t as u8) << 4) | (flags & 0x0F);
         #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: just constructed from a valid ControlType

@@ -9,7 +9,9 @@ use tokio::runtime::Runtime;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn raft_test() {
-    env::set_var("RUST_LOG", "raft_test=trace,mesquitte_core=debug");
+    unsafe {
+        env::set_var("RUST_LOG", "raft_test=trace,mesquitte_core=debug");
+    }
     env_logger::init();
 
     let (_, app1) = new_raft(

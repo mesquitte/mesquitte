@@ -3,17 +3,19 @@ use std::{env, io, sync::OnceLock};
 use mesquitte_core::{
     server::{config::ServerConfig, state::GlobalState, ws::server::WsServer},
     store::{
-        memory::{
-            message::MessageMemoryStore, retain::RetainMessageMemoryStore, topic::TopicMemoryStore,
-            MemoryStore,
-        },
         Storage,
+        memory::{
+            MemoryStore, message::MessageMemoryStore, retain::RetainMessageMemoryStore,
+            topic::TopicMemoryStore,
+        },
     },
 };
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    env::set_var("RUST_LOG", "ws=trace,mesquitte_core=trace");
+    unsafe {
+        env::set_var("RUST_LOG", "ws=trace,mesquitte_core=trace");
+    }
     env_logger::init();
 
     let topic_store = TopicMemoryStore::default();
