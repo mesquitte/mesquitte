@@ -1,7 +1,7 @@
 use futures::{SinkExt as _, StreamExt as _};
 use kanal::bounded_async;
 use mqtt_codec_kit::{
-    common::{ProtocolLevel, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX, SYS_PREFIX},
+    common::{MATCH_ALL_STR, MATCH_ONE_STR, ProtocolLevel, SHARED_PREFIX, SYS_PREFIX},
     v4::{
         control::ConnectReturnCode,
         packet::{ConnackPacket, MqttDecoder, MqttEncoder, PublishPacket, VariablePacket},

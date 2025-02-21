@@ -9,11 +9,11 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::{
     common::{
+        ConnectFlags, ConnectFlagsError, Decodable, Encodable, KeepAlive, ProtocolLevel,
+        ProtocolName, QualityOfService, TopicName, TopicNameDecodeError, TopicNameError,
         encodable::{VarBytes, VarInt},
         packet::DecodablePacket,
         protocol_level::SPEC_5_0,
-        ConnectFlags, ConnectFlagsError, Decodable, Encodable, KeepAlive, ProtocolLevel,
-        ProtocolName, QualityOfService, TopicName, TopicNameDecodeError, TopicNameError,
     },
     v5::{
         control::{ControlType, FixedHeader, PacketType, VariableHeaderError},
@@ -233,7 +233,13 @@ impl Display for ConnectPacket {
         write!(
             f,
             "{{fixed_header: {}, protocol_name: {}, protocol_level: {}, flags: {}, keepalive: {}, properties: {}, payload: {}}}",
-            self.fixed_header, self.protocol_name, self.protocol_level, self.flags, self.keep_alive, self.properties, self.payload
+            self.fixed_header,
+            self.protocol_name,
+            self.protocol_level,
+            self.flags,
+            self.keep_alive,
+            self.properties,
+            self.payload
         )
     }
 }

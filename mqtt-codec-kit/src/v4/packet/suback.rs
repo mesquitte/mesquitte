@@ -9,7 +9,7 @@ use std::{
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
 use crate::{
-    common::{packet::DecodablePacket, Decodable, Encodable, PacketIdentifier, QualityOfService},
+    common::{Decodable, Encodable, PacketIdentifier, QualityOfService, packet::DecodablePacket},
     v4::{
         control::{ControlType, FixedHeader, PacketType},
         packet::PacketError,

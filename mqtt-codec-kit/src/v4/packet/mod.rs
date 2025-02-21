@@ -10,12 +10,12 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{
     common::{
+        Decodable, Encodable,
         packet::{DecodablePacket, EncodablePacket},
         topic_name::{TopicNameDecodeError, TopicNameError},
-        Decodable, Encodable,
     },
     v4::control::{
-        variable_header::VariableHeaderError, ControlType, FixedHeader, FixedHeaderError,
+        ControlType, FixedHeader, FixedHeaderError, variable_header::VariableHeaderError,
     },
 };
 

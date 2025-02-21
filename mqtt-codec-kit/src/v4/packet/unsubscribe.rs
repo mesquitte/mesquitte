@@ -8,9 +8,9 @@ use std::{
 
 use crate::{
     common::{
+        Decodable, Encodable, PacketIdentifier, TopicFilter,
         packet::DecodablePacket,
         topic_filter::{TopicFilterDecodeError, TopicFilterError},
-        Decodable, Encodable, PacketIdentifier, TopicFilter,
     },
     v4::{
         control::{ControlType, FixedHeader, PacketType},

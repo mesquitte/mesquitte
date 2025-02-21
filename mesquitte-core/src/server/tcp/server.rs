@@ -4,7 +4,7 @@ use tokio::net::TcpSocket;
 
 use crate::{
     info,
-    server::{config::ServerConfig, process_client, state::GlobalState, Error},
+    server::{Error, config::ServerConfig, process_client, state::GlobalState},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore},
 };
 #[cfg(feature = "mqtts")]

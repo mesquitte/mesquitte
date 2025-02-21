@@ -78,7 +78,13 @@ impl Display for ConnectFlags {
         write!(
             f,
             "{{username: {}, password: {}, will_retain: {}, will_qos: {}, will_flag: {}, clean_session: {}, reserved: {}}}",
-            self.username, self.password, self.will_retain, self.will_qos, self.will_flag, self.clean_session, self.reserved
+            self.username,
+            self.password,
+            self.will_retain,
+            self.will_qos,
+            self.will_flag,
+            self.clean_session,
+            self.reserved
         )
     }
 }

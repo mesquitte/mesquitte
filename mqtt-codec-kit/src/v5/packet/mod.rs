@@ -10,12 +10,12 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{
     common::{
-        packet::{DecodablePacket, EncodablePacket},
         Decodable, TopicNameDecodeError, TopicNameError,
+        packet::{DecodablePacket, EncodablePacket},
     },
     v5::control::{
-        fixed_header::FixedHeaderError, variable_header::VariableHeaderError, ControlType,
-        FixedHeader,
+        ControlType, FixedHeader, fixed_header::FixedHeaderError,
+        variable_header::VariableHeaderError,
     },
 };
 
@@ -344,7 +344,7 @@ mod codec {
 
     use super::*;
     use crate::{
-        common::{packet::EncodablePacket, Encodable},
+        common::{Encodable, packet::EncodablePacket},
         v5::control::packet_type::{PacketType, PacketTypeError},
     };
 

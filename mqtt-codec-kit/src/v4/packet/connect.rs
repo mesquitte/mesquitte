@@ -7,15 +7,15 @@ use std::{
 
 use crate::{
     common::{
+        ConnectFlags, ConnectFlagsError, Decodable, Encodable, KeepAlive, ProtocolLevel,
+        ProtocolName, QualityOfService, TopicName,
         encodable::VarBytes,
         packet::DecodablePacket,
         protocol_level::SPEC_3_1_1,
         topic_name::{TopicNameDecodeError, TopicNameError},
-        ConnectFlags, ConnectFlagsError, Decodable, Encodable, KeepAlive, ProtocolLevel,
-        ProtocolName, QualityOfService, TopicName,
     },
     v4::{
-        control::{variable_header::VariableHeaderError, ControlType, FixedHeader, PacketType},
+        control::{ControlType, FixedHeader, PacketType, variable_header::VariableHeaderError},
         packet::PacketError,
     },
 };
@@ -220,7 +220,12 @@ impl Display for ConnectPacket {
         write!(
             f,
             "{{fixed_header: {}, protocol_name: {}, protocol_level: {}, flags: {}, keepalive: {}, payload: {}}}",
-            self.fixed_header, self.protocol_name, self.protocol_level, self.flags, self.keep_alive, self.payload
+            self.fixed_header,
+            self.protocol_name,
+            self.protocol_level,
+            self.flags,
+            self.keep_alive,
+            self.payload
         )
     }
 }

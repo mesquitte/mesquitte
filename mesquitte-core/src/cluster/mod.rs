@@ -13,7 +13,7 @@ use network::Network;
 use openraft::{Config, Raft};
 use pool::ClientPool;
 use serde::{Deserialize, Serialize};
-use store::{log_store, Request, Response, StateMachineData};
+use store::{Request, Response, StateMachineData, log_store};
 
 pub type NodeId = u64;
 

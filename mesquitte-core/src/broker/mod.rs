@@ -1,5 +1,5 @@
 use crate::{
-    server::{quic::server::QuicServer, tcp::server::TcpServer, ws::server::WsServer, Error},
+    server::{Error, quic::server::QuicServer, tcp::server::TcpServer, ws::server::WsServer},
     store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore},
 };
 

@@ -1,8 +1,8 @@
 use std::{io, num::ParseIntError};
 
-use mqtt_codec_kit::common::{protocol_level::ProtocolLevelError, ProtocolLevel};
+use mqtt_codec_kit::common::{ProtocolLevel, protocol_level::ProtocolLevelError};
 use state::GlobalState;
-use tokio::io::{split, AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, split};
 
 #[cfg(feature = "v4")]
 use crate::protocols::v4;

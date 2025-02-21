@@ -1,12 +1,12 @@
 use std::{fmt::Debug, marker::PhantomData, ops::RangeBounds, sync::Arc};
 
-use heed::{byteorder::BE, types::*, Database, Env};
+use heed::{Database, Env, byteorder::BE, types::*};
 use log::{debug, info};
 use openraft::{
+    LogState, OptionalSend, RaftLogReader, RaftTypeConfig, StorageError,
     alias::{EntryOf, LogIdOf, VoteOf},
     entry::RaftEntry as _,
     storage::{IOFlushed, RaftLogStorage},
-    LogState, OptionalSend, RaftLogReader, RaftTypeConfig, StorageError,
 };
 
 #[derive(Debug, Clone)]
@@ -210,10 +210,10 @@ where
 
 mod meta {
     use openraft::{
-        alias::{LogIdOf, VoteOf},
         AnyError, ErrorSubject, ErrorVerb, RaftTypeConfig, StorageError,
+        alias::{LogIdOf, VoteOf},
     };
-    use serde::{de::DeserializeOwned, Serialize};
+    use serde::{Serialize, de::DeserializeOwned};
 
     pub(crate) trait StoreMeta<C: RaftTypeConfig> {
         const KEY: &'static str;

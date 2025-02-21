@@ -7,9 +7,9 @@ use std::{
 
 use crate::{
     common::{
+        Decodable, Encodable, PacketIdentifier, TopicName, TopicNameRef,
         packet::{DecodablePacket, EncodablePacket},
         qos::QoSWithPacketIdentifier,
-        Decodable, Encodable, PacketIdentifier, TopicName, TopicNameRef,
     },
     v4::{
         control::{FixedHeader, PacketType},

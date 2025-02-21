@@ -9,7 +9,7 @@ use parking_lot::RwLock;
 
 use crate::{
     error,
-    store::message::{get_unix_ts, MessageStore, PendingPublishMessage, PublishMessage},
+    store::message::{MessageStore, PendingPublishMessage, PublishMessage, get_unix_ts},
 };
 
 #[derive(Debug)]

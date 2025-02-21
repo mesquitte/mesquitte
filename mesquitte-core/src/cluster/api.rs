@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use log::info;
 
-use super::{app::App, store::Request, typ::RaftMetrics, Node, NodeId};
+use super::{Node, NodeId, app::App, store::Request, typ::RaftMetrics};
 
 pub async fn write(State(app): State<App>, Json(req): Json<Request>) -> impl IntoResponse {
     let res = app.raft.client_write(req).await;
