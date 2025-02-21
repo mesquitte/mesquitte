@@ -3,7 +3,7 @@
 use std::{fmt::Display, io::Read};
 
 use crate::{
-    common::{packet::DecodablePacket, Decodable, PacketIdentifier},
+    common::{Decodable, PacketIdentifier, packet::DecodablePacket},
     v4::{
         control::{ControlType, FixedHeader, PacketType},
         packet::PacketError,

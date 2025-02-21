@@ -3,7 +3,7 @@
 use std::{fmt::Display, io::Read};
 
 use crate::{
-    common::{packet::DecodablePacket, ConnackFlags, ConnectAckFlagsError, Decodable},
+    common::{ConnackFlags, ConnectAckFlagsError, Decodable, packet::DecodablePacket},
     v5::{
         control::{
             ConnackProperties, ConnectReasonCode, ControlType, FixedHeader, PacketType,

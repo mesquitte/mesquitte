@@ -3,16 +3,16 @@ use std::{future::Future, net::SocketAddr};
 use backon::{ExponentialBuilder, Retryable};
 use log::{info, warn};
 use openraft::{
-    error::{ReplicationClosed, Unreachable},
-    network::{v2::RaftNetworkV2, RPCOption},
     OptionalSend, RaftNetworkFactory,
+    error::{ReplicationClosed, Unreachable},
+    network::{RPCOption, v2::RaftNetworkV2},
 };
 use tarpc::context;
 
 use super::{
+    Node, NodeId, TypeConfig,
     pool::{ClientPool, RPCClientManager},
     typ::*,
-    Node, NodeId, TypeConfig,
 };
 
 pub struct Connection {

@@ -1,7 +1,7 @@
 use std::{io, time::Duration};
 
 use futures::{SinkExt as _, StreamExt as _};
-use kanal::{bounded_async, AsyncReceiver, AsyncSender};
+use kanal::{AsyncReceiver, AsyncSender, bounded_async};
 use mqtt_codec_kit::v5::{
     control::DisconnectReasonCode,
     packet::{
@@ -11,7 +11,7 @@ use mqtt_codec_kit::v5::{
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    time::{interval_at, Instant},
+    time::{Instant, interval_at},
 };
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
@@ -19,7 +19,7 @@ use crate::{
     debug, error, info,
     protocols::ProtocolSessionState,
     server::state::{DeliverMessage, GlobalState},
-    store::{message::MessageStore, retain::RetainMessageStore, topic::TopicStore, Storage},
+    store::{Storage, message::MessageStore, retain::RetainMessageStore, topic::TopicStore},
     warn,
 };
 
@@ -30,7 +30,7 @@ use super::{
         handle_pubrel, handle_will, retrieve_all_pending_messages,
     },
     session::Session,
-    subscribe::{handle_subscribe, handle_unsubscribe, SubscribeAck},
+    subscribe::{SubscribeAck, handle_subscribe, handle_unsubscribe},
 };
 
 async fn read_from_client<T, D>(mut reader: FramedRead<T, D>, sender: AsyncSender<VariablePacket>)

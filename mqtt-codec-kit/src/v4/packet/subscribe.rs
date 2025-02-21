@@ -10,9 +10,9 @@ use byteorder::{ReadBytesExt, WriteBytesExt};
 
 use crate::{
     common::{
+        Decodable, Encodable, PacketIdentifier, QualityOfService, TopicFilter,
         packet::DecodablePacket,
         topic_filter::{TopicFilterDecodeError, TopicFilterError},
-        Decodable, Encodable, PacketIdentifier, QualityOfService, TopicFilter,
     },
     v4::{
         control::{ControlType, FixedHeader, PacketType},

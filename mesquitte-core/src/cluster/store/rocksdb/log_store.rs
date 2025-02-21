@@ -3,12 +3,12 @@ use std::{fmt::Debug, marker::PhantomData, ops::RangeBounds, sync::Arc};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::debug;
 use openraft::{
+    LogState, OptionalSend, RaftLogReader, RaftTypeConfig, StorageError,
     alias::{EntryOf, LogIdOf, VoteOf},
     entry::RaftEntry as _,
     storage::{IOFlushed, RaftLogStorage},
-    LogState, OptionalSend, RaftLogReader, RaftTypeConfig, StorageError,
 };
-use rust_rocksdb::{ColumnFamily, Direction, IteratorMode, DB};
+use rust_rocksdb::{ColumnFamily, DB, Direction, IteratorMode};
 
 #[derive(Debug, Clone)]
 pub struct LogStore<C: RaftTypeConfig> {
@@ -211,10 +211,10 @@ impl<C: RaftTypeConfig> RaftLogStorage<C> for LogStore<C> {
 
 mod meta {
     use openraft::{
-        alias::{LogIdOf, VoteOf},
         AnyError, ErrorSubject, ErrorVerb, RaftTypeConfig, StorageError,
+        alias::{LogIdOf, VoteOf},
     };
-    use serde::{de::DeserializeOwned, Serialize};
+    use serde::{Serialize, de::DeserializeOwned};
 
     pub(crate) trait StoreMeta<C: RaftTypeConfig> {
         const KEY: &'static str;

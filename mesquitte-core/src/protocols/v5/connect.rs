@@ -1,7 +1,7 @@
-use kanal::{bounded_async, AsyncReceiver};
+use kanal::{AsyncReceiver, bounded_async};
 use mqtt_codec_kit::{
     common::{
-        ProtocolLevel, QualityOfService, MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX, SYS_PREFIX,
+        MATCH_ALL_STR, MATCH_ONE_STR, ProtocolLevel, QualityOfService, SHARED_PREFIX, SYS_PREFIX,
     },
     v5::{
         control::{ConnackProperties, ConnectReasonCode, DisconnectReasonCode},

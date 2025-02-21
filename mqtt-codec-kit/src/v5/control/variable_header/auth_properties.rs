@@ -9,8 +9,8 @@ use byteorder::{ReadBytesExt, WriteBytesExt};
 
 use crate::{
     common::{
-        encodable::{VarBytes, VarInt},
         Decodable, Encodable,
+        encodable::{VarBytes, VarInt},
     },
     v5::property::{PropertyType, PropertyTypeError},
 };

@@ -1,20 +1,20 @@
 use std::{collections::BTreeMap, path::Path, sync::Arc};
 
-use heed::{byteorder::BE, types::*, Database, Env, EnvOpenOptions};
+use heed::{Database, Env, EnvOpenOptions, byteorder::BE, types::*};
 use log::debug;
 use openraft::{
+    Entry, EntryPayload, LogId, RaftSnapshotBuilder, RaftTypeConfig, SnapshotMeta, StorageError,
+    StoredMembership,
     alias::SnapshotDataOf,
     entry::RaftEntry as _,
     storage::{RaftStateMachine, Snapshot},
-    Entry, EntryPayload, LogId, RaftSnapshotBuilder, RaftTypeConfig, SnapshotMeta, StorageError,
-    StoredMembership,
 };
 use parking_lot::RwLock;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
-use crate::cluster::{typ, LogStore, TypeConfig};
+use crate::cluster::{LogStore, TypeConfig, typ};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Request {
@@ -275,10 +275,10 @@ pub async fn new<C: RaftTypeConfig, P: AsRef<Path>>(
 #[cfg(test)]
 mod tests {
     use openraft::{
-        testing::log::{StoreBuilder, Suite},
         StorageError,
+        testing::log::{StoreBuilder, Suite},
     };
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
 
     use crate::cluster::*;
 

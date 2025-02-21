@@ -4,18 +4,18 @@ use futures::StreamExt as _;
 use kanal::{AsyncReceiver, AsyncSender};
 use mqtt_codec_kit::{
     common::{
-        qos::QoSWithPacketIdentifier, QualityOfService, TopicFilter, MATCH_ALL_STR, MATCH_ONE_STR,
-        SHARED_PREFIX,
+        MATCH_ALL_STR, MATCH_ONE_STR, QualityOfService, SHARED_PREFIX, TopicFilter,
+        qos::QoSWithPacketIdentifier,
     },
     v4::packet::{
-        suback::SubscribeReturnCode, DisconnectPacket, PingrespPacket, PubackPacket, PubcompPacket,
-        PublishPacket, PubrecPacket, PubrelPacket, SubackPacket, SubscribePacket, UnsubackPacket,
-        UnsubscribePacket, VariablePacket, VariablePacketError,
+        DisconnectPacket, PingrespPacket, PubackPacket, PubcompPacket, PublishPacket, PubrecPacket,
+        PubrelPacket, SubackPacket, SubscribePacket, UnsubackPacket, UnsubscribePacket,
+        VariablePacket, VariablePacketError, suback::SubscribeReturnCode,
     },
 };
 use tokio::{
     io::AsyncRead,
-    time::{interval_at, Instant},
+    time::{Instant, interval_at},
 };
 use tokio_util::codec::{Decoder, FramedRead};
 
@@ -31,7 +31,7 @@ use crate::{
     warn,
 };
 
-use super::{session::Session, WritePacket};
+use super::{WritePacket, session::Session};
 
 pub(crate) struct ReadLoop<T, D, S: 'static> {
     reader: FramedRead<T, D>,

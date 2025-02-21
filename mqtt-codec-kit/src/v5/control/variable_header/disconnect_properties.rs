@@ -8,7 +8,7 @@ use std::{
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::{
-    common::{encodable::VarInt, Decodable, Encodable},
+    common::{Decodable, Encodable, encodable::VarInt},
     v5::property::{PropertyType, PropertyTypeError},
 };
 

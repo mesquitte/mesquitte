@@ -1,9 +1,9 @@
 use std::{fs::File, io::BufReader, sync::Arc};
 
-use rustls::{server::WebPkiClientVerifier, RootCertStore};
+use rustls::{RootCertStore, server::WebPkiClientVerifier};
 use tokio_rustls::{
-    rustls::{Error as RustlsError, ServerConfig},
     TlsAcceptor,
+    rustls::{Error as RustlsError, ServerConfig},
 };
 
 use super::config::TlsConfig;

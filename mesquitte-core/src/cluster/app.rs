@@ -5,8 +5,8 @@ use std::{
 };
 
 use axum::{
-    routing::{get, post},
     Router,
+    routing::{get, post},
 };
 use futures::{future, prelude::*};
 use log::info;
@@ -15,19 +15,19 @@ use openraft::raft::{
 };
 use tarpc::{
     context::Context,
-    server::{incoming::Incoming as _, BaseChannel, Channel as _},
+    server::{BaseChannel, Channel as _, incoming::Incoming as _},
     tokio_serde::formats::Bincode,
 };
 
 use crate::cluster::api::*;
 
 use super::{
+    Node, NodeId, StateMachineStore, TypeConfig,
     store::Request,
     typ::{
         ClientWriteError, ClientWriteResponse, InitializeError, Raft, RaftError, RaftMetrics,
         Snapshot, SnapshotData, SnapshotMeta, Vote,
     },
-    Node, NodeId, StateMachineStore, TypeConfig,
 };
 
 #[tarpc::service]

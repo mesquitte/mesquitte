@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use dashmap::DashMap;
 use log::info;
-use mobc::{async_trait, Connection, Manager, Pool};
+use mobc::{Connection, Manager, Pool, async_trait};
 use tarpc::{client::Config, serde_transport::Transport, tokio_serde::formats::Bincode};
 use tokio::net::TcpStream;
 

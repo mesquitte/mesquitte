@@ -2,7 +2,7 @@ use std::{io, mem, sync::Arc};
 
 use foldhash::HashMap;
 use mqtt_codec_kit::common::{
-    TopicName, LEVEL_SEP, MATCH_ALL_CHAR, MATCH_ALL_STR, MATCH_ONE_CHAR, MATCH_ONE_STR,
+    LEVEL_SEP, MATCH_ALL_CHAR, MATCH_ALL_STR, MATCH_ONE_CHAR, MATCH_ONE_STR, TopicName,
 };
 use parking_lot::RwLock;
 

@@ -11,7 +11,7 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::common::{Decodable, Encodable};
 
-use super::{packet_type::PacketTypeError, PacketType};
+use super::{PacketType, packet_type::PacketTypeError};
 
 /// Fixed header for each MQTT control packet
 ///

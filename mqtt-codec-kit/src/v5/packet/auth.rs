@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use crate::{
-    common::{packet::DecodablePacket, Decodable},
+    common::{Decodable, packet::DecodablePacket},
     v5::control::{
         AuthProperties, AuthenticateReasonCode, ControlType, FixedHeader, PacketType,
         VariableHeaderError,

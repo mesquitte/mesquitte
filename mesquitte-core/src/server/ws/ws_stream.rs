@@ -5,7 +5,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use futures::{ready, Sink, Stream};
+use futures::{Sink, Stream, ready};
 use pin_project_lite::pin_project;
 use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, ReadBuf};
 use tungstenite::Message;
@@ -272,7 +272,7 @@ where
                     return Poll::Ready(Err(io::Error::new(
                         io::ErrorKind::NotConnected,
                         "Already closed",
-                    )))
+                    )));
                 }
                 err => return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err))),
             }

@@ -7,10 +7,10 @@ use tarpc::{client::Config, context, serde_transport::Transport, tokio_serde::fo
 use tokio::net::TcpStream;
 
 use super::{
+    NodeId,
     app::RaftRPCClient,
     store::Request,
     typ::{ClientWriteResponse, ForwardToLeader, RPCError, RaftMetrics},
-    NodeId,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

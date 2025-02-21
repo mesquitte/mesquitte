@@ -7,8 +7,8 @@ use std::{
 
 use crate::{
     common::{
-        packet::{DecodablePacket, EncodablePacket},
         Decodable, Encodable,
+        packet::{DecodablePacket, EncodablePacket},
     },
     v5::{
         control::{

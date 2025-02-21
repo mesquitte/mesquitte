@@ -2,18 +2,18 @@ use std::{collections::BTreeMap, path::Path, sync::Arc};
 
 use log::debug;
 use openraft::{
+    Entry, EntryPayload, LogId, RaftSnapshotBuilder, RaftTypeConfig, SnapshotMeta, StorageError,
+    StoredMembership,
     alias::SnapshotDataOf,
     entry::RaftEntry as _,
     storage::{RaftStateMachine, Snapshot},
-    Entry, EntryPayload, LogId, RaftSnapshotBuilder, RaftTypeConfig, SnapshotMeta, StorageError,
-    StoredMembership,
 };
 use parking_lot::RwLock;
 use rand::Rng as _;
-use rust_rocksdb::{ColumnFamilyDescriptor, Options, DB};
+use rust_rocksdb::{ColumnFamilyDescriptor, DB, Options};
 use serde::{Deserialize, Serialize};
 
-use crate::cluster::{typ, LogStore, TypeConfig};
+use crate::cluster::{LogStore, TypeConfig, typ};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Request {
@@ -242,8 +242,8 @@ pub async fn new<C: RaftTypeConfig, P: AsRef<Path>>(
 #[cfg(test)]
 mod tests {
     use openraft::{
-        testing::log::{StoreBuilder, Suite},
         StorageError,
+        testing::log::{StoreBuilder, Suite},
     };
     use tempfile::TempDir;
 

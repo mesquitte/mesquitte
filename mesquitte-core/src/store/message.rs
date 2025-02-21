@@ -1,14 +1,14 @@
 use std::{fmt::Debug, future::Future, io, sync::Arc, time::SystemTime};
 
-use mqtt_codec_kit::common::{qos::QoSWithPacketIdentifier, QualityOfService, TopicName};
+use mqtt_codec_kit::common::{QualityOfService, TopicName, qos::QoSWithPacketIdentifier};
 #[cfg(feature = "v4")]
 use mqtt_codec_kit::v4::{
-    packet::connect::LastWill as V4LastWill, packet::PublishPacket as V4PublishPacket,
+    packet::PublishPacket as V4PublishPacket, packet::connect::LastWill as V4LastWill,
 };
 #[cfg(feature = "v5")]
 use mqtt_codec_kit::v5::{
-    control::PublishProperties, packet::connect::LastWill as V5LastWill,
-    packet::PublishPacket as V5PublishPacket,
+    control::PublishProperties, packet::PublishPacket as V5PublishPacket,
+    packet::connect::LastWill as V5LastWill,
 };
 
 use super::retain::RetainContent;
