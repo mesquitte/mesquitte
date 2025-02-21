@@ -8,7 +8,7 @@ use std::{
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
 use crate::{
-    common::{packet::DecodablePacket, Decodable, Encodable, PacketIdentifier},
+    common::{Decodable, Encodable, PacketIdentifier, packet::DecodablePacket},
     v5::{
         control::{ControlType, FixedHeader, PacketType, SubackProperties, VariableHeaderError},
         packet::PacketError,
@@ -246,7 +246,7 @@ impl Decodable for SubscribeReasonCode {
     type Cond = ();
 
     fn decode_with<R: Read>(reader: &mut R, _rest: ()) -> Result<Self, Self::Error> {
-        reader.read_u8().map(Self::try_from)?.map_err(From::from)
+        reader.read_u8().map(Self::try_from)?
     }
 }
 

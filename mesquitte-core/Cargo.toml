@@ -41,7 +41,7 @@ default = [
     "quic",
     "log",
     "cluster",
-    "rocksdb-storage",
+    "heed-storage",
 ]
 
 v4 = ["mqtt-codec-kit/v4"]

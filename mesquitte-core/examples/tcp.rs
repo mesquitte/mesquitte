@@ -4,17 +4,19 @@ use log::info;
 use mesquitte_core::{
     server::{config::ServerConfig, state::GlobalState, tcp::server::TcpServer},
     store::{
-        memory::{
-            message::MessageMemoryStore, retain::RetainMessageMemoryStore, topic::TopicMemoryStore,
-            MemoryStore,
-        },
         Storage,
+        memory::{
+            MemoryStore, message::MessageMemoryStore, retain::RetainMessageMemoryStore,
+            topic::TopicMemoryStore,
+        },
     },
 };
 
 #[tokio::main]
 async fn main() {
-    env::set_var("RUST_LOG", "tcp=trace,mesquitte_core=trace");
+    unsafe {
+        env::set_var("RUST_LOG", "tcp=trace,mesquitte_core=trace");
+    }
     env_logger::init();
 
     let topic_store = TopicMemoryStore::default();

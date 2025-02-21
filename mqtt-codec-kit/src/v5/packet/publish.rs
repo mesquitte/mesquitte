@@ -7,9 +7,9 @@ use std::{
 
 use crate::{
     common::{
+        Decodable, Encodable, PacketIdentifier, TopicName, TopicNameRef,
         packet::{DecodablePacket, EncodablePacket},
         qos::QoSWithPacketIdentifier,
-        Decodable, Encodable, PacketIdentifier, TopicName, TopicNameRef,
     },
     v5::{
         control::{FixedHeader, PacketType, PublishProperties, VariableHeaderError},
@@ -55,7 +55,7 @@ impl PublishPacket {
     pub fn set_dup(&mut self, dup: bool) {
         self.fixed_header
             .packet_type
-            .update_flags(|flags| (flags & !(1 << 3)) | (dup as u8) << 3)
+            .update_flags(|flags| (flags & !(1 << 3)) | ((dup as u8) << 3))
     }
 
     pub fn dup(&self) -> bool {
@@ -66,7 +66,7 @@ impl PublishPacket {
         let (qos, pkid) = qos.split();
         self.fixed_header
             .packet_type
-            .update_flags(|flags| (flags & !0b0110) | (qos as u8) << 1);
+            .update_flags(|flags| (flags & !0b0110) | ((qos as u8) << 1));
         self.packet_identifier = pkid.map(PacketIdentifier);
         self.fix_header_remaining_len();
     }

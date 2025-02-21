@@ -186,7 +186,7 @@ impl TopicFilterRef {
     /// Creating a filter from raw string may cause errors
     pub unsafe fn new_unchecked<S: AsRef<str> + ?Sized>(topic: &S) -> &Self {
         let topic = topic.as_ref();
-        &*(topic as *const str as *const Self)
+        unsafe { &*(topic as *const str as *const Self) }
     }
 
     /// Get a matcher

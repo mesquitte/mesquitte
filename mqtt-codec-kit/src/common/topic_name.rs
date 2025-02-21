@@ -167,7 +167,7 @@ impl TopicNameRef {
     /// Creating a name from raw string may cause errors
     pub unsafe fn new_unchecked<S: AsRef<str> + ?Sized>(topic_name: &S) -> &Self {
         let topic_name = topic_name.as_ref();
-        &*(topic_name as *const str as *const Self)
+        unsafe { &*(topic_name as *const str as *const Self) }
     }
 
     /// Creates a new topic name from string without validation
@@ -180,7 +180,7 @@ impl TopicNameRef {
     /// Creating a name from raw string may cause errors
     pub unsafe fn new_mut_unchecked<S: AsMut<str> + ?Sized>(topic_name: &mut S) -> &mut Self {
         let topic_name = topic_name.as_mut();
-        &mut *(topic_name as *mut str as *mut Self)
+        unsafe { &mut *(topic_name as *mut str as *mut Self) }
     }
 
     /// Check if this topic name is only for server.

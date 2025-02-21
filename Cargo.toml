@@ -11,8 +11,8 @@ authors = [
     "qinxin0720 <qinxin_0720@live.com>",
     "fiekers <fiekersfan@gmail.com>",
 ]
-edition = "2021"
-rust-version = "1.84"
+edition = "2024"
+rust-version = "1.85"
 
 [workspace.dependencies]
 mqtt-codec-kit = { version = "1.0", path = "mqtt-codec-kit", features = [
