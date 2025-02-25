@@ -1,4 +1,4 @@
-use std::{fmt::Debug, future::Future, io, sync::Arc, time::SystemTime};
+use std::{fmt::Debug, future::Future, io, time::SystemTime};
 
 use mqtt_codec_kit::common::{QualityOfService, TopicName, qos::QoSWithPacketIdentifier};
 #[cfg(feature = "v4")]
@@ -10,8 +10,6 @@ use mqtt_codec_kit::v5::{
     control::PublishProperties, packet::PublishPacket as V5PublishPacket,
     packet::connect::LastWill as V5LastWill,
 };
-
-use super::retain::RetainContent;
 
 pub fn get_unix_ts() -> u64 {
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
@@ -63,8 +61,8 @@ impl PublishMessage {
 }
 
 #[cfg(feature = "v4")]
-impl From<&V4PublishPacket> for PublishMessage {
-    fn from(packet: &V4PublishPacket) -> Self {
+impl From<V4PublishPacket> for PublishMessage {
+    fn from(packet: V4PublishPacket) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
 
@@ -81,8 +79,8 @@ impl From<&V4PublishPacket> for PublishMessage {
 }
 
 #[cfg(feature = "v5")]
-impl From<&V5PublishPacket> for PublishMessage {
-    fn from(packet: &V5PublishPacket) -> Self {
+impl From<V5PublishPacket> for PublishMessage {
+    fn from(packet: V5PublishPacket) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
 
@@ -93,23 +91,6 @@ impl From<&V5PublishPacket> for PublishMessage {
             retain: packet.retain(),
             dup: packet.dup(),
             properties: Some(packet.properties().to_owned()),
-        }
-    }
-}
-
-impl From<Arc<RetainContent>> for PublishMessage {
-    fn from(packet: Arc<RetainContent>) -> Self {
-        let mut payload = vec![0u8; packet.payload().len()];
-        payload.copy_from_slice(packet.payload());
-
-        Self {
-            topic_name: packet.topic_name().to_owned(),
-            payload,
-            qos: packet.qos().to_owned(),
-            retain: false,
-            dup: false,
-            #[cfg(feature = "v5")]
-            properties: packet.properties().cloned(),
         }
     }
 }
