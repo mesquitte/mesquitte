@@ -6,7 +6,7 @@ use mqtt_codec_kit::common::{
 };
 use parking_lot::RwLock;
 
-use crate::store::retain::{RetainContent, RetainMessageStore};
+use crate::store::{message::PublishMessage, retain::RetainMessageStore};
 
 fn split_topic(topic: &str) -> (&str, Option<&str>) {
     if let Some((head, rest)) = topic.split_once(LEVEL_SEP) {
@@ -18,7 +18,7 @@ fn split_topic(topic: &str) -> (&str, Option<&str>) {
 
 #[derive(Default)]
 struct RetainNode {
-    content: Option<Arc<RetainContent>>,
+    content: Option<Arc<PublishMessage>>,
     nodes: RwLock<HashMap<String, RetainNode>>,
 }
 
@@ -37,7 +37,7 @@ impl RetainNode {
         prev_item: &str,
         filter_items: Option<&str>,
         wildcard_first: bool,
-        retains: &mut Vec<Arc<RetainContent>>,
+        retains: &mut Vec<Arc<PublishMessage>>,
     ) {
         match prev_item {
             MATCH_ALL_STR => {
@@ -88,8 +88,8 @@ impl RetainNode {
         &self,
         prev_item: &str,
         topic_items: Option<&str>,
-        content: Arc<RetainContent>,
-    ) -> Option<Arc<RetainContent>> {
+        content: Arc<PublishMessage>,
+    ) -> Option<Arc<PublishMessage>> {
         let mut nodes = self.nodes.write();
         if let Some(node) = nodes.get_mut(prev_item) {
             if let Some((topic_item, rest_items)) = topic_items.map(split_topic) {
@@ -109,7 +109,7 @@ impl RetainNode {
         }
     }
 
-    fn remove(&self, prev_item: &str, topic_items: Option<&str>) -> Option<Arc<RetainContent>> {
+    fn remove(&self, prev_item: &str, topic_items: Option<&str>) -> Option<Arc<PublishMessage>> {
         let mut old_content = None;
         let mut remove_node = false;
         let mut nodes = self.nodes.write();
@@ -132,7 +132,7 @@ impl RetainMessageStore for RetainMessageMemoryStore {
     async fn search(
         &self,
         topic_filter: &mqtt_codec_kit::common::TopicFilter,
-    ) -> Result<Vec<Arc<RetainContent>>, io::Error> {
+    ) -> Result<Vec<Arc<PublishMessage>>, io::Error> {
         // [MQTT-4.7.2-1] The Server MUST NOT match Topic Filters starting with a
         // wildcard character (# or +) with Topic Names beginning with a $ character
         let wildcard_first = topic_filter.starts_with([MATCH_ONE_CHAR, MATCH_ALL_CHAR]);
@@ -147,8 +147,8 @@ impl RetainMessageStore for RetainMessageMemoryStore {
 
     async fn insert(
         &self,
-        content: RetainContent,
-    ) -> Result<Option<Arc<RetainContent>>, io::Error> {
+        content: PublishMessage,
+    ) -> Result<Option<Arc<PublishMessage>>, io::Error> {
         let topic_name = content.topic_name().to_owned();
         let (topic_item, rest_items) = split_topic(&topic_name);
 
@@ -158,7 +158,7 @@ impl RetainMessageStore for RetainMessageMemoryStore {
     async fn remove(
         &self,
         topic_name: &TopicName,
-    ) -> Result<Option<Arc<RetainContent>>, io::Error> {
+    ) -> Result<Option<Arc<PublishMessage>>, io::Error> {
         let (topic_item, rest_items) = split_topic(topic_name);
         Ok(self.inner.remove(topic_item, rest_items))
     }

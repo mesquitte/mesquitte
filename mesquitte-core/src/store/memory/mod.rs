@@ -7,7 +7,7 @@ use topic::TopicMemoryStore;
 
 use super::{
     message::{MessageStore, PendingPublishMessage, PublishMessage},
-    retain::{RetainContent, RetainMessageStore},
+    retain::RetainMessageStore,
     topic::{TopicContent, TopicStore},
 };
 
@@ -110,21 +110,21 @@ impl RetainMessageStore for MemoryStore {
     async fn search(
         &self,
         topic_filter: &TopicFilter,
-    ) -> Result<Vec<Arc<RetainContent>>, std::io::Error> {
+    ) -> Result<Vec<Arc<PublishMessage>>, std::io::Error> {
         self.retain_message_store.search(topic_filter).await
     }
 
     async fn insert(
         &self,
-        content: RetainContent,
-    ) -> Result<Option<Arc<RetainContent>>, std::io::Error> {
+        content: PublishMessage,
+    ) -> Result<Option<Arc<PublishMessage>>, std::io::Error> {
         self.retain_message_store.insert(content).await
     }
 
     async fn remove(
         &self,
         topic_name: &TopicName,
-    ) -> Result<Option<Arc<RetainContent>>, std::io::Error> {
+    ) -> Result<Option<Arc<PublishMessage>>, std::io::Error> {
         self.retain_message_store.remove(topic_name).await
     }
 }

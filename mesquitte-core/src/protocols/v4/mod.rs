@@ -30,12 +30,6 @@ mod write_loop;
 
 pub mod session;
 
-#[derive(Debug)]
-pub(crate) enum WritePacket {
-    VariablePacket(VariablePacket),
-    PendingMessage(PendingPublishMessage),
-}
-
 pub(crate) struct EventLoop<R, W, S: 'static> {
     reader: R,
     writer: W,
@@ -145,13 +139,11 @@ where
         }
 
         // FIXME: too many clients cause memory leak
-
-        // TODO: deliver channel size
-        let (deliver_tx, deliver_rx) = bounded_async(8);
-
+        // TODO: config forward channel size
+        let (forward_tx, forward_rx) = bounded_async(8);
         let receipt = self
             .global
-            .add_client(session.client_id(), deliver_tx)
+            .add_client(session.client_id(), forward_tx)
             .await;
         let session_present = match receipt {
             AddClientReceipt::Present(state) => {
@@ -200,16 +192,11 @@ where
         }
 
         debug!("{session}");
-
-        let (write_tx, write_rx) = bounded_async(2024);
-        let client_id = session.client_id().to_owned();
-        let mut read_task = tokio::spawn(
-            ReadLoop::new(frame_reader, session, deliver_rx, write_tx, self.global)
-                .read_from_client(),
-        );
-
+        // TODO: config read write loop size
+        let (read_tx, read_rx) = bounded_async(8);
+        let mut read_task = tokio::spawn(ReadLoop::new(frame_reader, read_tx).read_from_client());
         let mut write_task = tokio::spawn(async {
-            WriteLoop::new(frame_writer, client_id, write_rx, self.global)
+            WriteLoop::new(frame_writer, read_rx, forward_rx, session, self.global)
                 .write_to_client()
                 .await
         });
@@ -224,20 +211,6 @@ where
 
 impl From<PendingPublishMessage> for PublishPacket {
     fn from(value: PendingPublishMessage) -> Self {
-        let mut pkt = PublishPacket::new(
-            value.message().topic_name().to_owned(),
-            value.qos(),
-            value.message().payload(),
-        );
-        pkt.set_dup(value.dup());
-        pkt.set_retain(value.message().retain());
-
-        pkt
-    }
-}
-
-impl From<&PendingPublishMessage> for PublishPacket {
-    fn from(value: &PendingPublishMessage) -> Self {
         let mut pkt = PublishPacket::new(
             value.message().topic_name().to_owned(),
             value.qos(),

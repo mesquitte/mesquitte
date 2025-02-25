@@ -30,7 +30,7 @@ impl Display for KickReason {
 }
 
 #[derive(Debug)]
-pub enum DeliverMessage {
+pub enum ForwardMessage {
     Publish(TopicFilter, QualityOfService, Box<PublishMessage>),
     Online(AsyncSender<ProtocolSessionState>),
     Kick(KickReason),
@@ -56,7 +56,7 @@ pub struct GlobalState<S> {
     // min keep alive
     // config: Arc<Config>,
     pub storage: Storage<S>,
-    clients: DashMap<String, AsyncSender<DeliverMessage>, foldhash::fast::RandomState>,
+    clients: DashMap<String, AsyncSender<ForwardMessage>, foldhash::fast::RandomState>,
 }
 
 impl<S> GlobalState<S> {
@@ -70,15 +70,15 @@ impl<S> GlobalState<S> {
     pub async fn add_client(
         &self,
         client_id: &str,
-        new_sender: AsyncSender<DeliverMessage>,
+        new_sender: AsyncSender<ForwardMessage>,
     ) -> AddClientReceipt {
-        if let Some(old_sender) = self.get_deliver(client_id) {
+        if let Some(old_sender) = self.get_sender(client_id) {
             if !old_sender.is_closed() {
                 // TODO: config: build session state timeout
                 let receive_timeout = Duration::from_secs(10);
                 let (control_sender, control_receiver) = bounded_async(1);
                 let ret = old_sender
-                    .send(DeliverMessage::Online(control_sender))
+                    .send(ForwardMessage::Online(control_sender))
                     .await;
                 match ret {
                     Ok(_) => match time::timeout(receive_timeout, control_receiver.recv()).await {
@@ -110,7 +110,7 @@ impl<S> GlobalState<S> {
         self.clients.remove(client_id);
     }
 
-    pub fn get_deliver(&self, client_id: &str) -> Option<AsyncSender<DeliverMessage>> {
+    pub fn get_sender(&self, client_id: &str) -> Option<AsyncSender<ForwardMessage>> {
         self.clients.get(client_id).map(|s| s.value().clone())
     }
 }
