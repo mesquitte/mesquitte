@@ -537,15 +537,53 @@ impl Display for ConnectProperties {
         write!(f, "{{")?;
         match &self.session_expiry_interval {
             Some(session_expiry_interval) => {
-                write!(f, "session_expiry_interval: {}", session_expiry_interval)?
+                write!(f, "session_expiry_interval: {session_expiry_interval}")?
             }
             None => write!(f, "session_expiry_interval: None")?,
         };
         match &self.receive_maximum {
-            Some(receive_maximum) => write!(f, ", receive_maximum: {}", receive_maximum)?,
+            Some(receive_maximum) => write!(f, ", receive_maximum: {receive_maximum}")?,
             None => write!(f, ", receive_maximum: None")?,
         };
-        // TODO TBD
+        match &self.max_packet_size {
+            Some(max_packet_size) => write!(f, ", max_packet_size: {max_packet_size}")?,
+            None => write!(f, ", max_packet_size: None")?,
+        };
+        match &self.topic_alias_max {
+            Some(topic_alias_max) => write!(f, ", topic_alias_max: {topic_alias_max}")?,
+            None => write!(f, ", topic_alias_max: None")?,
+        };
+        match &self.request_response_info {
+            Some(request_response_info) => {
+                write!(f, ", request_response_info: {request_response_info}")?
+            }
+            None => write!(f, ", request_response_info: None")?,
+        };
+        match &self.request_problem_info {
+            Some(request_problem_info) => {
+                write!(f, ", request_problem_info: {request_problem_info}")?
+            }
+            None => write!(f, ", request_problem_info: None")?,
+        };
+        write!(f, ", user_properties: [")?;
+        let mut iter = self.user_properties.iter();
+        if let Some(first) = iter.next() {
+            write!(f, "({}, {})", first.0, first.1)?;
+            for property in iter {
+                write!(f, ", ({}, {})", property.0, property.1)?;
+            }
+        }
+        write!(f, "]")?;
+        match &self.authentication_method {
+            Some(authentication_method) => {
+                write!(f, ", authentication_method: {authentication_method}")?
+            }
+            None => write!(f, ", authentication_method: None")?,
+        };
+        match &self.authentication_data {
+            Some(authentication_data) => write!(f, ", authentication_data: {authentication_data}")?,
+            None => write!(f, ", authentication_data: None")?,
+        };
         write!(f, "}}")
     }
 }
@@ -678,15 +716,15 @@ impl Display for ConnectPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{client_identifier: {}", self.client_identifier)?;
         match &self.last_will {
-            Some(last_will) => write!(f, ", last_will: {}", last_will)?,
+            Some(last_will) => write!(f, ", last_will: {last_will}")?,
             None => write!(f, ", last_will: None")?,
         };
         match &self.username {
-            Some(username) => write!(f, ", username: {}", username)?,
+            Some(username) => write!(f, ", username: {username}")?,
             None => write!(f, ", username: None")?,
         };
         match &self.password {
-            Some(password) => write!(f, ", password: {}", password)?,
+            Some(password) => write!(f, ", password: {password}")?,
             None => write!(f, ", password: None")?,
         };
         write!(f, "}}")
@@ -1008,33 +1046,31 @@ impl Display for LastWillProperties {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{")?;
         match &self.delay_interval {
-            Some(delay_interval) => write!(f, "delay_interval: {}", delay_interval)?,
+            Some(delay_interval) => write!(f, "delay_interval: {delay_interval}")?,
             None => write!(f, "delay_interval: None")?,
         };
         match &self.payload_format_indicator {
-            Some(payload_format_indicator) => write!(
-                f,
-                ", payload_format_indicator: {}",
-                payload_format_indicator
-            )?,
+            Some(payload_format_indicator) => {
+                write!(f, ", payload_format_indicator: {payload_format_indicator}")?
+            }
             None => write!(f, ", payload_format_indicator: None")?,
         };
         match &self.message_expiry_interval {
             Some(message_expiry_interval) => {
-                write!(f, ", message_expiry_interval: {}", message_expiry_interval)?
+                write!(f, ", message_expiry_interval: {message_expiry_interval}")?
             }
             None => write!(f, ", message_expiry_interval: None")?,
         };
         match &self.content_type {
-            Some(content_type) => write!(f, ", content_type: {}", content_type)?,
+            Some(content_type) => write!(f, ", content_type: {content_type}")?,
             None => write!(f, ", content_type: None")?,
         };
         match &self.response_topic {
-            Some(response_topic) => write!(f, ", response_topic: {}", response_topic)?,
+            Some(response_topic) => write!(f, ", response_topic: {response_topic}")?,
             None => write!(f, ", response_topic: None")?,
         };
         match &self.correlation_data {
-            Some(correlation_data) => write!(f, ", correlation_data: {}", correlation_data)?,
+            Some(correlation_data) => write!(f, ", correlation_data: {correlation_data}")?,
             None => write!(f, ", correlation_data: None")?,
         };
         write!(f, ", user_properties: [")?;

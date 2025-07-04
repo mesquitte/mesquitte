@@ -185,12 +185,12 @@ impl Display for DisconnectProperties {
         write!(f, "{{")?;
         match &self.session_expiry_interval {
             Some(session_expiry_interval) => {
-                write!(f, "session_expiry_interval: {}", session_expiry_interval)?
+                write!(f, "session_expiry_interval: {session_expiry_interval}")?
             }
             None => write!(f, "session_expiry_interval: None")?,
         };
         match &self.reason_string {
-            Some(reason_string) => write!(f, ", reason_string: {}", reason_string)?,
+            Some(reason_string) => write!(f, ", reason_string: {reason_string}")?,
             None => write!(f, ", reason_string: None")?,
         };
         write!(f, ", user_properties: [")?;
@@ -203,7 +203,7 @@ impl Display for DisconnectProperties {
         }
         write!(f, "]")?;
         match &self.server_reference {
-            Some(server_reference) => write!(f, ", server_reference: {}", server_reference)?,
+            Some(server_reference) => write!(f, ", server_reference: {server_reference}")?,
             None => write!(f, ", server_reference: None")?,
         };
         write!(f, "}}")

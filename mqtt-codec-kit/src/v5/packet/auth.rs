@@ -93,7 +93,7 @@ impl Display for AuthPacket {
             self.fixed_header, self.reason_code
         )?;
         if let Some(properties) = &self.properties {
-            write!(f, ", properties: {}", properties)?;
+            write!(f, ", properties: {properties}")?;
         }
         write!(f, "}}")
     }

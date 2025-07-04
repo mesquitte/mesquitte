@@ -318,7 +318,7 @@ impl TryFrom<u8> for RetainHandling {
 impl Display for RetainHandling {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let value: u8 = self.into();
-        write!(f, "{}", value)
+        write!(f, "{value}")
     }
 }
 

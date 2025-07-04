@@ -145,9 +145,9 @@ impl Display for SubackPacketPayload {
         write!(f, "{{reason_codes: [")?;
         let mut iter = self.reason_codes.iter();
         if let Some(first) = iter.next() {
-            write!(f, "{}", first)?;
+            write!(f, "{first}")?;
             for code in iter {
-                write!(f, ", {}", code)?;
+                write!(f, ", {code}")?;
             }
         }
         write!(f, "]}}")
@@ -253,7 +253,7 @@ impl Decodable for SubscribeReasonCode {
 impl Display for SubscribeReasonCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let code: u8 = self.into();
-        write!(f, "{}", code)
+        write!(f, "{code}")
     }
 }
 
