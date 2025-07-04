@@ -148,21 +148,21 @@ impl Display for PublishPacket {
             self.fixed_header, self.topic_name
         )?;
         match self.packet_identifier {
-            Some(packet_identifier) => write!(f, ", packet_identifier: {}", packet_identifier)?,
+            Some(packet_identifier) => write!(f, ", packet_identifier: {packet_identifier}")?,
             None => write!(f, ", packet_identifier: None")?,
         };
 
         match std::str::from_utf8(&self.payload) {
             Ok(s) if s.chars().all(|c| c.is_ascii_graphic() || c == ' ') => {
-                write!(f, ", payload: {}", s)?;
+                write!(f, ", payload: {s}")?;
             }
             _ => {
                 write!(f, ", payload: [")?;
                 let mut iter = self.payload.iter();
                 if let Some(first) = iter.next() {
-                    write!(f, "{}", first)?;
+                    write!(f, "{first}")?;
                     for byte in iter {
-                        write!(f, ", {}", byte)?;
+                        write!(f, ", {byte}")?;
                     }
                 }
                 write!(f, "]")?;

@@ -276,26 +276,26 @@ impl Display for PublishProperties {
         write!(f, "{{")?;
         match &self.payload_format_indicator {
             Some(payload_format_indicator) => {
-                write!(f, "payload_format_indicator: {}", payload_format_indicator)?
+                write!(f, "payload_format_indicator: {payload_format_indicator}")?
             }
             None => write!(f, "payload_format_indicator: None")?,
         };
         match &self.message_expiry_interval {
             Some(message_expiry_interval) => {
-                write!(f, ", message_expiry_interval: {}", message_expiry_interval)?
+                write!(f, ", message_expiry_interval: {message_expiry_interval}")?
             }
             None => write!(f, ", message_expiry_interval: None")?,
         };
         match &self.topic_alias {
-            Some(topic_alias) => write!(f, ", topic_alias: {}", topic_alias)?,
+            Some(topic_alias) => write!(f, ", topic_alias: {topic_alias}")?,
             None => write!(f, ", topic_alias: None")?,
         };
         match &self.response_topic {
-            Some(response_topic) => write!(f, ", response_topic: {}", response_topic)?,
+            Some(response_topic) => write!(f, ", response_topic: {response_topic}")?,
             None => write!(f, ", response_topic: None")?,
         };
         match &self.correlation_data {
-            Some(correlation_data) => write!(f, ", correlation_data: {}", correlation_data)?,
+            Some(correlation_data) => write!(f, ", correlation_data: {correlation_data}")?,
             None => write!(f, ", correlation_data: None")?,
         };
         write!(f, ", user_properties: [")?;
@@ -309,12 +309,12 @@ impl Display for PublishProperties {
         write!(f, "]")?;
         match &self.subscription_identifier {
             Some(subscription_identifier) => {
-                write!(f, ", subscription_identifier: {}", subscription_identifier)?
+                write!(f, ", subscription_identifier: {subscription_identifier}")?
             }
             None => write!(f, ", subscription_identifier: None")?,
         };
         match &self.content_type {
-            Some(content_type) => write!(f, ", content_type: {}", content_type)?,
+            Some(content_type) => write!(f, ", content_type: {content_type}")?,
             None => write!(f, ", content_type: None")?,
         };
         write!(f, "}}")

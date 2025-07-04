@@ -131,9 +131,9 @@ impl Display for UnsubscribePacketPayload {
         write!(f, "{{topic_filters: [")?;
         let mut iter = self.topic_filters.iter();
         if let Some(first) = iter.next() {
-            write!(f, "{}", first)?;
+            write!(f, "{first}")?;
             for topic_filter in iter {
-                write!(f, ", {}", topic_filter)?;
+                write!(f, ", {topic_filter}")?;
             }
         }
         write!(f, "]}}")

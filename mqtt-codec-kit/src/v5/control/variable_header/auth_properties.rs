@@ -180,7 +180,7 @@ impl Display for AuthProperties {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{")?;
         match &self.reason_string {
-            Some(reason_string) => write!(f, "reason_string: {}", reason_string)?,
+            Some(reason_string) => write!(f, "reason_string: {reason_string}")?,
             None => write!(f, "reason_string: None")?,
         };
         write!(f, ", user_properties: [")?;
@@ -194,14 +194,12 @@ impl Display for AuthProperties {
         write!(f, "]")?;
         match &self.authentication_method {
             Some(authentication_method) => {
-                write!(f, ", authentication_method: {}", authentication_method)?
+                write!(f, ", authentication_method: {authentication_method}")?
             }
             None => write!(f, ", authentication_method: None")?,
         };
         match &self.authentication_data {
-            Some(authentication_data) => {
-                write!(f, ", authentication_data: {}", authentication_data)?
-            }
+            Some(authentication_data) => write!(f, ", authentication_data: {authentication_data}")?,
             None => write!(f, ", authentication_data: None")?,
         };
         write!(f, "}}")

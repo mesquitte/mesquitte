@@ -90,6 +90,6 @@ impl Decodable for PubackReasonCode {
 impl Display for PubackReasonCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let code: u8 = self.into();
-        write!(f, "{}", code)
+        write!(f, "{code}")
     }
 }

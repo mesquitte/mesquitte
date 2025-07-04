@@ -131,7 +131,7 @@ impl Display for SubscribeProperties {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{")?;
         match &self.identifier {
-            Some(identifier) => write!(f, "identifier: {}", identifier)?,
+            Some(identifier) => write!(f, "identifier: {identifier}")?,
             None => write!(f, "identifier: None")?,
         };
         write!(f, ", user_properties: [")?;

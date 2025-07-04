@@ -181,9 +181,9 @@ impl Display for SubackPacketPayload {
         write!(f, "{{return_codes: [")?;
         let mut iter = self.return_codes.iter();
         if let Some(first) = iter.next() {
-            write!(f, "{}", first)?;
+            write!(f, "{first}")?;
             for code in iter {
-                write!(f, ", {}", code)?;
+                write!(f, ", {code}")?;
             }
         }
         write!(f, "]}}")

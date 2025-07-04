@@ -359,15 +359,15 @@ impl Display for ConnectPacketPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{client_identifier: {}", self.client_identifier)?;
         match &self.last_will {
-            Some(last_will) => write!(f, ", last_will: {}", last_will),
+            Some(last_will) => write!(f, ", last_will: {last_will}"),
             None => write!(f, ", last_will: None"),
         }?;
         match &self.username {
-            Some(username) => write!(f, ", username: {}", username),
+            Some(username) => write!(f, ", username: {username}"),
             None => write!(f, ", username: None"),
         }?;
         match &self.password {
-            Some(password) => write!(f, ", password: {}", password),
+            Some(password) => write!(f, ", password: {password}"),
             None => write!(f, ", password: None"),
         }?;
         write!(f, "}}")

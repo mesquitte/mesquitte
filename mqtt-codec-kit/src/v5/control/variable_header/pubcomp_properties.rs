@@ -131,7 +131,7 @@ impl Display for PubcompProperties {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{")?;
         match &self.reason_string {
-            Some(reason_string) => write!(f, "reason_string: {}", reason_string)?,
+            Some(reason_string) => write!(f, "reason_string: {reason_string}")?,
             None => write!(f, "reason_string: None")?,
         };
         write!(f, ", user_properties: [")?;

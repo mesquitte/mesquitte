@@ -486,40 +486,39 @@ impl Display for ConnackProperties {
         write!(f, "{{")?;
         match &self.session_expiry_interval {
             Some(session_expiry_interval) => {
-                write!(f, "session_expiry_interval: {}", session_expiry_interval)?
+                write!(f, "session_expiry_interval: {session_expiry_interval}")?
             }
             None => write!(f, "session_expiry_interval: None")?,
         };
         match &self.receive_maximum {
-            Some(receive_maximum) => write!(f, ", receive_maximum: {}", receive_maximum)?,
+            Some(receive_maximum) => write!(f, ", receive_maximum: {receive_maximum}")?,
             None => write!(f, ", receive_maximum: None")?,
         };
         match &self.max_qos {
-            Some(max_qos) => write!(f, ", max_qos: {}", max_qos)?,
+            Some(max_qos) => write!(f, ", max_qos: {max_qos}")?,
             None => write!(f, ", max_qos: None")?,
         };
         match &self.retain_available {
-            Some(retain_available) => write!(f, ", retain_available: {}", retain_available)?,
+            Some(retain_available) => write!(f, ", retain_available: {retain_available}")?,
             None => write!(f, ", retain_available: None")?,
         };
         match &self.max_packet_size {
-            Some(max_packet_size) => write!(f, ", max_packet_size: {}", max_packet_size)?,
+            Some(max_packet_size) => write!(f, ", max_packet_size: {max_packet_size}")?,
             None => write!(f, ", max_packet_size: None")?,
         };
         match &self.assigned_client_identifier {
             Some(assigned_client_identifier) => write!(
                 f,
-                ", assigned_client_identifier: {}",
-                assigned_client_identifier
+                ", assigned_client_identifier: {assigned_client_identifier}"
             )?,
             None => write!(f, ", assigned_client_identifier: None")?,
         };
         match &self.topic_alias_max {
-            Some(topic_alias_max) => write!(f, ", topic_alias_max: {}", topic_alias_max)?,
+            Some(topic_alias_max) => write!(f, ", topic_alias_max: {topic_alias_max}")?,
             None => write!(f, ", topic_alias_max: None")?,
         };
         match &self.reason_string {
-            Some(reason_string) => write!(f, ", reason_string: {}", reason_string)?,
+            Some(reason_string) => write!(f, ", reason_string: {reason_string}")?,
             None => write!(f, ", reason_string: None")?,
         };
         write!(f, ", user_properties: [")?;
@@ -534,51 +533,46 @@ impl Display for ConnackProperties {
         match &self.wildcard_subscription_available {
             Some(wildcard_subscription_available) => write!(
                 f,
-                ", wildcard_subscription_available: {}",
-                wildcard_subscription_available
+                ", wildcard_subscription_available: {wildcard_subscription_available}"
             )?,
             None => write!(f, ", wildcard_subscription_available: None")?,
         };
         match &self.subscription_identifiers_available {
             Some(subscription_identifiers_available) => write!(
                 f,
-                ", subscription_identifiers_available: {}",
-                subscription_identifiers_available
+                ", subscription_identifiers_available: {subscription_identifiers_available}"
             )?,
             None => write!(f, ", subscription_identifiers_available: None")?,
         };
         match &self.shared_subscription_available {
             Some(shared_subscription_available) => write!(
                 f,
-                ", shared_subscription_available: {}",
-                shared_subscription_available
+                ", shared_subscription_available: {shared_subscription_available}"
             )?,
             None => write!(f, ", shared_subscription_available: None")?,
         };
         match &self.server_keep_alive {
-            Some(server_keep_alive) => write!(f, ", server_keep_alive: {}", server_keep_alive)?,
+            Some(server_keep_alive) => write!(f, ", server_keep_alive: {server_keep_alive}")?,
             None => write!(f, ", server_keep_alive: None")?,
         };
         match &self.response_information {
             Some(response_information) => {
-                write!(f, ", response_information: {}", response_information)?
+                write!(f, ", response_information: {response_information}")?
             }
             None => write!(f, ", response_information: None")?,
         };
         match &self.server_reference {
-            Some(server_reference) => write!(f, ", server_reference: {}", server_reference)?,
+            Some(server_reference) => write!(f, ", server_reference: {server_reference}")?,
             None => write!(f, ", server_reference: None")?,
         };
         match &self.authentication_method {
             Some(authentication_method) => {
-                write!(f, ", authentication_method: {}", authentication_method)?
+                write!(f, ", authentication_method: {authentication_method}")?
             }
             None => write!(f, ", authentication_method: None")?,
         };
         match &self.authentication_data {
-            Some(authentication_data) => {
-                write!(f, ", authentication_data: {}", authentication_data)?
-            }
+            Some(authentication_data) => write!(f, ", authentication_data: {authentication_data}")?,
             None => write!(f, ", authentication_data: None")?,
         };
         write!(f, "}}")
