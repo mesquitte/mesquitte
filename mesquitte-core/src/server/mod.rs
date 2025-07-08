@@ -57,12 +57,6 @@ pub enum Error {
     #[cfg(feature = "quic")]
     #[error("Connection broken")]
     ConnectionBroken,
-    #[cfg(feature = "v4")]
-    #[error(transparent)]
-    V4VariablePacket(#[from] mqtt_codec_kit::v4::packet::VariablePacketError),
-    #[cfg(feature = "v5")]
-    #[error(transparent)]
-    V5VariablePacket(#[from] mqtt_codec_kit::v5::packet::VariablePacketError),
 }
 
 async fn process_client<S, T>(
@@ -90,7 +84,7 @@ where
                 return Err(Error::UnsupportProtocol("v5".to_string()));
             }
             #[cfg(feature = "v5")]
-            v5::read_write_loop::read_write_loop(rd, wr, global, storage).await
+            v5::EventLoop::new(rd, wr, global).run().await;
         }
     }
     Ok(())

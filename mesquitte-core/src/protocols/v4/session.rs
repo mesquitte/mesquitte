@@ -160,10 +160,7 @@ impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            r#"client# {} session:
-                connect at : {:?}
-             clean session : {}
-                keep alive : {}"#,
+            r#"client# {} session, connect at: {:?}, clean session: {}, keep alive: {}"#,
             self.client_id, self.connected_at, self.clean_session, self.keep_alive,
         )
     }

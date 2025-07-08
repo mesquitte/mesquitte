@@ -30,7 +30,7 @@ async fn main() {
     static GLOBAL: OnceLock<GlobalState<MemoryStore>> = OnceLock::new();
 
     let config = ServerConfig::new("0.0.0.0:1883".parse().unwrap(), None, "4").unwrap();
-    info!("server config: {:?}", config);
+    info!("server config: {config:?}");
     let broker = TcpServer::new(config, GLOBAL.get_or_init(|| global))
         .await
         .unwrap();

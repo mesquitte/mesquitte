@@ -88,7 +88,7 @@ where
                         return Poll::Ready(Some(Err(e)));
                     }
                     err => {
-                        return Poll::Ready(Some(Err(io::Error::new(io::ErrorKind::Other, err))));
+                        return Poll::Ready(Some(Err(io::Error::other(err))));
                     }
                 },
             }
@@ -209,7 +209,7 @@ where
                             return Poll::Ready(Err(e));
                         }
                         err => {
-                            return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err)));
+                            return Poll::Ready(Err(io::Error::other(err)));
                         }
                     }
                 }
@@ -225,7 +225,7 @@ where
                             let e = io::Error::new(io::ErrorKind::NotConnected, "Already closed");
                             Poll::Ready(Err(e))
                         }
-                        err => Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err))),
+                        err => Poll::Ready(Err(io::Error::other(err))),
                     }
                 } else {
                     this.state.write = WriteState::Ready;
@@ -254,7 +254,7 @@ where
                     return Poll::Ready(Err(e));
                 }
                 err => {
-                    return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err)));
+                    return Poll::Ready(Err(io::Error::other(err)));
                 }
             }
         }
@@ -274,7 +274,7 @@ where
                         "Already closed",
                     )));
                 }
-                err => return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err))),
+                err => return Poll::Ready(Err(io::Error::other(err))),
             }
         }
         Poll::Ready(Ok(()))
