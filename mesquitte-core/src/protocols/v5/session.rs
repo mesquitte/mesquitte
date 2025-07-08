@@ -2,14 +2,14 @@ use std::{fmt, mem};
 
 use foldhash::{HashMap, HashMapExt};
 use mqtt_codec_kit::{
-    common::TopicFilter,
-    v5::packet::{connect::LastWill, subscribe::SubscribeOptions},
+    common::TopicFilter, v5::packet::connect::LastWill, v5::packet::subscribe::SubscribeOptions,
 };
 use tokio::time::Instant;
 
 pub const DEFAULT_MAX_PACKET_SIZE: u32 = 5 + 268_435_455;
 
-pub(super) struct Session {
+#[derive(Clone)]
+pub struct Session {
     connected_at: Instant,
     // last package timestamp
     last_packet_at: Instant,
@@ -41,13 +41,13 @@ pub(super) struct Session {
 }
 
 impl Session {
-    pub fn new(client_id: String, assigned_client_id: bool, receive_maximum: u16) -> Self {
+    pub fn new(client_id: &str, assigned_client_id: bool, receive_maximum: u16) -> Self {
         Self {
             connected_at: Instant::now(),
             last_packet_at: Instant::now(),
             server_packet_id: 1,
 
-            client_id,
+            client_id: client_id.to_string(),
             assigned_client_id,
             username: None,
             keep_alive: 0,
@@ -274,11 +274,7 @@ impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            r#"client# {} session:
-                connect at : {:?}
-             clean session : {}
-                keep alive : {}
-        assigned client id : {}"#,
+            r#"client# {} session, connect at: {:?}, clean session: {}, keep alive: {}, assigned client id: {}"#,
             self.client_id,
             self.connected_at,
             self.clean_session,

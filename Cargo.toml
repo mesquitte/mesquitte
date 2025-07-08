@@ -9,7 +9,7 @@ readme = "README.md"
 authors = [
     "sunj <diablur@gmail.com>",
     "qinxin0720 <qinxin_0720@live.com>",
-    "fiekers <fiekersfan@gmail.com>",
+    "fikers <fikersfan@gmail.com>",
 ]
 edition = "2024"
 rust-version = "1.86"

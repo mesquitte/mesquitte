@@ -1,7 +1,7 @@
 use futures::{SinkExt as _, StreamExt as _};
 use kanal::bounded_async;
 use mqtt_codec_kit::{
-    common::{MATCH_ALL_STR, MATCH_ONE_STR, ProtocolLevel, SHARED_PREFIX, SYS_PREFIX},
+    common::{MATCH_ALL_STR, MATCH_ONE_STR, SHARED_PREFIX, SYS_PREFIX},
     v4::{
         control::ConnectReturnCode,
         packet::{ConnackPacket, MqttDecoder, MqttEncoder, PublishPacket, VariablePacket},
@@ -62,22 +62,6 @@ where
             }
         };
 
-        if packet.protocol_level() != ProtocolLevel::Version311 || packet.protocol_name() != "MQTT"
-        {
-            error!(
-                "unsupported protocol name or level: {:?} {:?}",
-                packet.protocol_name(),
-                packet.protocol_level()
-            );
-            let _ = frame_writer
-                .send(ConnackPacket::new(
-                    false,
-                    ConnectReturnCode::UnacceptableProtocolVersion,
-                ))
-                .await;
-            return;
-        }
-
         if packet.client_identifier().is_empty() && !packet.clean_session() {
             let _ = frame_writer
                 .send(ConnackPacket::new(
@@ -102,7 +86,12 @@ where
 
         if let Some(last_will) = packet.will() {
             let topic_name = last_will.topic();
-            if topic_name.is_empty() {
+            if topic_name.is_empty()
+                || topic_name.contains(MATCH_ALL_STR)
+                || topic_name.contains(MATCH_ONE_STR)
+                || topic_name.starts_with(SHARED_PREFIX)
+                || topic_name.starts_with(SYS_PREFIX)
+            {
                 debug!("handle connect last will topic is empty");
                 let _ = frame_writer
                     .send(ConnackPacket::new(
@@ -113,28 +102,8 @@ where
                 return;
             }
 
-            if topic_name.contains(MATCH_ALL_STR) || topic_name.contains(MATCH_ONE_STR) {
-                debug!("handle connect last will topic contains illegal characters '+' or '#'");
-                let _ = frame_writer
-                    .send(ConnackPacket::new(
-                        false,
-                        ConnectReturnCode::IdentifierRejected,
-                    ))
-                    .await;
-                return;
-            }
-
-            if topic_name.starts_with(SHARED_PREFIX) || topic_name.starts_with(SYS_PREFIX) {
-                debug!("handle connect last will topic start with '$SYS/' or '$share/'");
-                let _ = frame_writer
-                    .send(ConnackPacket::new(
-                        false,
-                        ConnectReturnCode::IdentifierRejected,
-                    ))
-                    .await;
-                return;
-            }
-
+            // TODO: config: retain available
+            // TODO: config: max qos
             session.set_last_will(last_will)
         }
 
@@ -147,39 +116,49 @@ where
             .await;
         let session_present = match receipt {
             AddClientReceipt::Present(state) => {
-                let subscriptions = state.subscriptions();
-                let present = if !session.clean_session() {
-                    match state {
-                        ProtocolSessionState::V4(session_state) => {
+                let client_id = session.client_id();
+
+                match state {
+                    ProtocolSessionState::V4(session_state) => {
+                        if !session.clean_session() {
                             session.copy_state(session_state);
                             true
+                        } else {
+                            debug!(
+                                "packet id#{} session removed due to reconnect with clean session",
+                                packet.client_identifier(),
+                            );
+
+                            for topic in session_state.subscriptions() {
+                                if let Err(err) =
+                                    self.global.storage.unsubscribe(client_id, topic).await
+                                {
+                                    debug!("handle connect unsubscribe old topic failed: {err}");
+                                }
+                            }
+
+                            false
                         }
-                        #[cfg(feature = "v5")]
-                        ProtocolSessionState::V5(_) => false,
                     }
-                } else {
-                    debug!(
-                        "packet id#{} session removed due to reconnect with clean session",
-                        packet.client_identifier(),
-                    );
-                    false
-                };
-                if !present {
-                    for topic_filter in subscriptions {
-                        if let Err(err) = self
-                            .global
-                            .storage
-                            .unsubscribe(session.client_id(), &topic_filter)
-                            .await
-                        {
-                            debug!("handle connect unsubscribe old topic failed: {err}");
+
+                    #[cfg(feature = "v5")]
+                    ProtocolSessionState::V5(session_state) => {
+                        for topic in session_state.subscriptions().keys() {
+                            if let Err(err) =
+                                self.global.storage.unsubscribe(client_id, topic).await
+                            {
+                                debug!("handle connect unsubscribe old topic failed: {err}");
+                            }
                         }
+
+                        false
                     }
                 }
-                present
             }
+
             AddClientReceipt::New => false,
         };
+
         if let Err(err) = frame_writer
             .send(ConnackPacket::new(
                 session_present,

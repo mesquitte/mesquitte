@@ -4,13 +4,19 @@ use futures::SinkExt as _;
 use kanal::AsyncReceiver;
 use mqtt_codec_kit::{
     common::{
-        MATCH_ALL_STR, MATCH_ONE_STR, QualityOfService, SHARED_PREFIX, TopicFilter,
-        qos::QoSWithPacketIdentifier,
+        MATCH_ALL_STR, MATCH_ONE_STR, QualityOfService, TopicFilter, qos::QoSWithPacketIdentifier,
     },
-    v4::packet::{
-        DisconnectPacket, PingrespPacket, PubackPacket, PubcompPacket, PublishPacket, PubrecPacket,
-        PubrelPacket, SubackPacket, SubscribePacket, UnsubackPacket, UnsubscribePacket,
-        VariablePacket, suback::SubscribeReturnCode,
+    v5::{
+        control::{
+            DisconnectReasonCode, PubackReasonCode, PubcompReasonCode, PubrecReasonCode,
+            PubrelReasonCode,
+        },
+        packet::{
+            DisconnectPacket, PingrespPacket, PubackPacket, PubcompPacket, PublishPacket,
+            PubrecPacket, PubrelPacket, SubackPacket, SubscribePacket, UnsubackPacket,
+            UnsubscribePacket, VariablePacket, suback::SubscribeReasonCode,
+            subscribe::RetainHandling, unsuback::UnsubscribeReasonCode,
+        },
     },
 };
 use tokio::{
@@ -21,7 +27,7 @@ use tokio_util::codec::{Encoder, FramedWrite};
 
 use crate::{
     debug, error,
-    protocols::{Error, ProtocolSessionState},
+    protocols::{Error, ProtocolSessionState, v5::build_error_disconnect},
     server::state::{ForwardMessage, GlobalState},
     store::{
         message::{MessageStore, PendingPublishMessage, PublishMessage},
@@ -82,7 +88,7 @@ where
             VariablePacket::SubscribePacket(packet) => self.handle_subscribe(packet).await?,
             VariablePacket::PubcompPacket(packet) => self.handle_pubcomp(packet).await?,
             VariablePacket::UnsubscribePacket(packet) => self.handle_unsubscribe(packet).await?,
-            VariablePacket::DisconnectPacket(_packet) => self.handle_disconnect().await?,
+            VariablePacket::DisconnectPacket(packet) => self.handle_disconnect(packet).await?,
             _ => {
                 debug!("invalid packet: {:?}", packet);
                 return Err(Error::ServerDisconnect);
@@ -102,7 +108,7 @@ where
                     subscribe_qos,
                     packet,
                 );
-                if !self.session.subscriptions().contains(&topic_filter) {
+                if !self.session.subscriptions().contains_key(&topic_filter) {
                     return Err(Error::Topic(topic_filter.to_string()));
                 }
                 let final_qos = cmp::min(packet.qos(), subscribe_qos);
@@ -136,7 +142,7 @@ where
             ForwardMessage::Online(sender) => {
                 debug!("client#{} receive online message", self.session.client_id(),);
                 if let Err(err) = sender
-                    .send(ProtocolSessionState::V4(self.session.build_state()))
+                    .send(ProtocolSessionState::V5(self.session.build_state()))
                     .await
                 {
                     error!(
@@ -170,27 +176,42 @@ where
             packet.dup(),
         );
 
+        let message_count = self
+            .global
+            .storage
+            .message_count(self.session.client_id())
+            .await?;
+        if message_count >= self.session.receive_maximum().into() {
+            let err_pkt = build_error_disconnect(
+                &self.session,
+                DisconnectReasonCode::ReceiveMaximumExceeded,
+                "received more than Receive Maximum publication",
+            );
+            self.writer.send(err_pkt.into()).await?;
+            return Err(Error::ServerDisconnect);
+        }
+
         let topic_name = packet.topic_name();
         if topic_name.is_empty()
-            || topic_name.starts_with(SHARED_PREFIX)
             || topic_name.contains(MATCH_ALL_STR)
             || topic_name.contains(MATCH_ONE_STR)
         {
-            debug!(
-                "client#{} invalid topic name: {:?}",
-                self.session.client_id(),
-                topic_name
+            let err_pkt = build_error_disconnect(
+                &self.session,
+                DisconnectReasonCode::TopicNameInvalid,
+                "invalid topic name",
             );
-            self.writer.send(DisconnectPacket::new().into()).await?;
+            self.writer.send(err_pkt.into()).await?;
             return Err(Error::ServerDisconnect);
         }
 
         if packet.qos() == QoSWithPacketIdentifier::Level0 && packet.dup() {
-            debug!(
-                "client#{} invalid duplicate flag in QoS 0 publish message",
-                self.session.client_id()
+            let err_pkt = build_error_disconnect(
+                &self.session,
+                DisconnectReasonCode::ProtocolError,
+                "invalid duplicate flag in QoS 0 publish message",
             );
-            self.writer.send(DisconnectPacket::new().into()).await?;
+            self.writer.send(err_pkt.into()).await?;
             return Err(Error::ServerDisconnect);
         }
 
@@ -207,7 +228,7 @@ where
                     .await?;
                 }
                 self.writer
-                    .send(PubackPacket::new(packet_id).into())
+                    .send(PubackPacket::new(packet_id, PubackReasonCode::Success).into())
                     .await?;
             }
             QoSWithPacketIdentifier::Level2(packet_id) => {
@@ -222,7 +243,7 @@ where
                         .await?;
                 }
                 self.writer
-                    .send(PubrecPacket::new(packet_id).into())
+                    .send(PubrecPacket::new(packet_id, PubrecReasonCode::Success).into())
                     .await?;
             }
         }
@@ -298,7 +319,10 @@ where
             .await?
         {
             self.writer
-                .send(PubcompPacket::new(packet.packet_identifier()).into())
+                .send(
+                    PubcompPacket::new(packet.packet_identifier(), PubcompReasonCode::Success)
+                        .into(),
+                )
                 .await?;
 
             self.forward_publish_packet(msg).await?;
@@ -328,13 +352,21 @@ where
             packet.packet_identifier()
         );
 
-        self.global
+        let matched = self
+            .global
             .storage
             .pubrec(self.session.client_id(), packet.packet_identifier())
             .await?;
-        self.writer
-            .send(PubrelPacket::new(packet.packet_identifier()).into())
-            .await?;
+
+        let pkt = if matched {
+            PubrelPacket::new(packet.packet_identifier(), PubrelReasonCode::Success)
+        } else {
+            PubrelPacket::new(
+                packet.packet_identifier(),
+                PubrelReasonCode::PacketIdentifierNotFound,
+            )
+        };
+        self.writer.send(pkt.into()).await?;
         Ok(())
     }
 
@@ -376,47 +408,88 @@ where
             packet.packet_identifier(),
             packet.subscribes(),
         );
-        if packet.subscribes().is_empty() {
-            return Err(Error::EmptySubscribes);
+
+        let properties = packet.properties();
+        if properties.identifier() == Some(0) {
+            let disconnect_packet = build_error_disconnect(
+                &self.session,
+                DisconnectReasonCode::ProtocolError,
+                "Subscription identifier value=0 is not allowed",
+            );
+            self.writer.send(disconnect_packet.into()).await?;
+            return Err(Error::ServerDisconnect);
         }
-        let mut return_codes = Vec::with_capacity(packet.subscribes().len());
+        if packet.subscribes().is_empty() {
+            let disconnect_packet = build_error_disconnect(
+                &self.session,
+                DisconnectReasonCode::ProtocolError,
+                "Subscription is empty",
+            );
+            self.writer.send(disconnect_packet.into()).await?;
+            return Err(Error::ServerDisconnect);
+        }
+        // TODO: config subscription identifier available false
+        // properties.identifier().is_some() && !config.subscription_id_available()
+
+        let mut reason_codes = Vec::with_capacity(packet.subscribes().len());
         let mut pkts = Vec::new();
-        for (filter, subscribe_qos) in packet.subscribes() {
-            if filter.is_shared() {
-                warn!("mqtt v3.x don't support shared subscription");
-                return_codes.push(SubscribeReturnCode::Failure);
-                continue;
-            }
+        for (filter, sub_opts) in packet.subscribes() {
+            // TODO: shared subscribe
+            // SubscribeReasonCode::SharedSubscriptionNotSupported
+            // SubscribeReasonCode::WildcardSubscriptionsNotSupported topic contain +/#
 
             // TODO: config granted max qos
-            let granted_qos = subscribe_qos.to_owned();
+            let granted_qos = sub_opts.qos().to_owned();
             self.global
                 .storage
                 .subscribe(self.session.client_id(), filter, granted_qos)
                 .await?;
-            self.session.subscribe(filter.clone());
-            let retain_messages =
-                RetainMessageStore::search(self.global.storage.as_ref(), filter).await?;
-            for msg in retain_messages {
-                let qos = match granted_qos {
-                    QualityOfService::Level0 => QoSWithPacketIdentifier::Level0,
-                    QualityOfService::Level1 => {
-                        QoSWithPacketIdentifier::Level1(self.session.incr_server_packet_id())
-                    }
-                    QualityOfService::Level2 => {
-                        QoSWithPacketIdentifier::Level2(self.session.incr_server_packet_id())
-                    }
+            let exist = self.session.subscribe(filter.clone(), *sub_opts);
+            // TODO: config: retain available?
+            let send_retain = !filter.is_shared()
+                && match sub_opts.retain_handling() {
+                    RetainHandling::SendAtSubscribe => true,
+                    RetainHandling::SendAtSubscribeIfNotExist => exist,
+                    RetainHandling::DoNotSend => false,
                 };
+            if send_retain {
+                let retain_messages =
+                    RetainMessageStore::search(self.global.storage.as_ref(), filter).await?;
+                for msg in retain_messages {
+                    if sub_opts.no_local() && msg.client_id().eq(self.session.client_id()) {
+                        continue;
+                    }
 
-                let mut msg = PublishPacket::new(msg.topic_name().to_owned(), qos, msg.payload());
-                msg.set_retain(true);
-                pkts.push(msg);
+                    let final_qos = cmp::min(granted_qos, msg.qos());
+                    let qos = match final_qos {
+                        QualityOfService::Level0 => QoSWithPacketIdentifier::Level0,
+                        QualityOfService::Level1 => {
+                            QoSWithPacketIdentifier::Level1(self.session.incr_server_packet_id())
+                        }
+                        QualityOfService::Level2 => {
+                            QoSWithPacketIdentifier::Level2(self.session.incr_server_packet_id())
+                        }
+                    };
+
+                    let mut packet =
+                        PublishPacket::new(msg.topic_name().to_owned(), qos, msg.payload());
+                    packet.set_dup(msg.dup());
+                    if let Some(p) = msg.properties() {
+                        packet.set_properties(p.to_owned());
+                    }
+                    pkts.push(packet);
+                }
             }
 
-            return_codes.push(granted_qos.into());
+            let reason_code = match granted_qos {
+                QualityOfService::Level0 => SubscribeReasonCode::GrantedQos0,
+                QualityOfService::Level1 => SubscribeReasonCode::GrantedQos1,
+                QualityOfService::Level2 => SubscribeReasonCode::GrantedQos2,
+            };
+            reason_codes.push(reason_code);
         }
         self.writer
-            .send(SubackPacket::new(packet.packet_identifier(), return_codes).into())
+            .send(SubackPacket::new(packet.packet_identifier(), reason_codes).into())
             .await?;
 
         for pkt in pkts {
@@ -431,28 +504,48 @@ where
             r#"client#{} received a unsubscribe packet, packet id: {}, topics: {:?}"#,
             self.session.client_id(),
             packet.packet_identifier(),
-            packet.topic_filters(),
+            packet.subscribes(),
         );
-        for filter in packet.topic_filters() {
+
+        let mut reason_codes = Vec::with_capacity(packet.subscribes().len());
+        for filter in packet.subscribes() {
             self.session.unsubscribe(filter);
-            self.global
+
+            match self
+                .global
                 .storage
                 .unsubscribe(self.session.client_id(), filter)
-                .await?;
+                .await
+            {
+                Ok(_) => reason_codes.push(UnsubscribeReasonCode::Success),
+                Err(err) => {
+                    error!("Failed to unsubscribe from topic {:?}: {}", filter, err);
+                    reason_codes.push(UnsubscribeReasonCode::ImplementationSpecificError);
+                }
+            }
         }
+
         self.writer
-            .send(UnsubackPacket::new(packet.packet_identifier()).into())
+            .send(UnsubackPacket::new(packet.packet_identifier(), reason_codes).into())
             .await?;
+
         Ok(())
     }
 
-    async fn handle_disconnect(&mut self) -> Result<(), Error> {
+    async fn handle_disconnect(&mut self, packet: DisconnectPacket) -> Result<(), Error> {
         debug!(
             "client#{} received a disconnect packet",
             self.session.client_id()
         );
 
-        self.session.clear_last_will();
+        if let Some(value) = packet.properties().session_expiry_interval() {
+            self.session.set_session_expiry_interval(value);
+            self.session.set_clean_session(true);
+        }
+
+        if packet.reason_code() == DisconnectReasonCode::NormalDisconnection {
+            self.session.clear_last_will();
+        }
         self.session.set_client_disconnected();
         Err(Error::Disconnect)
     }
@@ -460,7 +553,7 @@ where
     async fn remove_client(&self) -> Result<(), Error> {
         if self.session.clean_session() {
             self.global.remove_client(self.session.client_id());
-            for topic_filter in self.session.subscriptions() {
+            for topic_filter in self.session.subscriptions().keys() {
                 self.global
                     .storage
                     .unsubscribe(self.session.client_id(), topic_filter)
@@ -474,12 +567,84 @@ where
         Ok(())
     }
 
+    async fn handle_clean_message(&mut self, packet: ForwardMessage) -> Result<bool, Error> {
+        match packet {
+            ForwardMessage::Publish(topic_filter, subscribe_qos, packet) => {
+                debug!(
+                    r#"""client#{} receive forward packet, topic filter: {:?}, subscribe qos: {:?}, packet: {:?}"""#,
+                    self.session.client_id(),
+                    topic_filter,
+                    subscribe_qos,
+                    packet,
+                );
+                if !self.session.subscriptions().contains_key(&topic_filter) {
+                    return Ok(false);
+                }
+
+                let final_qos = cmp::min(packet.qos(), subscribe_qos);
+                let (packet_id, qos) = match final_qos {
+                    QualityOfService::Level0 => return Ok(false),
+                    QualityOfService::Level1 => {
+                        let packet_id = self.session.incr_server_packet_id();
+                        (packet_id, QoSWithPacketIdentifier::Level1(packet_id))
+                    }
+                    QualityOfService::Level2 => {
+                        let packet_id = self.session.incr_server_packet_id();
+                        (packet_id, QoSWithPacketIdentifier::Level1(packet_id))
+                    }
+                };
+
+                let mut properties = None;
+                if let Some(p) = packet.properties() {
+                    properties = Some(p.to_owned());
+                }
+                let mut message = PendingPublishMessage::new(qos, *packet);
+                message.set_dup(message.dup());
+                message.message_mut().set_properties(properties);
+
+                self.global
+                    .storage
+                    .save_pending_publish_message(self.session.client_id(), packet_id, message)
+                    .await?;
+
+                Ok(false)
+            }
+            ForwardMessage::Online(sender) => {
+                debug!("client#{} receive online message", self.session.client_id(),);
+                if let Err(err) = sender
+                    .send(ProtocolSessionState::V5(self.session.build_state()))
+                    .await
+                {
+                    error!(
+                        "client#{} send session state: {err}",
+                        self.session.client_id(),
+                    );
+                }
+
+                self.remove_client().await?;
+                Ok(true)
+            }
+            ForwardMessage::Kick(reason) => {
+                debug!(
+                    "client#{} receive kick message: {}",
+                    self.session.client_id(),
+                    reason,
+                );
+                self.remove_client().await?;
+                Ok(true)
+            }
+        }
+    }
+
     async fn handle_clean_session(&mut self) -> Result<(), Error> {
         debug!(
-            r#"client#{} handle clean session: clean session: {}, keep alive: {}"#,
+            r#"client#{} handle clean session, clean session: {}, keep alive: {}, client side disconnected: {}, server side disconnected: {}, session expiry: {}"#,
             self.session.client_id(),
             self.session.clean_session(),
             self.session.keep_alive(),
+            self.session.client_disconnected(),
+            self.session.server_disconnected(),
+            self.session.session_expiry_interval(),
         );
 
         self.writer.close().await?;
@@ -495,65 +660,37 @@ where
             self.handle_will().await?;
         }
 
-        if self.session.clean_session() {
-            self.remove_client().await?;
-            return Ok(());
-        }
+        if self.session.session_expiry_interval() > 0 {
+            let dur = Duration::from_secs(self.session.session_expiry_interval() as u64);
+            let mut tick = interval_at(Instant::now() + dur, dur);
 
-        while let Ok(packet) = self.forward_rx.recv().await {
-            match packet {
-                ForwardMessage::Publish(topic_filter, subscribe_qos, packet) => {
-                    debug!(
-                        r#"""client#{} receive forward packet: topic filter: {:?}, subscribe qos: {:?}, packet: {:?}"""#,
-                        self.session.client_id(),
-                        topic_filter,
-                        subscribe_qos,
-                        packet,
-                    );
-                    if !self.session.subscriptions().contains(&topic_filter) {
-                        continue;
-                    }
-                    let final_qos = cmp::min(packet.qos(), subscribe_qos);
-                    let (packet_id, qos) = match final_qos {
-                        QualityOfService::Level0 => continue,
-                        QualityOfService::Level1 => {
-                            let packet_id = self.session.incr_server_packet_id();
-                            (packet_id, QoSWithPacketIdentifier::Level1(packet_id))
+            loop {
+                tokio::select! {
+                    out = self.forward_rx.recv() => {
+                        match out {
+                            Ok(p) => if self.handle_clean_message(p).await? {
+                                break;
+                            },
+                            Err(err) => {
+                                error!("handle deliver failed: {err}");
+                                break;
+                            },
                         }
-                        QualityOfService::Level2 => {
-                            let packet_id = self.session.incr_server_packet_id();
-                            (packet_id, QoSWithPacketIdentifier::Level1(packet_id))
-                        }
-                    };
-
-                    let message = PendingPublishMessage::new(qos, *packet);
-                    self.global
-                        .storage
-                        .save_pending_publish_message(self.session.client_id(), packet_id, message)
-                        .await?;
-                }
-                ForwardMessage::Online(sender) => {
-                    debug!("client#{} receive online message", self.session.client_id(),);
-                    if let Err(err) = sender
-                        .send(ProtocolSessionState::V4(self.session.build_state()))
-                        .await
-                    {
-                        error!(
-                            "client#{} send session state: {err}",
-                            self.session.client_id(),
-                        );
                     }
-
-                    self.remove_client().await?;
-                    break;
+                    _ = tick.tick() => {
+                        debug!("handle clean session client#{} session expired", self.session.client_id());
+                        break;
+                    }
                 }
-                ForwardMessage::Kick(reason) => {
-                    debug!(
-                        "client#{} receive kick message: {}",
-                        self.session.client_id(),
-                        reason,
-                    );
-                    self.remove_client().await?;
+            }
+        } else {
+            if self.session.clean_session() {
+                self.remove_client().await?;
+                return Ok(());
+            }
+            while let Ok(p) = self.forward_rx.recv().await {
+                let stop = self.handle_clean_message(p).await?;
+                if stop {
                     break;
                 }
             }
@@ -574,7 +711,9 @@ where
                     match pending_message.pubrec_at() {
                         Some(_) => {
                             self.writer
-                                .send(PubrelPacket::new(packet_id).into())
+                                .send(
+                                    PubrelPacket::new(packet_id, PubrelReasonCode::Success).into(),
+                                )
                                 .await?;
                         }
                         None => {

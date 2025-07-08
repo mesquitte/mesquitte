@@ -20,6 +20,7 @@ pub fn get_unix_ts() -> u64 {
 
 #[derive(Clone, Debug)]
 pub struct PublishMessage {
+    client_id: String,
     topic_name: TopicName,
     payload: Vec<u8>,
     qos: QualityOfService,
@@ -30,6 +31,10 @@ pub struct PublishMessage {
 }
 
 impl PublishMessage {
+    pub fn client_id(&self) -> &str {
+        &self.client_id
+    }
+
     pub fn topic_name(&self) -> &TopicName {
         &self.topic_name
     }
@@ -58,15 +63,21 @@ impl PublishMessage {
     pub fn properties(&self) -> Option<&PublishProperties> {
         self.properties.as_ref()
     }
+
+    #[cfg(feature = "v5")]
+    pub fn set_properties(&mut self, properties: Option<PublishProperties>) {
+        self.properties = properties;
+    }
 }
 
 #[cfg(feature = "v4")]
-impl From<V4PublishPacket> for PublishMessage {
-    fn from(packet: V4PublishPacket) -> Self {
+impl From<(String, V4PublishPacket)> for PublishMessage {
+    fn from((client_id, packet): (String, V4PublishPacket)) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
 
         Self {
+            client_id,
             topic_name: packet.topic_name().to_owned(),
             payload,
             qos: packet.qos().into(),
@@ -79,12 +90,13 @@ impl From<V4PublishPacket> for PublishMessage {
 }
 
 #[cfg(feature = "v5")]
-impl From<V5PublishPacket> for PublishMessage {
-    fn from(packet: V5PublishPacket) -> Self {
+impl From<(String, V5PublishPacket)> for PublishMessage {
+    fn from((client_id, packet): (String, V5PublishPacket)) -> Self {
         let mut payload = vec![0u8; packet.payload().len()];
         payload.copy_from_slice(packet.payload());
 
         Self {
+            client_id,
             topic_name: packet.topic_name().to_owned(),
             payload,
             qos: packet.qos().into(),
@@ -96,16 +108,17 @@ impl From<V5PublishPacket> for PublishMessage {
 }
 
 #[cfg(feature = "v4")]
-impl From<V4LastWill> for PublishMessage {
-    fn from(value: V4LastWill) -> Self {
-        let mut payload = vec![0u8; value.message().0.len()];
-        payload.copy_from_slice(&value.message().0);
+impl From<(String, V4LastWill)> for PublishMessage {
+    fn from((client_id, packet): (String, V4LastWill)) -> Self {
+        let mut payload = vec![0u8; packet.message().0.len()];
+        payload.copy_from_slice(&packet.message().0);
 
         Self {
-            topic_name: value.topic().to_owned(),
+            client_id,
+            topic_name: packet.topic().to_owned(),
             payload,
-            qos: value.qos(),
-            retain: value.retain(),
+            qos: packet.qos(),
+            retain: packet.retain(),
             dup: false,
             #[cfg(feature = "v5")]
             properties: None,
@@ -114,8 +127,8 @@ impl From<V4LastWill> for PublishMessage {
 }
 
 #[cfg(feature = "v5")]
-impl From<V5LastWill> for PublishMessage {
-    fn from(value: V5LastWill) -> Self {
+impl From<(String, V5LastWill)> for PublishMessage {
+    fn from((client_id, value): (String, V5LastWill)) -> Self {
         let mut payload = vec![0u8; value.message().0.len()];
         payload.copy_from_slice(&value.message().0);
 
@@ -131,6 +144,7 @@ impl From<V5LastWill> for PublishMessage {
         publish_properties.set_content_type(properties.content_type().clone());
 
         Self {
+            client_id,
             topic_name: value.topic().to_owned(),
             payload,
             qos: value.qos(),
@@ -169,6 +183,10 @@ impl PendingPublishMessage {
 
     pub fn message(&self) -> &PublishMessage {
         &self.message
+    }
+
+    pub fn message_mut(&mut self) -> &mut PublishMessage {
+        &mut self.message
     }
 
     pub fn dup(&self) -> bool {

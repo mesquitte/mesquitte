@@ -1,4 +1,4 @@
-use std::{io, mem, sync::Arc};
+use std::{io, sync::Arc};
 
 use foldhash::HashMap;
 use mqtt_codec_kit::common::{
@@ -95,7 +95,7 @@ impl RetainNode {
             if let Some((topic_item, rest_items)) = topic_items.map(split_topic) {
                 node.insert(topic_item, rest_items, content)
             } else {
-                mem::replace(&mut node.content, Some(content))
+                node.content.replace(content)
             }
         } else {
             let mut new_node = RetainNode::default();
