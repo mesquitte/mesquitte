@@ -1,3 +1,4 @@
+#[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
 use std::num::NonZeroUsize;
 
 use s2n_quic::Server;
@@ -24,7 +25,7 @@ where
     pub async fn serve(self) -> Result<(), Error> {
         #[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
         let worker = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
-        #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+        #[cfg(any(target_os = "solaris", target_os = "illumos", target_os = "windows"))]
         let worker = 1;
         let mut tasks = Vec::with_capacity(worker);
         for i in 0..worker {
@@ -41,7 +42,7 @@ where
                 .with_receive_address(self.config.addr)?
                 .with_reuse_port()?
                 .build()?;
-            #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+            #[cfg(any(target_os = "solaris", target_os = "illumos", target_os = "windows"))]
             let io = s2n_quic::provider::io::Default::builder()
                 .with_receive_address(self.config.addr)?
                 .build()?;

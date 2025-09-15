@@ -1,4 +1,6 @@
-use std::{net::SocketAddr, num::NonZeroUsize};
+use std::net::SocketAddr;
+#[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
+use std::num::NonZeroUsize;
 
 use tokio::net::TcpSocket;
 use tokio_tungstenite::accept_hdr_async;
@@ -32,7 +34,7 @@ where
     pub async fn serve(self) -> Result<(), Error> {
         #[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
         let worker = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
-        #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+        #[cfg(any(target_os = "solaris", target_os = "illumos", target_os = "windows"))]
         let worker = 1;
         let mut tasks = Vec::with_capacity(worker);
         for i in 0..worker {
@@ -71,7 +73,7 @@ where
         };
         #[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
         let worker = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
-        #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+        #[cfg(any(target_os = "solaris", target_os = "illumos", target_os = "windows"))]
         let worker = 1;
         let mut tasks = Vec::with_capacity(worker);
         for i in 0..worker {

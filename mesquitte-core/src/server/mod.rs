@@ -51,9 +51,12 @@ pub enum Error {
     #[cfg(feature = "quic")]
     #[error("QuicServer Connect Error : {0}")]
     Connection(#[from] s2n_quic::connection::Error),
+    // #[cfg(feature = "quic")]
+    // #[error("QuicServer Tls Error : {0}")]
+    // QuicTls(#[from] s2n_quic::provider::tls::default::error::Error),
     #[cfg(feature = "quic")]
     #[error("QuicServer Tls Error : {0}")]
-    QuicTls(#[from] s2n_quic::provider::tls::default::error::Error),
+    QuicTls(#[from] Box<dyn std::error::Error + Send + Sync>),
     #[cfg(feature = "quic")]
     #[error("Connection broken")]
     ConnectionBroken,
