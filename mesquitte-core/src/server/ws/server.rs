@@ -52,7 +52,7 @@ where
                     let ws_stream = WsByteStream::new(
                         accept_hdr_async(stream, ws_callback)
                             .await
-                            .map_err(|e| Error::from(Box::new(e)))?
+                            .map_err(|e| Error::from(Box::new(e)))?,
                     );
                     tokio::spawn(async move {
                         process_client(ws_stream, self.config.version, self.global).await?;
@@ -98,7 +98,7 @@ where
                             let ws_stream = WsByteStream::new(
                                 accept_hdr_async(stream, ws_callback)
                                     .await
-                                    .map_err(|e| Error::from(Box::new(e)))?
+                                    .map_err(|e| Error::from(Box::new(e)))?,
                             );
                             tokio::spawn(async move {
                                 process_client(ws_stream, self.config.version, self.global).await?;
