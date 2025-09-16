@@ -34,7 +34,7 @@ where
     pub async fn serve(self) -> Result<(), Error> {
         #[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
         let worker = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
-        #[cfg(any(target_os = "solaris", target_os = "illumos", target_os = "windows"))]
+        #[cfg(any(windows, target_os = "solaris", target_os = "illumos"))]
         let worker = 1;
         let mut tasks = Vec::with_capacity(worker);
         for i in 0..worker {
@@ -49,7 +49,11 @@ where
             let listener = socket.listen(1024)?;
             let task = tokio::spawn(async move {
                 while let Ok((stream, _addr)) = listener.accept().await {
-                    let ws_stream = WsByteStream::new(accept_hdr_async(stream, ws_callback).await?);
+                    let ws_stream = WsByteStream::new(
+                        accept_hdr_async(stream, ws_callback)
+                            .await
+                            .map_err(|e| Error::from(Box::new(e)))?
+                    );
                     tokio::spawn(async move {
                         process_client(ws_stream, self.config.version, self.global).await?;
                         Ok::<(), Error>(())
@@ -73,7 +77,7 @@ where
         };
         #[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
         let worker = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
-        #[cfg(any(target_os = "solaris", target_os = "illumos", target_os = "windows"))]
+        #[cfg(any(windows, target_os = "solaris", target_os = "illumos"))]
         let worker = 1;
         let mut tasks = Vec::with_capacity(worker);
         for i in 0..worker {
@@ -91,8 +95,11 @@ where
                 while let Ok((stream, _addr)) = listener.accept().await {
                     match acceptor.accept(stream).await {
                         Ok(stream) => {
-                            let ws_stream =
-                                WsByteStream::new(accept_hdr_async(stream, ws_callback).await?);
+                            let ws_stream = WsByteStream::new(
+                                accept_hdr_async(stream, ws_callback)
+                                    .await
+                                    .map_err(|e| Error::from(Box::new(e)))?
+                            );
                             tokio::spawn(async move {
                                 process_client(ws_stream, self.config.version, self.global).await?;
                                 Ok::<(), Error>(())

@@ -34,7 +34,7 @@ pub enum Error {
     ProtocolLevel(#[from] ProtocolLevelError),
     #[cfg(any(feature = "ws", feature = "wss"))]
     #[error("tungstenite Error : {0}")]
-    Accept(#[from] tungstenite::Error),
+    Accept(#[from] Box<tungstenite::Error>),
     #[error("Missing tls config")]
     MissingTlsConfig,
     #[cfg(feature = "rustls")]
@@ -51,10 +51,10 @@ pub enum Error {
     #[cfg(feature = "quic")]
     #[error("QuicServer Connect Error : {0}")]
     Connection(#[from] s2n_quic::connection::Error),
-    // #[cfg(feature = "quic")]
-    // #[error("QuicServer Tls Error : {0}")]
-    // QuicTls(#[from] s2n_quic::provider::tls::default::error::Error),
-    #[cfg(feature = "quic")]
+    #[cfg(all(unix, feature = "quic"))]
+    #[error("QuicServer Tls Error : {0}")]
+    QuicTls(#[from] s2n_quic::provider::tls::default::error::Error),
+    #[cfg(all(windows, feature = "quic"))]
     #[error("QuicServer Tls Error : {0}")]
     QuicTls(#[from] Box<dyn std::error::Error + Send + Sync>),
     #[cfg(feature = "quic")]
