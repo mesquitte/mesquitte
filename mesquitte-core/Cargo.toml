@@ -68,7 +68,7 @@ axum = { workspace = true, features = [
     "tokio",
 ], optional = true }
 backon = { workspace = true, features = ["tokio-sleep"], optional = true }
-bincode = { workspace = true, optional = true }
+bincode = { workspace = true, features = ["serde"], optional = true }
 byteorder.workspace = true
 bytes.workspace = true
 dashmap.workspace = true

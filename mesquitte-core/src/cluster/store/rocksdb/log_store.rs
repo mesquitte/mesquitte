@@ -54,13 +54,18 @@ impl<C: RaftTypeConfig> LogStore<C> {
 
         let t = match v {
             None => None,
-            Some(bytes) => Some(bincode::deserialize(&bytes).map_err(M::read_err)?),
+            Some(bytes) => {
+                let (d, _) = bincode::serde::decode_from_slice(&bytes, bincode::config::standard())
+                    .map_err(M::read_err)?;
+                Some(d)
+            }
         };
         Ok(t)
     }
 
     fn put_meta<M: meta::StoreMeta<C>>(&self, value: &M::Value) -> Result<(), StorageError<C>> {
-        let encoded = bincode::serialize(value).map_err(|e| M::write_err(value, e))?;
+        let encoded = bincode::serde::encode_to_vec(value, bincode::config::standard())
+            .map_err(|e| M::write_err(value, e))?;
 
         self.db
             .put_cf(self.cf_meta(), M::KEY, encoded)
@@ -94,9 +99,9 @@ impl<C: RaftTypeConfig> RaftLogReader<C> for LogStore<C> {
             if !range.contains(&id) {
                 break;
             }
-
-            let entry: EntryOf<C> =
-                bincode::deserialize(&val).map_err(|e| StorageError::read_logs(&e))?;
+            let (d, _) = bincode::serde::decode_from_slice(&val, bincode::config::standard())
+                .map_err(|e| StorageError::read_logs(&e))?;
+            let entry: EntryOf<C> = d;
 
             assert_eq!(id, entry.index());
 
@@ -123,8 +128,11 @@ impl<C: RaftTypeConfig> RaftLogStorage<C> for LogStore<C> {
             None => None,
             Some(res) => {
                 let (_log_index, entry_bytes) = res.map_err(|e| StorageError::read_logs(&e))?;
-                let ent = bincode::deserialize::<EntryOf<C>>(&entry_bytes)
-                    .map_err(|e| StorageError::read_logs(&e))?;
+                let (ent, _) = bincode::serde::decode_from_slice::<EntryOf<C>, _>(
+                    &entry_bytes,
+                    bincode::config::standard(),
+                )
+                .map_err(|e| StorageError::read_logs(&e))?;
                 Some(ent.log_id())
             }
         };
@@ -162,12 +170,10 @@ impl<C: RaftTypeConfig> RaftLogStorage<C> for LogStore<C> {
             debug!("append entries: {:?}", entry);
             let id = id_to_bin(entry.index());
             assert_eq!(bin_to_id(&id), entry.index());
+            let encoded = bincode::serde::encode_to_vec(&entry, bincode::config::standard())
+                .map_err(|e| StorageError::write_logs(&e))?;
             self.db
-                .put_cf(
-                    self.cf_logs(),
-                    id,
-                    bincode::serialize(&entry).map_err(|e| StorageError::write_logs(&e))?,
-                )
+                .put_cf(self.cf_logs(), id, encoded)
                 .map_err(|e| StorageError::write_logs(&e))?;
         }
 

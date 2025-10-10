@@ -80,15 +80,15 @@ impl MessageStore for MessageMemoryStore {
         packet_id: u16,
         message: PublishMessage,
     ) -> Result<bool, io::Error> {
-        if let Some(messages) = self.received_message.read().get(client_id) {
-            if messages.len() > self.max_packets {
-                error!(
-                    "drop received publish packet {:?}, store is full: {}",
-                    message,
-                    messages.len()
-                );
-                return Ok(true);
-            }
+        if let Some(messages) = self.received_message.read().get(client_id)
+            && messages.len() > self.max_packets
+        {
+            error!(
+                "drop received publish packet {:?}, store is full: {}",
+                message,
+                messages.len()
+            );
+            return Ok(true);
         }
 
         let mut received_message_guard = self.received_message.write();
@@ -127,15 +127,15 @@ impl MessageStore for MessageMemoryStore {
         packet_id: u16,
         message: PendingPublishMessage,
     ) -> Result<bool, io::Error> {
-        if let Some(messages) = self.pending_message.read().get(client_id) {
-            if messages.len() > self.max_packets {
-                error!(
-                    "drop pending publish packet {:?}, store is full: {}",
-                    message,
-                    messages.len()
-                );
-                return Ok(true);
-            }
+        if let Some(messages) = self.pending_message.read().get(client_id)
+            && messages.len() > self.max_packets
+        {
+            error!(
+                "drop pending publish packet {:?}, store is full: {}",
+                message,
+                messages.len()
+            );
+            return Ok(true);
         }
 
         let mut pending_message_guard = self.pending_message.write();

@@ -72,32 +72,32 @@ impl<S> GlobalState<S> {
         client_id: &str,
         new_sender: AsyncSender<ForwardMessage>,
     ) -> AddClientReceipt {
-        if let Some(old_sender) = self.get_sender(client_id) {
-            if !old_sender.is_closed() {
-                // TODO: config: build session state timeout
-                let receive_timeout = Duration::from_secs(10);
-                let (control_sender, control_receiver) = bounded_async(1);
-                let ret = old_sender
-                    .send(ForwardMessage::Online(control_sender))
-                    .await;
-                match ret {
-                    Ok(_) => match time::timeout(receive_timeout, control_receiver.recv()).await {
-                        Ok(data) => match data {
-                            Ok(state) => {
-                                self.clients.insert(client_id.to_owned(), new_sender);
-                                return AddClientReceipt::Present(state);
-                            }
-                            Err(err) => {
-                                warn!("add client failed: {err}");
-                            }
-                        },
-                        Err(_) => {
-                            warn!("receive old session state timeout");
+        if let Some(old_sender) = self.get_sender(client_id)
+            && !old_sender.is_closed()
+        {
+            // TODO: config: build session state timeout
+            let receive_timeout = Duration::from_secs(10);
+            let (control_sender, control_receiver) = bounded_async(1);
+            let ret = old_sender
+                .send(ForwardMessage::Online(control_sender))
+                .await;
+            match ret {
+                Ok(_) => match time::timeout(receive_timeout, control_receiver.recv()).await {
+                    Ok(data) => match data {
+                        Ok(state) => {
+                            self.clients.insert(client_id.to_owned(), new_sender);
+                            return AddClientReceipt::Present(state);
+                        }
+                        Err(err) => {
+                            warn!("add client failed: {err}");
                         }
                     },
-                    Err(err) => {
-                        warn!("send online failed: {err}")
+                    Err(_) => {
+                        warn!("receive old session state timeout");
                     }
+                },
+                Err(err) => {
+                    warn!("send online failed: {err}")
                 }
             }
         }
