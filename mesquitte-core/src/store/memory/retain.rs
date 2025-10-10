@@ -47,10 +47,10 @@ impl RetainNode {
                     node.get_matches(MATCH_ALL_STR, None, wildcard_first, retains);
                 }
                 // Topic name "abc" will match topic filter "abc/#", since "#" also represent parent level.
-                if let Some(content) = self.content.as_ref() {
-                    if !(content.topic_name().starts_with('$') && wildcard_first) {
-                        retains.push(Arc::clone(content));
-                    }
+                if let Some(content) = self.content.as_ref()
+                    && !(content.topic_name().starts_with('$') && wildcard_first)
+                {
+                    retains.push(Arc::clone(content));
                 }
             }
             MATCH_ONE_STR => {
@@ -61,10 +61,10 @@ impl RetainNode {
                     }
                 } else {
                     for node in nodes.values() {
-                        if let Some(content) = node.content.as_ref() {
-                            if !(content.topic_name().starts_with('$') && wildcard_first) {
-                                retains.push(Arc::clone(content));
-                            }
+                        if let Some(content) = node.content.as_ref()
+                            && !(content.topic_name().starts_with('$') && wildcard_first)
+                        {
+                            retains.push(Arc::clone(content));
                         }
                     }
                 }
@@ -74,10 +74,10 @@ impl RetainNode {
                 if let Some(node) = nodes.get(prev_item) {
                     if let Some((filter_item, rest_items)) = filter_items.map(split_topic) {
                         node.get_matches(filter_item, rest_items, wildcard_first, retains);
-                    } else if let Some(content) = node.content.as_ref() {
-                        if !(content.topic_name().starts_with('$') && wildcard_first) {
-                            retains.push(Arc::clone(content));
-                        }
+                    } else if let Some(content) = node.content.as_ref()
+                        && !(content.topic_name().starts_with('$') && wildcard_first)
+                    {
+                        retains.push(Arc::clone(content));
                     }
                 }
             }

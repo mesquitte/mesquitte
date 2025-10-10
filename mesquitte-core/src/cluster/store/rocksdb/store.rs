@@ -99,9 +99,9 @@ impl RaftSnapshotBuilder<TypeConfig> for Arc<StateMachineStore> {
             data: sm.clone(),
         };
 
-        let serialized_snapshot = bincode::serialize(&snapshot)
-            .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
-
+        let serialized_snapshot =
+            bincode::serde::encode_to_vec(&snapshot, bincode::config::standard())
+                .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
         self.db
             .put_cf(
                 self.db.cf_handle("sm_meta").unwrap(),
@@ -181,8 +181,9 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
             let mut sm = self.sm.write();
             *sm = updated_state_machine;
         }
-        let serialized_snapshot = bincode::serialize(&new_snapshot)
-            .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
+        let serialized_snapshot =
+            bincode::serde::encode_to_vec(&new_snapshot, bincode::config::standard())
+                .map_err(|e| StorageError::write_snapshot(Some(meta.signature()), &e))?;
         self.db
             .put_cf(
                 self.db.cf_handle("sm_meta").unwrap(),
@@ -207,8 +208,11 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
             Some(x) => x,
             None => return Ok(None),
         };
-        let snapshot: StoredSnapshot =
-            bincode::deserialize(&bytes).map_err(|e| StorageError::write_snapshot(None, &e))?;
+        let (snapshot, _) = bincode::serde::decode_from_slice::<StoredSnapshot, _>(
+            &bytes,
+            bincode::config::standard(),
+        )
+        .map_err(|e| StorageError::write_snapshot(None, &e))?;
         let data = snapshot.data.clone();
 
         Ok(Some(Snapshot {
