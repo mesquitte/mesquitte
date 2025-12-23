@@ -26,23 +26,8 @@ name = "ws"
 path = "examples/ws.rs"
 required-features = ["ws"]
 
-[[test]]
-name = "raft"
-path = "tests/raft_test.rs"
-required-features = ["cluster", "rocksdb-storage"]
-
 [features]
-default = [
-    "v4",
-    "mqtt",
-    "mqtts",
-    "ws",
-    "wss",
-    "quic",
-    "log",
-    "cluster",
-    "rocksdb-storage",
-]
+default = ["v4", "mqtt", "mqtts", "ws", "wss", "quic", "log"]
 
 v4 = ["mqtt-codec-kit/v4"]
 v5 = ["mqtt-codec-kit/v5"]
@@ -57,18 +42,9 @@ rustls = [
     "rustls-pemfile",
     "tokio-rustls/aws-lc-rs",
 ]
-cluster = ["axum", "backon", "bincode", "mobc", "openraft", "serde", "tarpc"]
-rocksdb-storage = ["rust-rocksdb"]
 log = ["dep:log"]
 
 [dependencies]
-axum = { workspace = true, features = [
-    "http1",
-    "json",
-    "tokio",
-], optional = true }
-backon = { workspace = true, features = ["tokio-sleep"], optional = true }
-bincode = { workspace = true, features = ["serde"], optional = true }
 byteorder.workspace = true
 bytes.workspace = true
 dashmap.workspace = true
@@ -81,31 +57,13 @@ log = { workspace = true, optional = true }
 mqtt-codec-kit = { workspace = true, features = [
     "tokio-codec",
 ], optional = true }
-mobc = { workspace = true, optional = true }
 nanoid.workspace = true
 parking_lot.workspace = true
 pin-project-lite.workspace = true
-openraft = { workspace = true, features = [
-    "serde",
-    "type-alias",
-], optional = true }
 rand.workspace = true
-rust-rocksdb = { workspace = true, features = [
-    "io-uring",
-    "zstd",
-    "zstd-static-linking-only",
-    "bindgen-runtime",
-], optional = true }
 rustls = { workspace = true, default-features = false, optional = true }
 rustls-pemfile = { workspace = true, optional = true }
 s2n-quic = { workspace = true, optional = true }
-serde = { workspace = true, features = ["derive"], optional = true }
-tarpc = { workspace = true, features = [
-    "tokio1",
-    "serde-transport",
-    "serde-transport-bincode",
-    "tcp",
-], optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = [
     "macros",

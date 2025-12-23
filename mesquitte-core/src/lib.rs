@@ -10,8 +10,6 @@ compile_error!("v4 or v5 must be enabled");
 compile_error!("mqtt or mqtts or ws or wss or quic must be enabled");
 
 pub mod broker;
-#[cfg(all(feature = "cluster", feature = "rocksdb-storage"))]
-pub mod cluster;
 pub mod server;
 pub mod store;
 
