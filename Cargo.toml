@@ -43,7 +43,7 @@ tempfile = "3.23"
 thiserror = "2.0"
 tokio = "1.48"
 tokio-rustls = { version = "0.26", default-features = false }
-tokio-tungstenite = "0.28"
+tokio-tungstenite = "0.29"
 tokio-util = "0.7"
 tungstenite = "0.29"
 
